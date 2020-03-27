@@ -96,7 +96,7 @@ function fetchData() {
     //generate a random color to put into fetch request
     const randomColor = Math.floor(Math.random()*16777215).toString(16);
     console.log('fetching', randomMode, randomColor)
-    fetch(`http://thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=json&count=14`)
+    fetch(`//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=json&count=14`)
     .then(data=>data.json())
     .then(data=>{
         console.log(data)
