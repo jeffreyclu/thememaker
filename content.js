@@ -1,4 +1,4 @@
-/**********this stuff is just making the UI buttons************/
+/**********this stuff is just making the placeholder UI buttons************/
 
 const docBody = document.querySelector("body");
 
@@ -28,7 +28,7 @@ docBody.appendChild(saveButton);
 // resetButton.style.zIndex = "99999999";
 // docBody.appendChild(resetButton);
 
-/**********this stuff is just making the UI buttons************/
+/**********the stuff above is just making the placeholder UI buttons************/
 
 
 //function to generate random number
@@ -41,9 +41,16 @@ function generateScheme(colorArr) {
     console.log('generating scheme')
     //empty object to hold color scheme -> {'body': 'color1', 'p': 'color2', etc.}
     const colorScheme = {};
-    for (let i = 0; i < htmlElements.length; i++) {
-        colorScheme[htmlElements[i]] = colorArr[i];
+    //if first color (root color) is black, just make everything else white
+    if (colorArr[0] === "#000000" ) {
+        for (let i = 1; i < htmlElements.length; i++) {
+            colorArr[i] = "#FFFFFF";
+        }
     }
+    for (let j = 0; j < htmlElements.length; j++) {
+        colorScheme[htmlElements[j]] = colorArr[j];
+    }
+    
     return colorScheme;
 }
 
