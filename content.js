@@ -20,13 +20,14 @@ saveButton.style.zIndex = "99999999";
 saveButton.onclick = saveScheme;
 docBody.appendChild(saveButton);
 
-// const resetButton = document.createElement("button");
-// resetButton.innerText = "reset scheme"
-// resetButton.style.position = "fixed";
-// resetButton.style.top = "40px";
-// resetButton.style.right = "0px";
-// resetButton.style.zIndex = "99999999";
-// docBody.appendChild(resetButton);
+const resetButton = document.createElement("button");
+resetButton.innerText = "reset scheme"
+resetButton.style.position = "fixed";
+resetButton.style.top = "40px";
+resetButton.style.right = "0px";
+resetButton.style.zIndex = "99999999";
+resetButton.onclick = resetScheme;
+docBody.appendChild(resetButton);
 
 /**********the stuff above is just making the placeholder UI buttons************/
 
@@ -116,6 +117,13 @@ function saveScheme() {
     console.log(colorSchemeGlobal);
     localStorage.setItem("saved scheme", JSON.stringify(colorSchemeGlobal));
     alert('Success, color scheme saved.');
+}
+
+//function to reset theme 
+function resetScheme() {
+    localStorage.removeItem("saved scheme");
+    window.location.reload(true);
+    alert('Scheme reset.')
 }
 
 //window on load function to apply the saved scheme in local storage
