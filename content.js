@@ -95,12 +95,11 @@ function applyScheme(schemeObj) {
     console.log('applying scheme')
     for (const [key, value] of Object.entries(schemeObj)) {
         if (key === 'body') {
-            console.log('here')
             const selector = document.querySelector(key)
             selector.style.backgroundColor = value;
             selector.style.color = schemeObj["p"];
         }
-        else if (key ==='button' || key === 'div' || key === 'ul') {
+        else if (key ==='button' || key === 'div' || key === 'ul' || key === 'li' || key === 'td' || key === 'th') {
             const selectorAll = document.querySelectorAll(key);
             selectorAll.forEach(selected=>{
                 selected.style.backgroundColor = schemeObj["body"];
@@ -118,7 +117,7 @@ function applyScheme(schemeObj) {
 }
 
 //global const array of common html elements
-const htmlElements = ['body', 'ul', 'div', 'hr', 'span', 'button', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'];
+const htmlElements = ['body', 'ul', 'li', 'td', 'th', 'div', 'hr', 'span', 'button', 'a', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p'];
 //global const array of different modes for fetch request
 const modes = ['monochrome', 'monochrome-dark', 'monochrome-light', 'analogic', 'complement', 'analogic-complement', 'triad', 'quad'];
 let colorSchemeGlobal = {};
@@ -135,7 +134,7 @@ function fetchData() {
     console.log('fetching', randomMode, randomColor);
     colorSchemeLink = `<p>Root Color: <a href="//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=html&count=14" target="_blank">${randomColor}</a></p>`
 
-    fetch(`//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=json&count=14`)
+    fetch(`//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=json&count=${htmlElements.length}`)
     .then(data=>data.json())
     .then(data=>{
         console.log(data)
