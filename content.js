@@ -78,9 +78,8 @@ class Thememaker {
      */
     generateScheme = (colorArr) => {
         const colorScheme = {};
-        // if first color (root color) is black, just make everything else white
-        if (colorArr[0] === "#000000" ) {
-            for (let i = 1; i < this.htmlElements.length; i++) {
+        for (let i = 0; i < this.htmlElements.length; i++) {
+            if (colorArr[0] === "#000000") {
                 if (
                     this.htmlElements[i] === "h1" ||
                     this.htmlElements[i] === "h2" ||
@@ -96,11 +95,8 @@ class Thememaker {
                 } else {
                     colorScheme[this.htmlElements[i]] = colorArr[i];
                 }
-                
-            }
-        } else {
-            for (let j = 0; j < this.htmlElements.length; j++) {
-                colorScheme[this.htmlElements[j]] = colorArr[j];
+            } else {
+                colorScheme[this.htmlElements[i]] = colorArr[i];
             }
         }
 
@@ -152,18 +148,18 @@ class Thememaker {
         // add color scheme details to UI panel
         const colorApiUrl = this.generateColorApiUrl("html");
 
-        let colorSchemeInfo = `<p><a href=${colorApiUrl}>${this.rootColorName} (${this.colorMode})</a></p>`
+        let colorSchemeInfo = `<p><a href=${colorApiUrl}">${this.rootColorName} (${this.colorMode})</a></p>`
     
         for (let [key, value] of Object.entries(this.scheme)) {
             // TODO: color the value
-            let newP = `<p>${key}: ${value}</p>`;
+            let newP = `<p style="color: ${value}">${key}: ${value}</p>`;
             colorSchemeInfo += newP;
         }
     
         const schemeDetailsPanel = document.querySelector("#schemeDetailsPanel")
     
         schemeDetailsPanel.innerHTML = colorSchemeInfo;
-        schemeDetailsPanel.style.backgroundColor = "#FFFFFF"
+        schemeDetailsPanel.style.backgroundColor = this.scheme.body === "#000000" ? "#808080" : "#FFFFFF";
     }
 
     /**
@@ -455,8 +451,7 @@ window.onload = () => {
 
     const htmlElements = [
         "body", 
-        "button", 
-        "code",
+        "button",
         "td", "th", 
         "div", 
         "hr", 
