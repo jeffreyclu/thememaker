@@ -47,7 +47,7 @@ class Thememaker {
      */
     fetchColors = async (colorApiUrl) => {
         const generatedColors = [];
-        console.info('fetching:', this.rootColor, this.colorMode);
+        console.info("fetching:", this.rootColor, this.colorMode);
 
         // colorSchemeLink = `<p>Root Color: <a href="//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=html&count=${htmlElements.length}" target="_blank">${randomColor}</a></p>`
         const resp = await fetch(colorApiUrl);
@@ -74,7 +74,7 @@ class Thememaker {
      * 
      * @param {[]} colorArr 
      * @returns an object describing a color scheme of html element: color key/value pairs
-     * -> {'body': 'color1', 'p': 'color2', etc.}
+     * -> {"body": "color1", "p": "color2", etc.}
      */
     generateScheme = (colorArr) => {
         const colorScheme = {};
@@ -113,20 +113,20 @@ class Thememaker {
      */
     applyScheme = () => {
         for (const [key, value] of Object.entries(this.scheme)) {
-            if (key === 'body') {
+            if (key === "body") {
                 const selectedNode = document.querySelector(key)
                 selectedNode.style.backgroundColor = value;
                 selectedNode.style.color = this.scheme["p"];
             }
             // treat certain elements like the body
             else if (
-                key ==='button' || 
-                key === 'code' ||
-                key === 'div' || 
-                key === 'ul' || 
-                key === 'li' || 
-                key === 'td' || 
-                key === 'th'
+                key ==="button" || 
+                key === "code" ||
+                key === "div" || 
+                key === "ul" || 
+                key === "li" || 
+                key === "td" || 
+                key === "th"
             ) {
                 const selectedNodes = document.querySelectorAll(key);
                 selectedNodes.forEach((node) => {
@@ -211,7 +211,7 @@ class Thememaker {
     handleSaveScheme = () => {
         localStorage.setItem("savedScheme", JSON.stringify(this.scheme));
         this.saveSchemeDetails();
-        alert('Success, color scheme saved.');
+        alert("Success, color scheme saved.");
     }
     
     /**
@@ -220,7 +220,7 @@ class Thememaker {
     handleResetScheme = () => {
         localStorage.removeItem("savedScheme");
         localStorage.removeItem("schemeDetails");
-        alert('Scheme reset.')
+        alert("Scheme reset.")
         window.location.reload(true);
     }
 
@@ -447,21 +447,21 @@ let themeMaker;
 
 window.onload = () => {
     const modes = [
-        'monochrome', 'monochrome-dark', 'monochrome-light', 
-        'complement', 'analogic-complement', 
-        'triad', 
-        'quad'
+        "monochrome", "monochrome-dark", "monochrome-light", 
+        "complement", "analogic-complement", 
+        "triad", 
+        "quad"
     ];
 
     const htmlElements = [
-        'body', 
-        'button', 
-        'code',
-        'td', 'th', 
-        'div', 
-        'hr', 
-        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-        'span', 'a', 'p'
+        "body", 
+        "button", 
+        "code",
+        "td", "th", 
+        "div", 
+        "hr", 
+        "h1", "h2", "h3", "h4", "h5", "h6",
+        "span", "a", "p"
     ];
 
     themeMaker = new Thememaker(modes, htmlElements);
