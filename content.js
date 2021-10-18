@@ -49,7 +49,6 @@ class Thememaker {
         const generatedColors = [];
         console.info("fetching:", this.rootColor, this.colorMode);
 
-        // colorSchemeLink = `<p>Root Color: <a href="//www.thecolorapi.com/scheme?hex=${randomColor}&mode=${randomMode}&format=html&count=${htmlElements.length}" target="_blank">${randomColor}</a></p>`
         const resp = await fetch(colorApiUrl);
         const data = await resp.json();
 
@@ -148,7 +147,7 @@ class Thememaker {
         // add color scheme details to UI panel
         const colorApiUrl = this.generateColorApiUrl("html");
 
-        let colorSchemeInfo = `<p><a href=${colorApiUrl}">${this.rootColorName} (${this.colorMode})</a></p>`
+        let colorSchemeInfo = `<p><a href=${colorApiUrl}>${this.rootColorName} (${this.colorMode})</a></p>`
     
         for (let [key, value] of Object.entries(this.scheme)) {
             // TODO: color the value
@@ -159,7 +158,7 @@ class Thememaker {
         const schemeDetailsPanel = document.querySelector("#schemeDetailsPanel")
     
         schemeDetailsPanel.innerHTML = colorSchemeInfo;
-        schemeDetailsPanel.style.backgroundColor = this.scheme.body === "#000000" ? "#808080" : "#FFFFFF";
+        schemeDetailsPanel.style.backgroundColor = this.scheme.body === "#000000" ? "#808080" : "#000000";
     }
 
     /**
@@ -437,6 +436,15 @@ class Thememaker {
             this.renderSchemeDetails();
         }
     }
+
+    /**
+     * initialize THEMEMAKER
+     */
+    initialize = () => {
+        this.generateUi();
+        this.applySavedScheme();
+        this.applySavedSchemeDetails();
+    }
 }
 
 let themeMaker;
@@ -461,9 +469,7 @@ window.onload = () => {
 
     themeMaker = new Thememaker(modes, htmlElements);
 
-    themeMaker.generateUi();
-    themeMaker.applySavedScheme();
-    themeMaker.applySavedSchemeDetails();
+    themeMaker.initialize();
 }
 
 // TODO make this work with reactive content
