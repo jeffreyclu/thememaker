@@ -11,6 +11,7 @@ class Thememaker {
         this.colorScheme = {};
         this.modes = modes;
         this.htmlElements = htmlElements;
+        this.showDetails = false;
     }
 
     /**
@@ -39,6 +40,13 @@ class Thememaker {
         return this.modes[this.randomNum(0, this.modes.length - 1)];
     }
 
+    /**
+     * 
+     * @returns an integer representing the number of total colors for thememaker
+     */
+    calculateTotalColors = () => {
+        return Object.keys(this.htmlElements).length;
+    }
     
     /**
      * 
@@ -56,10 +64,6 @@ class Thememaker {
             throw new Error("Error, invalid color data");
         };
 
-        if (data.colors.length < this.htmlElements.length) {
-            return await this.fetchColors();
-        }
-
         data?.colors.forEach(colorObj=>{
             generatedColors.push(colorObj?.hex?.value);
         })
@@ -71,32 +75,54 @@ class Thememaker {
 
     /**
      * 
+     * @param {string} element 
+     * @returns a boolean representing if the element is a container element
+     */
+    isContainerElement = (element) => {
+        return this.htmlElements.darkContainer.includes(element) ||
+            this.htmlElements.mediumContainer.includes(element) ||
+            this.htmlElements.lightContainer.includes(element)
+    }
+
+    /**
+     * 
+     * @param {string} element 
+     * @returns a boolean representing if the element is a text element
+     */
+    isTextElement = (element) => {
+        return this.htmlElements.darkText.includes(element) ||
+        this.htmlElements.mediumText.includes(element) ||
+        this.htmlElements.lightText.includes(element)
+    }
+
+    /**
+     * 
      * @param {[]} colorArr 
      * @returns an object describing a color scheme of html element: color key/value pairs
      * -> {"body": "color1", "p": "color2", etc.}
      */
     generateScheme = (colorArr) => {
         const colorScheme = {};
-        for (let i = 0; i < this.htmlElements.length; i++) {
-            if (colorArr[0] === "#000000") {
-                if (
-                    this.htmlElements[i] === "h1" ||
-                    this.htmlElements[i] === "h2" ||
-                    this.htmlElements[i] === "h3" ||
-                    this.htmlElements[i] === "h4" ||
-                    this.htmlElements[i] === "h5" ||
-                    this.htmlElements[i] === "h6" ||
-                    this.htmlElements[i] === "span" ||
-                    this.htmlElements[i] === "a" ||
-                    this.htmlElements[i] === "p"
-                ) {
-                    colorScheme[this.htmlElements[i]] = "#FFFFFF";
+
+        const elements = Object.values(this.htmlElements);
+
+        const totalColors = this.calculateTotalColors();
+
+        for (let i = 0; i < totalColors; i += 1) {
+            const elementArr = elements[i];
+            const color = colorArr[i];
+
+            elementArr.forEach((element) => {
+                if (colorArr[0] === "#000000") {
+                    if (this.isTextElement(element)) {
+                        colorScheme[element] = "#FFFFFF"
+                    } else {
+                        colorScheme[element] = color;
+                    }
                 } else {
-                    colorScheme[this.htmlElements[i]] = colorArr[i];
+                    colorScheme[element] = color;
                 }
-            } else {
-                colorScheme[this.htmlElements[i]] = colorArr[i];
-            }
+            })
         }
 
         return colorScheme;
@@ -107,35 +133,28 @@ class Thememaker {
      * applies the color scheme
      */
     applyScheme = () => {
+        let schemeStyle = "";
         for (const [key, value] of Object.entries(this.scheme)) {
-            if (key === "body") {
-                const selectedNode = document.querySelector(key)
-                selectedNode.style.backgroundColor = value;
-                selectedNode.style.color = this.scheme["p"];
-            }
-            // treat certain elements like the body
-            else if (
-                key ==="button" || 
-                key === "code" ||
-                key === "div" || 
-                key === "ul" || 
-                key === "li" || 
-                key === "td" || 
-                key === "th"
-            ) {
-                const selectedNodes = document.querySelectorAll(key);
-                selectedNodes.forEach((node) => {
-                    node.style.backgroundColor = value;
-                    node.style.color = this.scheme["p"];
-                });
-            }
-            else {
-                const selectedNodes = document.querySelectorAll(key);
-                selectedNodes.forEach((node) => {
-                    node.style.color = value;
-                });
+            if (this.isContainerElement(key)) {
+                schemeStyle += `${key} { color: ${this.scheme["p"]} !important; background-color: ${value} !important; }`;
+            } else {
+                schemeStyle += `${key} { color: ${value} !important; background-color: transparent !important; background-image: none !important; }`;
             }
         }
+
+        // hardcode thememaker UI colors
+        schemeStyle += "#generateSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#saveSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#resetSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#showDetailsButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#hideDetailsButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += `#schemeDetailsPanel { background-color: #FFFFFF !important; }`;
+
+        // inject the new style element with the theme styles
+        const head = document.querySelector("head");
+        const newStyle = document.createElement("style");
+        newStyle.innerText = schemeStyle;
+        head.appendChild(newStyle);
 
         this.updateUi();
     }
@@ -144,21 +163,19 @@ class Thememaker {
      * applies the color scheme details to the details panel
      */
     renderSchemeDetails = () => {
-        // add color scheme details to UI panel
         const colorApiUrl = this.generateColorApiUrl("html");
 
-        let colorSchemeInfo = `<p><a href=${colorApiUrl}>${this.rootColorName} (${this.colorMode})</a></p>`
+        let colorSchemeInfo = `<p><a style="color: #000000 !important; text-decoration: underline;" href=${colorApiUrl}>${this.rootColorName} (${this.colorMode})</a></p>`
     
         for (let [key, value] of Object.entries(this.scheme)) {
             // TODO: color the value
-            let newP = `<p style="color: ${value}">${key}: ${value}</p>`;
+            let newP = `<p style="color: #000000 !important">${key}: <span style="color: ${value} !important">${value}</span></p>`;
             colorSchemeInfo += newP;
         }
     
-        const schemeDetailsPanel = document.querySelector("#schemeDetailsPanel")
+        const schemeDetailsPanel = document.querySelector("#schemeDetailsPanel");
     
         schemeDetailsPanel.innerHTML = colorSchemeInfo;
-        schemeDetailsPanel.style.backgroundColor = this.scheme.body === "#000000" ? "#808080" : "#000000";
     }
 
     /**
@@ -167,7 +184,8 @@ class Thememaker {
      * @returns a string representing a valid color api url
      */
     generateColorApiUrl = (format) => {
-        return `//www.thecolorapi.com/scheme?hex=${this.rootColor}&mode=${this.colorMode}&format=${format}&count=${this.htmlElements.length}`
+        const totalColors = this.calculateTotalColors();
+        return `//www.thecolorapi.com/scheme?hex=${this.rootColor}&mode=${this.colorMode}&format=${format}&count=${totalColors}`;
     }
 
     /**
@@ -180,15 +198,12 @@ class Thememaker {
 
         // generate a url
         const colorApiUrl = this.generateColorApiUrl("json");
-        console.log(colorApiUrl);
 
         // fetch data
         const fetchedColors = await this.fetchColors(colorApiUrl);
-        console.log(fetchedColors)
 
         // generate the scheme
         this.scheme = this.generateScheme(fetchedColors);
-        console.log(this.scheme)
 
         // apply the scheme
         this.applyScheme();
@@ -226,6 +241,8 @@ class Thememaker {
         const schemeDetails = document.querySelector("#schemeDetailsPanel")
         schemeDetails.style.display = "flex";
         schemeDetails.style.flexFlow = "column";
+        this.showDetails = true;
+        this.updateUi();
     }
 
     /**
@@ -234,6 +251,8 @@ class Thememaker {
     handleHideDetails = () => {
         const schemeDetails = document.querySelector("#schemeDetailsPanel")
         schemeDetails.style.display = "none";
+        this.showDetails = false;
+        this.updateUi();
     }
 
     /**
@@ -431,8 +450,9 @@ class Thememaker {
         if (this.scheme) {
             document.querySelector("#saveSchemeButton").style.display = "block";
             document.querySelector("#resetSchemeButton").style.display = "block";
-            document.querySelector("#showDetailsButton").style.display = "block";
-            document.querySelector("#hideDetailsButton").style.display = "block";
+
+            document.querySelector("#showDetailsButton").style.display = this.showDetails ? "none" : "block";
+            document.querySelector("#hideDetailsButton").style.display = this.showDetails ? "block" : "none";
             this.renderSchemeDetails();
         }
     }
@@ -457,24 +477,17 @@ window.onload = () => {
         "quad"
     ];
 
-    const htmlElements = [
-        "body", 
-        "button",
-        "td", "th", 
-        "div", 
-        "hr", 
-        "h1", "h2", "h3", "h4", "h5", "h6",
-        "span", "a", "p"
-    ];
+    const htmlElements = { 
+        darkContainer: ["body", "main", "div"],
+        mediumContainer: ["pre", "code"],
+        lightContainer: ["button", "td", "th", 'input[type="submit"]'],
+        clearContainer: ["header", "footer", "article", "section", "aside", "nav", "tbody", "ul", "li"],
+        darkText: ["h4", "h5", "h6", "li"],
+        mediumText: ["h3", "h2", "a", "ul"],
+        lightText: ["h1", "p", "span"]
+    };
 
     themeMaker = new Thememaker(modes, htmlElements);
 
     themeMaker.initialize();
 }
-
-// TODO make this work with reactive content
-// document.addEventListener("click", () => {
-//     themeMaker.generateUi();
-//     themeMaker.applyScheme();
-//     themeMaker.renderSchemeDetails();
-// })
