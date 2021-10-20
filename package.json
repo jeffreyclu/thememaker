@@ -1,5 +1,13 @@
 {
+  "type": "module",
   "devDependencies": {
-    "jest": "^27.3.0"
+    "jest": "^27.3.0",
+    "jsdom": "^18.0.0"
+  },
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js"
+  },
+  "jest": {
+    "transform": {}
   }
 }
