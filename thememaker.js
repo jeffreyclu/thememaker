@@ -1,3 +1,5 @@
+import { generateUiSchema } from "./config.js";
+
 export default class Thememaker {
     /**
      * 
@@ -20,13 +22,12 @@ export default class Thememaker {
         if (!Object.values(htmlElements).filter((element) => Array.isArray(element)).length) {
             throw new Error("htmlElements values must be arrays");
         }
-        this.rootColor = "";
-        this.rootColorName = "";
-        this.colorMode = "";
-        this.scheme = {};
+
+        this.scheme = null;
         this.modes = modes;
         this.htmlElements = htmlElements;
         this.showDetails = false;
+        this.showHistory = false;
         this.schemeHistory = [];
     }
 
@@ -72,7 +73,8 @@ export default class Thememaker {
     fetchColors = async (colorApiUrl) => {
         try {
             const generatedColors = [];
-            console.info("fetching:", this.rootColor, this.colorMode);
+            const { rootColor, colorMode } = this.scheme.schemeDetails;
+            console.info("fetching:", rootColor, colorMode);
 
             const resp = await fetch(colorApiUrl);
             const data = await resp.json();
@@ -85,7 +87,7 @@ export default class Thememaker {
                 generatedColors.push(colorObj?.hex?.value);
             })
 
-            this.rootColorName = data?.seed?.name?.value;
+            this.scheme.schemeDetails.rootColorName = data?.seed?.name?.value;
 
             return generatedColors;
         } catch (e) {
@@ -124,7 +126,6 @@ export default class Thememaker {
         if (this.schemeHistory.length > 10) {
             this.schemeHistory.shift();
         }
-        console.log(this.schemeHistory)
     }
 
     /**
@@ -161,6 +162,8 @@ export default class Thememaker {
             const color = colorArr[i];
 
             elementArr.forEach((element) => {
+                // if root color is black, 
+                // set all text elements to white
                 if (colorArr[0] === "#000000") {
                     if (this.isTextElement(element)) {
                         colorScheme[element] = "#FFFFFF"
@@ -183,6 +186,9 @@ export default class Thememaker {
     applyScheme = () => {
         let schemeStyle = "";
         for (const [key, value] of Object.entries(this.scheme)) {
+            if (key === "schemeDetails") {
+                continue;
+            }
             if (this.isContainerElement(key)) {
                 schemeStyle += `${key} { color: ${this.scheme["p"]} !important; background-color: ${value} !important; }`;
             } else {
@@ -196,11 +202,21 @@ export default class Thememaker {
         schemeStyle += "#resetSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
         schemeStyle += "#showDetailsButton { background-color: #FFFFFF !important; color: #000000 !important; }";
         schemeStyle += "#hideDetailsButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#showHistoryButton { background-color: #FFFFFF !important; color: #000000 !important; }";
+        schemeStyle += "#hideHistoryButton { background-color: #FFFFFF !important; color: #000000 !important; }";
         schemeStyle += `#schemeDetailsPanel { background-color: #FFFFFF !important; }`;
+        schemeStyle += `#schemeHistoryPanel { background-color: #FFFFFF !important; }`;
+
+        // rest existing scheme from head
+        const head = document.querySelector("head");
+        const oldScheme = document.querySelector("#themeMaker");
+        if (oldScheme) { 
+            head.removeChild(oldScheme);
+        };
 
         // inject the new style element with the theme styles
-        const head = document.querySelector("head");
         const newStyle = document.createElement("style");
+        newStyle.id = "themeMaker";
         newStyle.innerText = schemeStyle;
         head.appendChild(newStyle);
 
@@ -211,31 +227,85 @@ export default class Thememaker {
      * applies the color scheme details to the details panel
      */
     renderSchemeDetails = () => {
+        const { rootColorName, colorMode } = this.scheme.schemeDetails;
         const colorApiUrl = this.generateColorApiUrl("html");
 
-        let colorSchemeInfo = `<p><a style="color: #000000 !important; text-decoration: underline;" href=${colorApiUrl}>${this.rootColorName} (${this.colorMode})</a></p>`
+        let colorSchemeInfo = `
+            <p>
+                <span style="color: #000000 !important;">
+                    ${rootColorName} (${colorMode})
+                </span> 
+                <a style="color: #000000 !important; text-decoration: underline;" href=${colorApiUrl}>link</a>
+            </p>
+        `;
     
+        const reversedScheme = {};
+
         for (let [key, value] of Object.entries(this.scheme)) {
-            let newP = `<p style="color: #000000 !important">${key}: <span style="color: ${value} !important">${value}</span></p>`;
+            if (key === "schemeDetails") {
+                continue;
+            }
+            if (!reversedScheme[value]) {
+                reversedScheme[value] = [];
+            }
+            reversedScheme[value].push(key);
+        }
+
+        for (let [key, value] of Object.entries(reversedScheme)) {
+            const reducedValue = value.reduce((prev, curr, idx, arr) => {
+                if (idx === arr.length - 1) {
+                    return prev += curr;
+                }
+                return prev += curr + ","
+            }, "");
+
+            let newP = `
+                <p style="color: #000000 !important">
+                    ${reducedValue}: <span style="color: ${key === "#FFFFFF" ? "#000000" : key} !important">${key}</span>
+                </p>
+            `;
             colorSchemeInfo += newP;
         }
     
         const schemeDetailsPanel = document.querySelector("#schemeDetailsPanel");
         schemeDetailsPanel.innerHTML = colorSchemeInfo;
     }
-
+    
+    /**
+     * applies the scheme history to the scheme history panel
+     */
     renderSchemeHistory = () => {
         const schemeHistoryPanel = document.querySelector("#schemeHistoryPanel");
         schemeHistoryPanel.innerHTML = "";
+        
+        const header = document.createElement("p");
+        header.innerHTML = `
+            <span style="color: #000000 !important; text-decoration: underline">
+                Scheme History
+            </span>
+        `;
+        schemeHistoryPanel.appendChild(header);
+
         this.schemeHistory.forEach((scheme, i) => {
-            const button = document.createElement("button");
-            button.innerText = `scheme ${i + 1}`;
-            button.onclick = () => {
+            const { rootColorName, colorMode } = scheme.schemeDetails;
+
+            const applyHistory = () => {
                 this.scheme = scheme;
                 this.applyScheme();
+                console.log('here')
                 this.renderSchemeDetails();
             }
-            schemeHistoryPanel.appendChild(button);
+
+            const newP = document.createElement("p");
+            newP.innerHTML = `
+                <span style="color: #000000 !important">
+                    ${i + 1}.${rootColorName} (${colorMode})
+                </span>
+            `;
+            newP.onclick = applyHistory;
+
+            
+            schemeHistoryPanel.appendChild(newP);
         })
     }
 
@@ -245,8 +315,11 @@ export default class Thememaker {
      * @returns a string representing a valid color api url
      */
     generateColorApiUrl = (format) => {
+        const { rootColor, colorMode } = this.scheme.schemeDetails;
         const totalColors = this.calculateTotalColors();
-        return `//www.thecolorapi.com/scheme?hex=${this.rootColor}&mode=${this.colorMode}&format=${format}&count=${totalColors}`;
+        return "//www.thecolorapi.com/scheme"
+            +`?hex=${rootColor}&mode=${colorMode}`
+            +`&format=${format}&count=${totalColors}`;
     }
 
     /**
@@ -254,8 +327,12 @@ export default class Thememaker {
      */
     handleGenerateScheme = async () => {
         // generate a mode and a color
-        this.colorMode = this.randomMode();
-        this.rootColor = this.randomHexColor();
+        this.scheme = {
+            schemeDetails: {
+                colorMode: this.randomMode(),
+                rootColor: this.randomHexColor()
+            }
+        };
 
         // generate a url
         const colorApiUrl = this.generateColorApiUrl("json");
@@ -267,15 +344,19 @@ export default class Thememaker {
         const generatedScheme = this.generateScheme(fetchedColors);
 
         // set the scheme in state
-        this.scheme = generatedScheme;
+        this.scheme = {
+            ...this.scheme,
+            ...generatedScheme
+        };
         
         // add the scheme to the queue;
-        this.enqueueScheme(generatedScheme);
+        this.enqueueScheme(this.scheme);
 
         // apply the scheme
         this.applyScheme();
 
         // apply the details to the details panel;
+        console.log('here')
         this.renderSchemeDetails();
 
         // update the UI
@@ -287,7 +368,6 @@ export default class Thememaker {
      */
     handleSaveScheme = () => {
         localStorage.setItem("savedScheme", JSON.stringify(this.scheme));
-        this.saveSchemeDetails();
         alert("Success, color scheme saved.");
     }
     
@@ -323,189 +403,52 @@ export default class Thememaker {
     }
 
     /**
+     * click handler to show the scheme history panel
+     */
+    handleShowHistory = () => {
+        const schemeHistory = document.querySelector("#schemeHistoryPanel");
+        schemeHistory.style.display = "flex";
+        schemeHistory.style.flexFlow = "column";
+        this.showHistory = true;
+        this.updateUi();
+    }
+
+    /**
+     * click handler to hide the scheme history panel
+     */
+    handleHideHistory = () => {
+        const schemeHistory = document.querySelector("#schemeHistoryPanel");
+        schemeHistory.style.display = "none";
+        this.showHistory = false;
+        this.updateUi();
+    }
+
+    /**
      * retrieve and apply the saved scheme
      */
     applySavedScheme = () => {
         if (!localStorage.getItem("savedScheme")) {
             return;
         }
-        if (localStorage.getItem("savedScheme") && localStorage.getItem("schemeDetails")) {
-            this.scheme = JSON.parse(localStorage.getItem("savedScheme"));
-            this.applyScheme();
-        }
-    }
-
-    /**
-     * save the current color scheme details
-     */
-    saveSchemeDetails = () => {
-        const schemeDetails = {
-            rootColor: this.rootColor,
-            rootColorName: this.rootColorName,
-            colorMode: this.colorMode
-        };
-        
-        localStorage.setItem("schemeDetails", JSON.stringify(schemeDetails));
-    }
-
-    /**
-     * retrieve and apply the saved scheme details
-     */
-    applySavedSchemeDetails = () => {
-        if (localStorage.getItem("savedScheme") && localStorage.getItem("schemeDetails")) {
-            const schemeDetails = JSON.parse(localStorage.getItem("schemeDetails"));
-            this.rootColor = schemeDetails.rootColor;
-            this.rootColorName = schemeDetails.rootColorName;
-            this.colorMode = schemeDetails.colorMode;
-            this.renderSchemeDetails();
-        }
+        this.scheme = JSON.parse(localStorage.getItem("savedScheme"));
+        this.applyScheme();
+        this.enqueueScheme(this.scheme);
+        this.updateUi();
     }
 
     /**
      * generates the UI and binds the click handlers for THEMEMAKER
      */
     generateUi = () => {
-        const uiSchema = [
-            {
-                type: "button",
-                properties: {
-                    id: "generateSchemeButton",
-                    innerText: "generate scheme",
-                    style: {
-                        position: "fixed",
-                        padding: 0,
-                        margin: 0,
-                        fontSize: "10px",
-                        border: "none",
-                        outline: "none",
-                        top: "0px",
-                        right: "0px",
-                        backgroundColor: "#FFFFFF",
-                        color: "#000000",
-                        zIndex: "999999999"
-                    },
-                    onclick: this.handleGenerateScheme
-                }
-            },
-            {
-                type: "button",
-                properties: {
-                    id: "saveSchemeButton",
-                    innerText: "save scheme",
-                    style: {
-                        display: `${this.scheme ? "block" : "none"}`,
-                        position: "fixed",
-                        padding: 0,
-                        margin: 0,
-                        fontSize: "10px",
-                        border: "none",
-                        outline: "none",
-                        top: "20px",
-                        right: "0px",
-                        backgroundColor: "#FFFFFF",
-                        color: "#000000",
-                        zIndex: "999999999"
-                    },
-                    onclick: this.handleSaveScheme
-                }
-            },
-            {
-                type: "button",
-                properties: {
-                    id: "resetSchemeButton",
-                    innerText: "reset scheme",
-                    style: {
-                        display: `${this.scheme ? "block" : "none"}`,
-                        position: "fixed",
-                        padding: 0,
-                        margin: 0,
-                        fontSize: "10px",
-                        border: "none",
-                        outline: "none",
-                        top: "40px",
-                        right: "0px",
-                        backgroundColor: "#FFFFFF",
-                        color: "#000000",
-                        zIndex: "999999999"
-                    },
-                    onclick: this.handleResetScheme
-                }
-            },
-            {
-                type: "button",
-                properties: {
-                    id: "showDetailsButton",
-                    innerText: "show details",
-                    style: {
-                        display: `${this.scheme ? "block" : "none"}`,
-                        position: "fixed",
-                        padding: 0,
-                        margin: 0,
-                        fontSize: "10px",
-                        border: "none",
-                        outline: "none",
-                        top: "60px",
-                        right: "0px",
-                        backgroundColor: "#FFFFFF",
-                        color: "#000000",
-                        zIndex: "999999999"
-                    },
-                    onclick: this.handleShowDetails
-                }
-            },
-            {
-                type: "button",
-                properties: {
-                    id: "hideDetailsButton",
-                    innerText: "hide details",
-                    style: {
-                        display: `${this.scheme ? "block" : "none"}`,
-                        position: "fixed",
-                        padding: 0,
-                        margin: 0,
-                        fontSize: "10px",
-                        border: "none",
-                        outline: "none",
-                        top: "60px",
-                        right: "0px",
-                        backgroundColor: "#FFFFFF",
-                        color: "#000000",
-                        zIndex: "999999999"
-                    },
-                    onclick: this.handleHideDetails
-                }
-            },
-            {
-                type: "div",
-                properties: {
-                    id: "schemeDetailsPanel",
-                    style: {
-                        position: "fixed",
-                        fontSize: "10px",
-                        bottom: "0px",
-                        right: "0px",
-                        padding: "5px",
-                        border: "1px solid black",
-                        zIndex: "999999999",
-                        display: "none"
-                    }
-                }
-            },
-            {
-                type: "div",
-                properties: {
-                    id: "schemeHistoryPanel",
-                    style: {
-                        position: "fixed",
-                        fontSize: "10px",
-                        bottom: "0px",
-                        left: "0px",
-                        border: "1px solid black",
-                        zIndex: "999999999",
-                    }
-                }
-            }
-        ]
+        const uiSchema = generateUiSchema(
+            this.handleGenerateScheme,
+            this.handleSaveScheme,
+            this.handleResetScheme,
+            this.handleShowDetails,
+            this.handleHideDetails,
+            this.handleShowHistory,
+            this.handleHideHistory,
+        )
         
         const docBody = document.querySelector("body");
         
@@ -538,8 +481,14 @@ export default class Thememaker {
         document.querySelector("#resetSchemeButton").style.display = "block";
         document.querySelector("#showDetailsButton").style.display = this.showDetails ? "none" : "block";
         document.querySelector("#hideDetailsButton").style.display = this.showDetails ? "block" : "none";
-            
-        // this.renderSchemeHistory();
+
+        if (this.schemeHistory.length) {
+            document.querySelector("#showHistoryButton").style.display = this.showHistory ? "none" : "block";
+            document.querySelector("#hideHistoryButton").style.display = this.showHistory ? "block" : "none";
+            this.renderSchemeHistory();
+        }
+        
+        console.log('here')
         this.renderSchemeDetails();
     }
 
@@ -549,6 +498,5 @@ export default class Thememaker {
     initialize = () => {
         this.generateUi();
         this.applySavedScheme();
-        this.applySavedSchemeDetails();
     }
 }
