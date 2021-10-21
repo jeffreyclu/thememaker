@@ -3,13 +3,14 @@ import { JSDOM } from "jsdom"
 
 import Thememaker from "../src/thememaker";
 
-import { modes, htmlElements } from "../src/config";
-import { mockScheme, mockColorArr, mockSchemeDetails, mockResponse, mockUrl } from "./helper";
-import { tsObjectKeyword } from "@babel/types";
-
+import { modes, htmlElements, generateUiSchema } from "../src/config";
+import { mockScheme, mockColorArr, mockSchemeDetails, mockResponse, mockUrl, mockJsonUrl, mockHtmlUrl } from "./mocks";
 
 describe("Thememaker", () => {
     const dom = new JSDOM();
+    
+    const uiSchema = generateUiSchema();
+    const selectors = uiSchema.map((obj) => `#${obj.properties.id}`);
 
     global.document = dom.window.document;
     global.window = dom.window;
@@ -82,6 +83,11 @@ describe("Thememaker", () => {
         expect(themeMaker.calculateTotalColors()).toBe(Object.values(htmlElements).length);
     });
 
+    it("calling generateColorApiUrl should generate a valid url", () => {
+        expect(themeMaker.generateColorApiUrl(mockSchemeDetails, "json")).toBe(mockJsonUrl);
+        expect(themeMaker.generateColorApiUrl(mockSchemeDetails, "html")).toBe(mockHtmlUrl);
+    });
+
     it("calling fetchColors should return an array of hex strings", () => {
         themeMaker.applySchemeDetails(mockSchemeDetails);
         return themeMaker.fetchColors(mockUrl)
@@ -101,19 +107,10 @@ describe("Thememaker", () => {
         expect(themeMaker.isTextElement("a")).toBeTruthy();
     });
 
-    it("calling enqueueScheme should add a scheme to scheme history", () => {
-        themeMaker.enqueueScheme(mockScheme);
-        expect(themeMaker.schemeHistory).toHaveLength(1);
-    })
-
-    it("calling dequeueScheme should return the scheme at the passed index", () => {
-        expect(themeMaker.dequeueScheme(0)).toStrictEqual({});
-        expect(themeMaker.schemeHistory).toHaveLength(0);
-        themeMaker.enqueueScheme(mockScheme);
-        expect(themeMaker.schemeHistory).toHaveLength(1);
-        expect(themeMaker.dequeueScheme(0)).toStrictEqual(mockScheme);
-        expect(themeMaker.schemeHistory).toHaveLength(1);
-    })
+    it("calling applySchemeDetails should set schemeDetails in state", () => {
+        themeMaker.applySchemeDetails(mockSchemeDetails);
+        expect(themeMaker.scheme).toStrictEqual({ schemeDetails: mockSchemeDetails })
+    });
 
     it("calling generate scheme should generate a scheme", () => {
         themeMaker.applySchemeDetails(mockSchemeDetails);
@@ -125,6 +122,80 @@ describe("Thememaker", () => {
         themeMaker.generateUi();
         themeMaker.applyScheme(mockScheme);
         expect(global.document.head.childElementCount).toBe(1);
+    });
+
+    it("applySavedScheme", () => {
+
+    });
+
+    it("calling enqueueScheme should add a scheme to scheme history", () => {
+        themeMaker.enqueueScheme(mockScheme);
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+    });
+
+    it("calling dequeueScheme should return the scheme at the passed index", () => {
+        expect(themeMaker.dequeueScheme(0)).toStrictEqual({});
+        expect(themeMaker.schemeHistory).toHaveLength(0);
+        themeMaker.enqueueScheme(mockScheme);
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+        expect(themeMaker.dequeueScheme(0)).toStrictEqual(mockScheme);
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+    });
+
+    it("calling generateUi should generate the ui", () => {
+        expect(document.body.childElementCount).toBe(0);
+        themeMaker.generateUi();
+        expect(document.body.childElementCount).toBe(uiSchema.length);
+        selectors.forEach((selector) => {
+            if (selector === "#generateSchemeButton") {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        })
+    });
+
+    it("calling updateUi should do nothing if no scheme is applied", () => {
+        themeMaker.generateUi();
+        expect(document.body.childElementCount).toBe(uiSchema.length);
+        selectors.forEach((selector) => {
+            if (selector === "#generateSchemeButton") {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        });
+
+        themeMaker.updateUi();
+        expect(document.body.childElementCount).toBe(uiSchema.length);
+        selectors.forEach((selector) => {
+            if (selector === "#generateSchemeButton") {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        });
     })
 
+    it("calling updateUi should update the ui when a scheme is applied", () => {
+        themeMaker.generateUi();
+        themeMaker.applyScheme(mockScheme);
+        themeMaker.updateUi();
+        selectors.forEach((selector) => {
+            if (
+                selector === "#generateSchemeButton" ||
+                selector === "#saveSchemeButton" ||
+                selector === "#resetSchemeButton" ||
+                selector === "#showDetailsButton"
+                ) {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        });
+    });
 })
