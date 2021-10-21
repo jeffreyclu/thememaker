@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import Thememaker from "../thememaker";
-import { modes, htmlElements } from "../config";
+import Thememaker from "../src/thememaker";
+import { modes, htmlElements } from "../src/config";
+import { mockScheme, mockColorArr } from "./helper";
 import { JSDOM } from "jsdom"
+import _ from "lodash";
 
 const dom = new JSDOM()
 global.document = dom.window.document
@@ -88,5 +90,28 @@ describe("Thememaker", () => {
         expect(themeMaker.isTextElement("body")).toBeFalsy();
         expect(themeMaker.isTextElement("a")).toBeTruthy();
     });
+
+    it("calling enqueueScheme should add a scheme to scheme history", () => {
+        themeMaker.enqueueScheme({ body: "#000000" });
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+    })
+
+    it("calling dequeueScheme should return the scheme at the passed index", () => {
+        expect(themeMaker.dequeueScheme(0)).toStrictEqual({});
+        expect(themeMaker.schemeHistory).toHaveLength(0);
+        themeMaker.enqueueScheme({ body: "#000000" });
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+        expect(themeMaker.dequeueScheme(0)).toStrictEqual({ body: "#000000" });
+        expect(themeMaker.schemeHistory).toHaveLength(1);
+    })
+
+    it("calling generate scheme should generate a scheme", () => {
+        expect(themeMaker.generateScheme(mockColorArr)).toStrictEqual(mockScheme);
+    });
+
+    // it("calling apply scheme applies the scheme", () => {
+    //     themeMaker.scheme = mockScheme;
+    //     themeMaker.applyScheme();
+    // })
 
 })

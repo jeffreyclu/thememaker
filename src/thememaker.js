@@ -85,6 +85,12 @@ export default class Thememaker {
                 generatedColors.push(colorObj?.hex?.value);
             })
 
+            if (!this.scheme) {
+                this.scheme = {
+                    schemeDetails: {}
+                }
+            }
+
             this.scheme.schemeDetails.rootColorName = data?.seed?.name?.value;
 
             return generatedColors;
