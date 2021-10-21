@@ -1,4 +1,4 @@
 (async () => {
-    const src = chrome.runtime.getURL("index.js");
+    const src = chrome.runtime.getURL("src/index.js");
     await import(src);
 })();

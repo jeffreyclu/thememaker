@@ -20,7 +20,7 @@
     },
     "web_accessible_resources": [
         {
-            "resources": [ "index.js", "thememaker.js", "config.js" ],
+            "resources": [ "src/index.js", "src/thememaker.js", "src/config.js" ],
             "matches": [
                 "<all_urls>"
             ]
