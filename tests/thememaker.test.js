@@ -125,7 +125,7 @@ describe("Thememaker", () => {
     });
 
     it("applySavedScheme", () => {
-
+        // add this test
     });
 
     it("calling enqueueScheme should add a scheme to scheme history", () => {
