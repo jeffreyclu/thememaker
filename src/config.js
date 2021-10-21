@@ -31,6 +31,7 @@ export const generateUiSchema = (
                 id: "generateSchemeButton",
                 innerText: "generate scheme",
                 style: {
+                    display: "block",
                     position: "fixed",
                     padding: 0,
                     margin: 0,
