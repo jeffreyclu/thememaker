@@ -46,7 +46,7 @@ export default class Thememaker {
      * @returns a string representing a random hexadecimal color
      */
     randomHexColor = () => {
-        return Math.floor(Math.random()*16777215).toString(16);
+        return Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
     }
 
     /**
@@ -160,17 +160,18 @@ export default class Thememaker {
             const color = colorArr[i];
 
             elementArr.forEach((element) => {
+                colorScheme[element] = color;
                 // if root color is black, 
                 // set all text elements to white
-                if (colorArr[0] === "#000000") {
-                    if (this.isTextElement(element)) {
-                        colorScheme[element] = "#FFFFFF"
-                    } else {
-                        colorScheme[element] = color;
-                    }
-                } else {
-                    colorScheme[element] = color;
-                }
+                // if (colorArr[0] === "#000000") {
+                //     if (this.isTextElement(element)) {
+                //         colorScheme[element] = "#FFFFFF"
+                //     } else {
+                //         colorScheme[element] = color;
+                //     }
+                // } else {
+                //     colorScheme[element] = color;
+                // }
             })
         }
 
@@ -428,7 +429,7 @@ export default class Thememaker {
         }
 
         const retrievedScheme = JSON.parse(localStorage.getItem("savedScheme"));
-        
+
         if (!retrievedScheme.hasOwnProperty("schemeDetails")) {
             localStorage.removeItem("savedScheme");
             return;
