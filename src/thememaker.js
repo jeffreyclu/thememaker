@@ -85,13 +85,12 @@ export default class Thememaker {
                 generatedColors.push(colorObj?.hex?.value);
             })
 
-            if (!this.scheme) {
-                this.scheme = {
-                    schemeDetails: {}
-                }
-            }
+            const newDetails = {
+                ...this.scheme.schemeDetails,
+                rootColorName: data?.seed?.name?.value
+            };
 
-            this.scheme.schemeDetails.rootColorName = data?.seed?.name?.value;
+            this.applySchemeDetails(newDetails);
 
             return generatedColors;
         } catch (e) {
@@ -123,29 +122,27 @@ export default class Thememaker {
     
     /**
      * 
-     * @param {{}} scheme 
+     * @param {string} format 
+     * @returns a string representing a valid color api url
      */
-    enqueueScheme = (scheme) => {
-        this.schemeHistory.push(scheme);
-        if (this.schemeHistory.length > 10) {
-            this.schemeHistory.shift();
-        }
+    generateColorApiUrl = (schemeDetails, format) => {
+        const { rootColor, colorMode } = schemeDetails;
+        const totalColors = this.calculateTotalColors();
+        return "//www.thecolorapi.com/scheme"
+            +`?hex=${rootColor}&mode=${colorMode}`
+            +`&format=${format}&count=${totalColors}`;
     }
 
     /**
      * 
-     * @param {number} index 
-     * @returns the stored scheme at the passed in index
+     * @param {{}} schemeDetails 
      */
-    dequeueScheme = (index) => {
-        if (!this.schemeHistory.length) {
-            return {};
-        }
-        let selectedScheme = {};
-        if (index >= 0 && index < this.schemeHistory.length) {
-            selectedScheme = this.schemeHistory[index];
-        }
-        return selectedScheme;
+    applySchemeDetails = (schemeDetails) => {
+        this.scheme = {
+            schemeDetails: {
+                ...schemeDetails
+            }
+        };
     }
 
     /**
@@ -155,7 +152,9 @@ export default class Thememaker {
      * -> {"body": "color1", "p": "color2", etc.}
      */
     generateScheme = (colorArr) => {
-        const colorScheme = {};
+        const colorScheme = {
+            ...this.scheme
+        };
 
         const elements = Object.values(this.htmlElements);
 
@@ -188,14 +187,16 @@ export default class Thememaker {
      * 
      * applies the color scheme
      */
-    applyScheme = () => {
+    applyScheme = (scheme) => {
+        this.scheme = scheme;
+
         let schemeStyle = "";
-        for (const [key, value] of Object.entries(this.scheme)) {
+        for (const [key, value] of Object.entries(scheme)) {
             if (key === "schemeDetails") {
                 continue;
             }
             if (this.isContainerElement(key)) {
-                schemeStyle += `${key} { color: ${this.scheme["p"]} !important; background-color: ${value} !important; }`;
+                schemeStyle += `${key} { color: ${scheme["p"]} !important; background-color: ${value} !important; }`;
             } else {
                 schemeStyle += `${key} { color: ${value} !important; background-color: transparent !important; background-image: none !important; }`;
             }
@@ -229,11 +230,115 @@ export default class Thememaker {
     }
 
     /**
+     * retrieve and apply the saved scheme
+     */
+    applySavedScheme = () => {
+        if (!localStorage.getItem("savedScheme")) {
+            return;
+        }
+
+        const retrievedScheme = JSON.parse(localStorage.getItem("savedScheme"));
+
+        if (!retrievedScheme.hasOwnProperty("schemeDetails")) {
+            localStorage.removeItem("savedScheme");
+            return;
+        };
+
+        this.enqueueScheme(retrievedScheme);
+        this.applyScheme(retrievedScheme);
+        
+        this.updateUi();
+    }
+
+    /**
+     * 
+     * @param {{}} scheme 
+     */
+    enqueueScheme = (scheme) => {
+        this.schemeHistory.push(scheme);
+        if (this.schemeHistory.length > 10) {
+            this.schemeHistory.shift();
+        }
+    }
+
+    /**
+     * 
+     * @param {number} index 
+     * @returns the stored scheme at the passed in index
+     */
+    dequeueScheme = (index) => {
+        if (!this.schemeHistory.length) {
+            return {};
+        }
+        let selectedScheme = {};
+        if (index >= 0 && index < this.schemeHistory.length) {
+            selectedScheme = this.schemeHistory[index];
+        }
+        return selectedScheme;
+    }
+
+    /**
+     * generates the UI and binds the click handlers for THEMEMAKER
+     */
+    generateUi = () => {
+        const uiSchema = generateUiSchema(
+            this.handleGenerateScheme,
+            this.handleSaveScheme,
+            this.handleResetScheme,
+            this.handleShowDetails,
+            this.handleHideDetails,
+            this.handleShowHistory,
+            this.handleHideHistory,
+        )
+        
+        const docBody = document.querySelector("body");
+        
+        uiSchema.forEach((schema) => {
+            // create an html node, override its properties with
+            // the UI schema, and append it to the body
+            const element = document.createElement(schema.type);
+            for (const [key, value] of Object.entries(schema.properties)) {
+                // handle style property separately since its an {}
+                if (key === "style") {
+                    for (const [styleKey, styleValue] of Object.entries(value)) {
+                        element.style[styleKey] = styleValue;
+                    }
+                } else {
+                    element[key] = value;
+                }
+            }
+            docBody.appendChild(element);
+        });
+    }
+
+    /**
+     * update the Thememaker UI based on state
+     */
+    updateUi = () => {
+        if (!this.scheme) {
+            return;
+        }
+        document.querySelector("#saveSchemeButton").style.display = "block";
+        document.querySelector("#resetSchemeButton").style.display = "block";
+        document.querySelector("#showDetailsButton").style.display = this.showDetails ? "none" : "block";
+        document.querySelector("#hideDetailsButton").style.display = this.showDetails ? "block" : "none";
+
+        if (this.schemeHistory.length) {
+            document.querySelector("#showHistoryButton").style.display = this.showHistory ? "none" : "block";
+            document.querySelector("#hideHistoryButton").style.display = this.showHistory ? "block" : "none";
+            this.renderSchemeHistory();
+        }
+        
+        this.renderSchemeDetails(this.scheme);
+    }
+
+    /**
      * applies the color scheme details to the details panel
      */
-    renderSchemeDetails = () => {
-        const { rootColorName, colorMode } = this.scheme.schemeDetails;
-        const colorApiUrl = this.generateColorApiUrl("html");
+    renderSchemeDetails = (scheme) => {
+        const { rootColorName, colorMode } = scheme.schemeDetails;
+        console.log(colorMode)
+        const colorApiUrl = this.generateColorApiUrl(scheme.schemeDetails, "html");
 
         let colorSchemeInfo = `
             <p>
@@ -295,9 +400,8 @@ export default class Thememaker {
             const { rootColorName, colorMode } = scheme.schemeDetails;
 
             const applyHistory = () => {
-                this.scheme = scheme;
-                this.applyScheme();
-                this.renderSchemeDetails();
+                this.applyScheme(scheme);
+                this.renderSchemeDetails(scheme);
             }
 
             const newP = document.createElement("p");
@@ -314,32 +418,20 @@ export default class Thememaker {
     }
 
     /**
-     * 
-     * @param {string} format 
-     * @returns a string representing a valid color api url
-     */
-    generateColorApiUrl = (format) => {
-        const { rootColor, colorMode } = this.scheme.schemeDetails;
-        const totalColors = this.calculateTotalColors();
-        return "//www.thecolorapi.com/scheme"
-            +`?hex=${rootColor}&mode=${colorMode}`
-            +`&format=${format}&count=${totalColors}`;
-    }
-
-    /**
      * click handler to generate a scheme
      */
     handleGenerateScheme = async () => {
         // generate a mode and a color
-        this.scheme = {
-            schemeDetails: {
-                colorMode: this.randomMode(),
-                rootColor: this.randomHexColor()
-            }
-        };
+        const seedDetails = {
+            rootColor: this.randomHexColor(),
+            colorMode: this.randomMode()
+        }
+
+        // save seed details in state
+        this.applySchemeDetails(seedDetails);
 
         // generate a url
-        const colorApiUrl = this.generateColorApiUrl("json");
+        const colorApiUrl = this.generateColorApiUrl(seedDetails, "json");
 
         // fetch data
         const fetchedColors = await this.fetchColors(colorApiUrl);
@@ -347,20 +439,16 @@ export default class Thememaker {
         // generate the scheme
         const generatedScheme = this.generateScheme(fetchedColors);
 
-        // set the scheme in state
-        this.scheme = {
-            ...this.scheme,
-            ...generatedScheme
-        };
+        console.log(generatedScheme)
         
         // add the scheme to the queue;
-        this.enqueueScheme(this.scheme);
+        this.enqueueScheme(generatedScheme);
 
         // apply the scheme
-        this.applyScheme();
+        this.applyScheme(generatedScheme);
 
         // apply the details to the details panel;
-        this.renderSchemeDetails();
+        this.renderSchemeDetails(generatedScheme);
 
         // update the UI
         this.updateUi();
@@ -424,82 +512,6 @@ export default class Thememaker {
         schemeHistory.style.display = "none";
         this.showHistory = false;
         this.updateUi();
-    }
-
-    /**
-     * retrieve and apply the saved scheme
-     */
-    applySavedScheme = () => {
-        if (!localStorage.getItem("savedScheme")) {
-            return;
-        }
-
-        const retrievedScheme = JSON.parse(localStorage.getItem("savedScheme"));
-
-        if (!retrievedScheme.hasOwnProperty("schemeDetails")) {
-            localStorage.removeItem("savedScheme");
-            return;
-        };
-
-        this.scheme = retrievedScheme;
-        this.applyScheme();
-        this.enqueueScheme(this.scheme);
-        this.updateUi();
-    }
-
-    /**
-     * generates the UI and binds the click handlers for THEMEMAKER
-     */
-    generateUi = () => {
-        const uiSchema = generateUiSchema(
-            this.handleGenerateScheme,
-            this.handleSaveScheme,
-            this.handleResetScheme,
-            this.handleShowDetails,
-            this.handleHideDetails,
-            this.handleShowHistory,
-            this.handleHideHistory,
-        )
-        
-        const docBody = document.querySelector("body");
-        
-        uiSchema.forEach((schema) => {
-            // create an html node, override its properties with
-            // the UI schema, and append it to the body
-            const element = document.createElement(schema.type);
-            for (const [key, value] of Object.entries(schema.properties)) {
-                // handle style property separately since its an {}
-                if (key === "style") {
-                    for (const [styleKey, styleValue] of Object.entries(value)) {
-                        element.style[styleKey] = styleValue;
-                    }
-                } else {
-                    element[key] = value;
-                }
-            }
-            docBody.appendChild(element);
-        });
-    }
-
-    /**
-     * update the Thememaker UI based on state
-     */
-    updateUi = () => {
-        if (!this.scheme) {
-            return;
-        }
-        document.querySelector("#saveSchemeButton").style.display = "block";
-        document.querySelector("#resetSchemeButton").style.display = "block";
-        document.querySelector("#showDetailsButton").style.display = this.showDetails ? "none" : "block";
-        document.querySelector("#hideDetailsButton").style.display = this.showDetails ? "block" : "none";
-
-        if (this.schemeHistory.length) {
-            document.querySelector("#showHistoryButton").style.display = this.showHistory ? "none" : "block";
-            document.querySelector("#hideHistoryButton").style.display = this.showHistory ? "block" : "none";
-            this.renderSchemeHistory();
-        }
-        
-        this.renderSchemeDetails();
     }
 
     /**
