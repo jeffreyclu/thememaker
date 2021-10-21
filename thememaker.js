@@ -73,8 +73,6 @@ export default class Thememaker {
     fetchColors = async (colorApiUrl) => {
         try {
             const generatedColors = [];
-            const { rootColor, colorMode } = this.scheme.schemeDetails;
-            console.info("fetching:", rootColor, colorMode);
 
             const resp = await fetch(colorApiUrl);
             const data = await resp.json();
@@ -292,7 +290,6 @@ export default class Thememaker {
             const applyHistory = () => {
                 this.scheme = scheme;
                 this.applyScheme();
-                console.log('here')
                 this.renderSchemeDetails();
             }
 
@@ -356,7 +353,6 @@ export default class Thememaker {
         this.applyScheme();
 
         // apply the details to the details panel;
-        console.log('here')
         this.renderSchemeDetails();
 
         // update the UI
@@ -430,7 +426,15 @@ export default class Thememaker {
         if (!localStorage.getItem("savedScheme")) {
             return;
         }
-        this.scheme = JSON.parse(localStorage.getItem("savedScheme"));
+
+        const retrievedScheme = JSON.parse(localStorage.getItem("savedScheme"));
+        
+        if (!retrievedScheme.hasOwnProperty("schemeDetails")) {
+            localStorage.removeItem("savedScheme");
+            return;
+        };
+
+        this.scheme = retrievedScheme;
         this.applyScheme();
         this.enqueueScheme(this.scheme);
         this.updateUi();
@@ -488,7 +492,6 @@ export default class Thememaker {
             this.renderSchemeHistory();
         }
         
-        console.log('here')
         this.renderSchemeDetails();
     }
 

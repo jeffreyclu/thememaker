@@ -73,6 +73,7 @@ describe("Thememaker", () => {
     it("calling fetchColors should return an array of hex strings", () => {
         return themeMaker.fetchColors("https://www.thecolorapi.com/scheme?hex=b98790&mode=analogic-complement&format=json&count=7")
             .then(data => {
+                console.log(data)
                 expect(data).toBeTruthy();
                 expect(data).toHaveLength(7);
             });
