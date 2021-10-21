@@ -36,6 +36,8 @@ export const mockResponse = {
 };
 
 export const mockUrl = "https://www.thecolorapi.com/scheme?hex=B98790&mode=analogic-complement&count=7";
+export const mockJsonUrl = "https://www.thecolorapi.com/scheme?hex=#B98790&mode=analogic-complement&format=json&count=7";
+export const mockHtmlUrl = "https://www.thecolorapi.com/scheme?hex=#B98790&mode=analogic-complement&format=html&count=7"
 
 export const mockColorArr = [
     "#6F928B",
