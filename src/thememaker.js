@@ -64,6 +64,19 @@ export default class Thememaker {
     calculateTotalColors = () => {
         return Object.keys(this.htmlElements).length;
     }
+
+    /**
+     * 
+     * @param {string} format 
+     * @returns a string representing a valid color api url
+     */
+    generateColorApiUrl = (schemeDetails, format) => {
+    const { rootColor, colorMode } = schemeDetails;
+    const totalColors = this.calculateTotalColors();
+    return "https://www.thecolorapi.com/scheme"
+        +`?hex=${rootColor}&mode=${colorMode}`
+        +`&format=${format}&count=${totalColors}`;
+}
     
     /**
      * 
@@ -120,19 +133,6 @@ export default class Thememaker {
         this.htmlElements.lightText.includes(element)
     }
     
-    /**
-     * 
-     * @param {string} format 
-     * @returns a string representing a valid color api url
-     */
-    generateColorApiUrl = (schemeDetails, format) => {
-        const { rootColor, colorMode } = schemeDetails;
-        const totalColors = this.calculateTotalColors();
-        return "//www.thecolorapi.com/scheme"
-            +`?hex=${rootColor}&mode=${colorMode}`
-            +`&format=${format}&count=${totalColors}`;
-    }
-
     /**
      * 
      * @param {{}} schemeDetails 
@@ -337,7 +337,6 @@ export default class Thememaker {
      */
     renderSchemeDetails = (scheme) => {
         const { rootColorName, colorMode } = scheme.schemeDetails;
-        console.log(colorMode)
         const colorApiUrl = this.generateColorApiUrl(scheme.schemeDetails, "html");
 
         let colorSchemeInfo = `
@@ -438,8 +437,6 @@ export default class Thememaker {
 
         // generate the scheme
         const generatedScheme = this.generateScheme(fetchedColors);
-
-        console.log(generatedScheme)
         
         // add the scheme to the queue;
         this.enqueueScheme(generatedScheme);
