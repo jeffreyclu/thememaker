@@ -350,7 +350,7 @@ export default class Thememaker {
     
         const reversedScheme = {};
 
-        for (let [key, value] of Object.entries(this.scheme)) {
+        for (let [key, value] of Object.entries(scheme)) {
             if (key === "schemeDetails") {
                 continue;
             }
@@ -467,6 +467,7 @@ export default class Thememaker {
         localStorage.removeItem("schemeDetails");
         alert("Scheme reset.")
         window.location.reload(true);
+        this.scheme = null;
     }
 
     /**
