@@ -12,8 +12,6 @@ describe("Thememaker", () => {
     const uiSchema = generateUiSchema();
     const selectors = uiSchema.map((obj) => `#${obj.properties.id}`);
 
-    
-
     global.document = dom.window.document;
     global.window = dom.window;
     global.localStorage = {
