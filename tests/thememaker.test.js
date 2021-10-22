@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "@jest/globals";
+import { afterEach, beforeEach, describe, expect, it, jest } from "@jest/globals";
 import { JSDOM } from "jsdom"
 
 import Thememaker from "../src/thememaker";
@@ -11,6 +11,8 @@ describe("Thememaker", () => {
     
     const uiSchema = generateUiSchema();
     const selectors = uiSchema.map((obj) => `#${obj.properties.id}`);
+
+    
 
     global.document = dom.window.document;
     global.window = dom.window;
@@ -31,6 +33,8 @@ describe("Thememaker", () => {
         json: () => Promise.resolve(mockResponse),
     });
 
+    global.alert = jest.fn();
+
     let themeMaker;
 
     beforeEach(() => {
@@ -39,6 +43,7 @@ describe("Thememaker", () => {
     afterEach(() => {
         global.document.head.innerHTML = "";
         global.document.body.innerHTML = "";
+        localStorage.data = {};
     })
     it("throws an error with invalid arguments", () => {
         const noArgs = () => new Thememaker();
@@ -119,13 +124,21 @@ describe("Thememaker", () => {
 
     it("calling apply scheme applies the scheme", () => {
         expect(document.head.childElementCount).toBe(0);
-        themeMaker.generateUi();
+        themeMaker.initialize();
         themeMaker.applyScheme(mockScheme);
-        expect(global.document.head.childElementCount).toBe(1);
+        expect(document.head.childElementCount).toBe(1);
     });
 
-    it("applySavedScheme", () => {
+    it("calling applySavedScheme should do nothing if no scheme is saved", () => {
+        themeMaker.applySavedScheme();
+        expect(themeMaker.scheme).toBeNull();
+    })
 
+    it("calling applySavedScheme should apply a scheme saved in localStorage", () => {
+        localStorage.setItem("savedScheme", JSON.stringify(mockScheme));
+        themeMaker.generateUi();
+        themeMaker.applySavedScheme();
+        expect(themeMaker.scheme).toStrictEqual(mockScheme);
     });
 
     it("calling enqueueScheme should add a scheme to scheme history", () => {
@@ -157,7 +170,7 @@ describe("Thememaker", () => {
     });
 
     it("calling updateUi should do nothing if no scheme is applied", () => {
-        themeMaker.generateUi();
+        themeMaker.initialize();
         expect(document.body.childElementCount).toBe(uiSchema.length);
         selectors.forEach((selector) => {
             if (selector === "#generateSchemeButton") {
@@ -181,7 +194,7 @@ describe("Thememaker", () => {
     })
 
     it("calling updateUi should update the ui when a scheme is applied", () => {
-        themeMaker.generateUi();
+        themeMaker.initialize();
         themeMaker.applyScheme(mockScheme);
         themeMaker.updateUi();
         selectors.forEach((selector) => {
@@ -198,4 +211,138 @@ describe("Thememaker", () => {
             expect(document.querySelector(selector)).toBeTruthy();
         });
     });
+
+    it("calling renderSchemeDetails should render the scheme details in the scheme details panel", () => {
+        expect(document.querySelector("#schemeDetailsPanel")).toBeNull();
+        themeMaker.initialize();
+        themeMaker.renderSchemeDetails(mockScheme);
+        expect(document.querySelector("#schemeDetailsPanel").childElementCount).toBe(Object.values(htmlElements).length + 1);
+    })
+
+    it("calling renderSchemeHistory should render just the title in the scheme history panel with no scheme history", () => {
+        expect(document.querySelector("#schemeHistoryPanel")).toBeNull();
+        themeMaker.initialize();
+        themeMaker.renderSchemeHistory(mockScheme);
+        expect(document.querySelector("#schemeHistoryPanel").childElementCount).toBe(1);
+    })
+
+    it("calling renderSchemeHistory should render the scheme history in the scheme history panel with no scheme history", () => {
+        expect(document.querySelector("#schemeHistoryPanel")).toBeNull();
+        themeMaker.initialize();
+        themeMaker.enqueueScheme(mockScheme);
+        themeMaker.renderSchemeHistory(mockScheme);
+        expect(document.querySelector("#schemeHistoryPanel").childElementCount).toBe(2);
+    });
+
+    it("calling handleGenerateScheme should generate a scheme and apply it", async () => {
+        expect(document.head.childElementCount).toBe(0);
+        themeMaker.initialize();
+        return themeMaker.handleGenerateScheme()
+            .then(() => {
+                expect(themeMaker.scheme).toBeTruthy();
+                expect(document.head.childElementCount).toBe(1);
+            });
+    });
+
+    it("calling handleSaveScheme should save a scheme in localStorage", () => {
+        expect(localStorage.getItem("savedScheme")).toBeUndefined();
+        themeMaker.initialize();
+        themeMaker.applyScheme(mockScheme);
+        themeMaker.handleSaveScheme();
+        expect(alert).toHaveBeenCalled();
+        expect(JSON.parse(localStorage.getItem("savedScheme"))).toStrictEqual(mockScheme);
+    });
+
+    it("calling handleResetScheme should delete the saved scheme and reset the scheme", () => {
+        themeMaker.initialize();
+        themeMaker.applyScheme(mockScheme);
+        themeMaker.handleSaveScheme();
+        themeMaker.handleResetScheme();
+        expect(alert).toHaveBeenCalled();
+        expect(localStorage.getItem("savedScheme")).toBeUndefined();
+        expect(themeMaker.scheme).toBeNull();
+    });
+
+    it("calling handleShowDetails should make the schemeDetailsPanel visible", () => {
+        themeMaker.initialize();
+        themeMaker.handleGenerateScheme();
+        expect(themeMaker.showDetails).toBeFalsy();
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("none");
+        themeMaker.handleShowDetails();
+        expect(themeMaker.showDetails).toBeTruthy();
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("flex");
+    });
+
+    it("calling handleHideDetails should hide the schemeDetailsPanel", () => {
+        themeMaker.initialize();
+        themeMaker.handleGenerateScheme();
+        expect(themeMaker.showDetails).toBeFalsy();
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("none");
+        themeMaker.handleShowDetails();
+        expect(themeMaker.showDetails).toBeTruthy();
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("flex");
+        themeMaker.handleHideDetails();
+        expect(themeMaker.showDetails).toBeFalsy();
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("none");
+    });
+
+    it("calling handleShowHistory should make the schemeHistoryPanel visible", () => {
+        themeMaker.initialize();
+        themeMaker.enqueueScheme(mockScheme);
+        expect(themeMaker.showHistory).toBeFalsy();
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("none");
+        themeMaker.handleShowHistory();
+        expect(themeMaker.showHistory).toBeTruthy();
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("flex");
+    });
+
+    it("calling handleHideHistory should hide the schemeHistoryPanel", () => {
+        themeMaker.initialize();
+        themeMaker.enqueueScheme(mockScheme);
+        expect(themeMaker.showHistory).toBeFalsy();
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("none");
+        themeMaker.handleShowHistory();
+        expect(themeMaker.showHistory).toBeTruthy();
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("flex");
+        themeMaker.handleHideHistory();
+        expect(themeMaker.showHistory).toBeFalsy();
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("none");
+    });
+
+    it("calling initialize should generate the UI only when no scheme is saved", () => {
+        expect(document.body.childElementCount).toBe(0);
+        themeMaker.initialize();
+        expect(document.body.childElementCount).toBe(uiSchema.length);
+        selectors.forEach((selector) => {
+            if (selector === "#generateSchemeButton") {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        });
+        expect(themeMaker.scheme).toBeNull();
+    });
+
+    it("calling initialize should generate the UI and apply the saved scheme if a scheme is saved", () => {
+        localStorage.setItem("savedScheme", JSON.stringify(mockScheme));
+        expect(document.body.childElementCount).toBe(0);
+        themeMaker.initialize();
+        expect(document.body.childElementCount).toBe(uiSchema.length);
+        selectors.forEach((selector) => {
+            if (
+                selector === "#generateSchemeButton" ||
+                selector === "#saveSchemeButton" ||
+                selector === "#resetSchemeButton" ||
+                selector === "#showDetailsButton" ||
+                selector === "#showHistoryButton"
+                ) {
+                expect(document.querySelector(selector).style.display).toBe("block");
+            } else {
+                expect(document.querySelector(selector).style.display).toBe("none");
+            }
+            expect(document.querySelector(selector)).toBeTruthy();
+        });
+        expect(themeMaker.scheme).toStrictEqual(mockScheme);
+    })
 })
