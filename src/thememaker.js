@@ -59,7 +59,7 @@ export default class Thememaker {
 
     /**
      * 
-     * @returns an integer representing the number of total colors for thememaker
+     * @returns an integer representing the number of total colors for THEMEMAKER
      */
     calculateTotalColors = () => {
         return Object.keys(this.htmlElements).length;
@@ -166,17 +166,6 @@ export default class Thememaker {
 
             elementArr.forEach((element) => {
                 colorScheme[element] = color;
-                // if root color is black, 
-                // set all text elements to white
-                // if (colorArr[0] === "#000000") {
-                //     if (this.isTextElement(element)) {
-                //         colorScheme[element] = "#FFFFFF"
-                //     } else {
-                //         colorScheme[element] = color;
-                //     }
-                // } else {
-                //     colorScheme[element] = color;
-                // }
             })
         }
 
@@ -184,7 +173,6 @@ export default class Thememaker {
     }
 
     /**
-     * 
      * applies the color scheme
      */
     applyScheme = (scheme) => {
@@ -199,10 +187,10 @@ export default class Thememaker {
                 schemeStyle += `${key} { color: ${scheme["p"]} !important; background-color: ${value} !important; }`;
             } else {
                 schemeStyle += `${key} { color: ${value} !important; background-color: transparent !important; background-image: none !important; }`;
-            }
+            } 
         }
 
-        // hardcode thememaker UI colors
+        // hardcode thememaker UI colors otherwise the theme will override it 🥲
         schemeStyle += "#generateSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
         schemeStyle += "#saveSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
         schemeStyle += "#resetSchemeButton { background-color: #FFFFFF !important; color: #000000 !important; }";
@@ -213,7 +201,7 @@ export default class Thememaker {
         schemeStyle += `#schemeDetailsPanel { background-color: #FFFFFF !important; }`;
         schemeStyle += `#schemeHistoryPanel { background-color: #FFFFFF !important; }`;
 
-        // rest existing scheme from head
+        // reset existing scheme from head
         const head = document.querySelector("head");
         const oldScheme = document.querySelector("#themeMaker");
         if (oldScheme) { 
@@ -253,6 +241,7 @@ export default class Thememaker {
     /**
      * 
      * @param {{}} scheme 
+     * enqueues the passed in scheme
      */
     enqueueScheme = (scheme) => {
         this.schemeHistory.push(scheme);
@@ -393,6 +382,7 @@ export default class Thememaker {
                 Scheme History
             </span>
         `;
+
         schemeHistoryPanel.appendChild(header);
 
         this.schemeHistory.forEach((scheme, i) => {
@@ -410,7 +400,6 @@ export default class Thememaker {
                 </span>
             `;
             newP.onclick = applyHistory;
-
             
             schemeHistoryPanel.appendChild(newP);
         })
@@ -420,34 +409,25 @@ export default class Thememaker {
      * click handler to generate a scheme
      */
     handleGenerateScheme = async () => {
-        // generate a mode and a color
         const seedDetails = {
             rootColor: this.randomHexColor(),
             colorMode: this.randomMode()
         }
 
-        // save seed details in state
         this.applySchemeDetails(seedDetails);
 
-        // generate a url
         const colorApiUrl = this.generateColorApiUrl(seedDetails, "json");
 
-        // fetch data
         const fetchedColors = await this.fetchColors(colorApiUrl);
 
-        // generate the scheme
         const generatedScheme = this.generateScheme(fetchedColors);
         
-        // add the scheme to the queue;
         this.enqueueScheme(generatedScheme);
 
-        // apply the scheme
         this.applyScheme(generatedScheme);
 
-        // apply the details to the details panel;
         this.renderSchemeDetails(generatedScheme);
 
-        // update the UI
         this.updateUi();
     }
 
