@@ -446,7 +446,11 @@ export default class Thememaker {
         localStorage.removeItem("savedScheme");
         localStorage.removeItem("schemeDetails");
         alert("Scheme reset.")
-        window.location.reload(true);
+        const head = document.querySelector("head");
+        const oldScheme = document.querySelector("#themeMaker");
+        if (oldScheme) { 
+            head.removeChild(oldScheme);
+        };
         this.scheme = null;
     }
 
@@ -500,3 +504,5 @@ export default class Thememaker {
         this.applySavedScheme();
     }
 }
+
+// let user add their own dom node types
