@@ -463,6 +463,7 @@ export default class Thememaker {
         if (oldScheme) { 
             head.removeChild(oldScheme);
         };
+        this.scheme = null;
 
         // reset UI panel
         this.resetUi();
