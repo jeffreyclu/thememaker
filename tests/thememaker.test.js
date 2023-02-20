@@ -261,6 +261,24 @@ describe("Thememaker", () => {
         expect(themeMaker.scheme).toBeNull();
     });
 
+    it("calling handleResetScheme should reset the UI", () => {
+        themeMaker.initialize();
+        themeMaker.applyScheme(mockScheme);
+        themeMaker.handleSaveScheme();
+        themeMaker.handleResetScheme();
+        expect(alert).toHaveBeenCalled();
+
+        expect(document.querySelector("#saveSchemeButton").style.display).toBe("none");
+        expect(document.querySelector("#resetSchemeButton").style.display).toBe("none");
+        expect(document.querySelector("#showDetailsButton").style.display).toBe("none");
+        expect(document.querySelector("#hideDetailsButton").style.display).toBe("none");
+        expect(document.querySelector("#showHistoryButton").style.display).toBe("none");
+        expect(document.querySelector("#hideHistoryButton").style.display).toBe("none");
+        
+        expect(document.querySelector("#schemeDetailsPanel").style.display).toBe("none");
+        expect(document.querySelector("#schemeHistoryPanel").style.display).toBe("none");
+    })
+
     it("calling handleShowDetails should make the schemeDetailsPanel visible", () => {
         themeMaker.initialize();
         themeMaker.handleGenerateScheme();
