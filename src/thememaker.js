@@ -342,6 +342,11 @@ export default class Thememaker {
 
         let colorSchemeInfo = `
             <p>
+                <span style="color: #000000 !important; text-decoration: underline">
+                    Scheme Details
+                </span>
+            </p>
+            <p>
                 <span style="color: #000000 !important;">
                     ${rootColorName} (${colorMode})
                 </span> 
@@ -391,7 +396,7 @@ export default class Thememaker {
         const header = document.createElement("p");
         header.innerHTML = `
             <span style="color: #000000 !important; text-decoration: underline">
-                Scheme History
+                Scheme History (click to apply)
             </span>
         `;
 
