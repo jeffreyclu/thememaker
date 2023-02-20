@@ -341,17 +341,19 @@ export default class Thememaker {
         const colorApiUrl = this.generateColorApiUrl(scheme.schemeDetails, "html");
 
         let colorSchemeInfo = `
-            <p>
-                <span style="color: #000000 !important; text-decoration: underline">
-                    Scheme Details
-                </span>
-            </p>
-            <p>
-                <span style="color: #000000 !important;">
-                    ${rootColorName} (${colorMode})
-                </span> 
-                <a style="color: #000000 !important; text-decoration: underline;" href=${colorApiUrl}>link</a>
-            </p>
+            <div style="background-color: #FFFFFF !important;">
+                <p>
+                    <span style="color: #000000 !important; text-decoration: underline">
+                        Scheme Details
+                    </span>
+                </p>
+                <p>
+                    <span style="color: #000000 !important;">
+                        ${rootColorName} (${colorMode})
+                    </span> 
+                    <a style="color: #000000 !important; text-decoration: underline;" href=${colorApiUrl}>link</a>
+                </p>
+            </div>
         `;
     
         const reversedScheme = {};
