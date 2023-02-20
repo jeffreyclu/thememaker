@@ -132,7 +132,7 @@ export default class Thememaker {
         this.htmlElements.mediumText.includes(element) ||
         this.htmlElements.lightText.includes(element)
     }
-    
+
     /**
      * 
      * @param {{}} schemeDetails 
@@ -322,6 +322,18 @@ export default class Thememaker {
     }
 
     /**
+     * resets the ui panel
+     */
+    resetUi = () => {
+        document.querySelector("#saveSchemeButton").style.display = "none";
+        document.querySelector("#resetSchemeButton").style.display = "none";
+        document.querySelector("#showDetailsButton").style.display = "none";
+        document.querySelector("#hideDetailsButton").style.display = "none";
+        document.querySelector("#showHistoryButton").style.display = "none";
+        document.querySelector("#hideHistoryButton").style.display = "none";
+    }
+
+    /**
      * applies the color scheme details to the details panel
      */
     renderSchemeDetails = (scheme) => {
@@ -451,7 +463,9 @@ export default class Thememaker {
         if (oldScheme) { 
             head.removeChild(oldScheme);
         };
-        this.scheme = null;
+
+        // reset UI panel
+        this.resetUi();
     }
 
     /**
