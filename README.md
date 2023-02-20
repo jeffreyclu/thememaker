@@ -6,7 +6,7 @@ THEMEMAKER is a chrome extension to instantly (sort of) apply a random (kinda) c
 
 ## Why does this exist?
 
-Idk.
+Colors are awesome. Themes are awesome. Why don't websites provide custom themes?
 
 ## OK I'm sold, how do I use it?
 
