@@ -1,6 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Thememaker",
+    "descripton": "Apply a new color scheme to any website.",
     "version": "0.1",
     "content_scripts": [
         {
