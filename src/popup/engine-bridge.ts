@@ -10,6 +10,7 @@
  */
 import { modes } from "../config";
 import { randomHexColor, randomMode } from "../lib/theme-engine";
+import { describeColor } from "../lib/color-names";
 import { localPalette, apiPalette } from "../lib/color-source";
 import type { PaletteSourceDeps } from "../lib/color-source";
 import type { Palette } from "../lib/palette";
@@ -93,7 +94,13 @@ export const generateForSelection = async (
     ? await apiPalette(seedHex, mode, opts.deps)
     : localPalette(seedHex, mode);
 
-  const scheme = schemeFromPalette(palette, opts.intensity);
+  // Name the seed locally so history/details show a real name (e.g. "Vivid
+  // Blue") instead of the "scheme" placeholder.
+  const scheme = schemeFromPalette(
+    palette,
+    opts.intensity,
+    describeColor(palette.seed),
+  );
   return { palette, scheme, options: { intensity: opts.intensity } };
 };
 
@@ -111,4 +118,24 @@ export const applyPayloadForScheme = (
   const palette =
     details.palette ?? localPalette(details.rootColor, details.colorMode);
   return { palette, options: { intensity } };
+};
+
+/**
+ * Stamps the CURRENT (live) intensity onto a scheme so the persisted per-site
+ * `savedScheme` reapplies at exactly the look on screen — capturing the slider
+ * position, not the intensity the scheme was generated with. The palette is
+ * resolved (regenerated locally for legacy schemes) so the saved scheme always
+ * carries a concrete palette the content script can reapply faithfully.
+ */
+export const schemeWithIntensity = (
+  scheme: Scheme,
+  intensity: Intensity,
+): Scheme => {
+  const details = scheme.schemeDetails;
+  const palette =
+    details.palette ?? localPalette(details.rootColor, details.colorMode);
+  return {
+    ...scheme,
+    schemeDetails: { ...details, palette, intensity },
+  };
 };

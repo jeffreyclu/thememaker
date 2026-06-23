@@ -22,10 +22,9 @@ export interface PopupRefs {
   intensityValue: HTMLElement;
   surpriseToggle: HTMLButtonElement;
   generate: HTMLButtonElement;
-  save: HTMLButtonElement;
+  apply: HTMLButtonElement;
   reset: HTMLButtonElement;
   status: HTMLElement;
-  siteToggle: HTMLButtonElement;
   detailsToggle: HTMLButtonElement;
   details: HTMLElement;
   history: HTMLElement;
@@ -33,14 +32,14 @@ export interface PopupRefs {
 
 export interface PopupHandlers {
   onGenerate: () => void;
-  onSave: () => void;
+  /** Persist the current theme to this site + enable auto-reapply. */
+  onApply: () => void;
   onReset: () => void;
   onSelectMode: (mode: ModeSelection) => void;
   /** Fired as the slider is dragged (debounced live re-apply). */
   onSelectIntensity: (intensity: Intensity) => void;
   onToggleSurprise: () => void;
   onToggleDetails: () => void;
-  onToggleSite: () => void;
   onSelectHistory: (index: number) => void;
 }
 
@@ -61,10 +60,9 @@ export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
     intensityValue: byId<HTMLElement>("intensity-value"),
     surpriseToggle: byId<HTMLButtonElement>("surprise-toggle"),
     generate: byId<HTMLButtonElement>("generate"),
-    save: byId<HTMLButtonElement>("save"),
+    apply: byId<HTMLButtonElement>("apply"),
     reset: byId<HTMLButtonElement>("reset"),
     status: byId<HTMLElement>("status"),
-    siteToggle: byId<HTMLButtonElement>("site-toggle"),
     detailsToggle: byId<HTMLButtonElement>("details-toggle"),
     details: byId<HTMLElement>("details"),
     history: byId<HTMLElement>("history"),
@@ -92,10 +90,9 @@ export const populateModes = (
 /** Wires DOM events to handler callbacks. Call once after `queryRefs`. */
 export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.generate.addEventListener("click", handlers.onGenerate);
-  refs.save.addEventListener("click", handlers.onSave);
+  refs.apply.addEventListener("click", handlers.onApply);
   refs.reset.addEventListener("click", handlers.onReset);
   refs.detailsToggle.addEventListener("click", handlers.onToggleDetails);
-  refs.siteToggle.addEventListener("click", handlers.onToggleSite);
   refs.mode.addEventListener("change", () =>
     handlers.onSelectMode(refs.mode.value as ModeSelection),
   );
@@ -194,9 +191,11 @@ const renderHistory = (state: PopupState, list: HTMLElement): void => {
       }
 
       const label = document.createElement("span");
+      label.className = "history__label";
       label.textContent = historyLabel(scheme, index);
 
-      btn.append(swatches, label);
+      // Number + name on the left, swatches right-aligned (CSS pushes them).
+      btn.append(label, swatches);
       li.appendChild(btn);
       list.appendChild(li);
     });
@@ -212,7 +211,7 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
 
   refs.generate.disabled = state.loading;
   refs.generate.textContent = state.loading ? "Generating…" : "Generate";
-  refs.save.disabled = !state.current;
+  refs.apply.disabled = !state.current;
   refs.reset.disabled = !state.applied && !state.current;
 
   refs.status.classList.toggle("popup__status--error", Boolean(state.error));
@@ -223,8 +222,6 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   } else {
     refs.status.textContent = "";
   }
-
-  refs.siteToggle.setAttribute("aria-checked", String(state.siteEnabled));
 
   refs.detailsToggle.disabled = !state.current;
   refs.detailsToggle.setAttribute("aria-expanded", String(state.showDetails));

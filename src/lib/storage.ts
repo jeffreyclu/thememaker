@@ -53,11 +53,16 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Storage key prefix for cached palettes (keyed by seed+mode). */
 const PALETTE_CACHE_PREFIX = "cache:";
 
-/** Per-site enable state. Phase 3 will consume `enabled` for auto-reapply. */
+/**
+ * Per-site enable state. The always-on content script (`src/content/index.ts`)
+ * reads this on every load: when `enabled` and `savedScheme` carries a palette +
+ * intensity, it auto-reapplies that scheme. `savedScheme` is kept even while
+ * disabled so re-enabling restores the last look.
+ */
 export interface SiteState {
-  /** Whether the user enabled Thememaker for this origin. */
+  /** Whether the user enabled auto-reapply for this origin. */
   enabled: boolean;
-  /** The scheme last applied to this origin, if any. */
+  /** The scheme to reapply on this origin (palette + intensity), if any. */
   savedScheme?: Scheme;
 }
 

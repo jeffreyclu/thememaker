@@ -102,24 +102,33 @@ describe("popupReducer", () => {
     expect(next).toBe(state);
   });
 
-  it("reset clears current and applied", () => {
+  it("reset clears current, applied, and siteEnabled", () => {
     const state: PopupState = {
       ...initialPopupState,
       current: mockScheme,
       applied: true,
+      siteEnabled: true,
     };
     const next = popupReducer(state, { type: "reset" });
     expect(next.current).toBeNull();
     expect(next.applied).toBe(false);
+    expect(next.siteEnabled).toBe(false);
   });
 
-  it("toggleDetails and toggleSite flip their flags", () => {
+  it("toggleDetails flips its flag; setSiteEnabled sets siteEnabled", () => {
     expect(
       popupReducer(initialPopupState, { type: "toggleDetails" }).showDetails,
     ).toBe(true);
     expect(
-      popupReducer(initialPopupState, { type: "toggleSite" }).siteEnabled,
+      popupReducer(initialPopupState, { type: "setSiteEnabled", enabled: true })
+        .siteEnabled,
     ).toBe(true);
+    expect(
+      popupReducer(
+        { ...initialPopupState, siteEnabled: true },
+        { type: "setSiteEnabled", enabled: false },
+      ).siteEnabled,
+    ).toBe(false);
   });
 
   it("selectIntensity sets the numeric intensity", () => {

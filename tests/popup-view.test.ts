@@ -17,10 +17,9 @@ const POPUP_HTML = `
   <output id="intensity-value">80</output>
   <button id="surprise-toggle" aria-checked="false"></button>
   <button id="generate"></button>
-  <button id="save"></button>
+  <button id="apply"></button>
   <button id="reset"></button>
   <p id="status"></p>
-  <button id="site-toggle" aria-checked="false"></button>
   <button id="details-toggle" aria-expanded="false"></button>
   <div id="details" hidden></div>
   <ul id="history"></ul>
@@ -33,13 +32,12 @@ const mount = () => {
 
 const noopHandlers = (): PopupHandlers => ({
   onGenerate: vi.fn(),
-  onSave: vi.fn(),
+  onApply: vi.fn(),
   onReset: vi.fn(),
   onSelectMode: vi.fn(),
   onSelectIntensity: vi.fn(),
   onToggleSurprise: vi.fn(),
   onToggleDetails: vi.fn(),
-  onToggleSite: vi.fn(),
   onSelectHistory: vi.fn(),
 });
 
@@ -59,8 +57,11 @@ describe("popup view", () => {
     const refs = mount();
     populateModes(refs.mode);
     render(initialPopupState, refs);
-    expect(refs.save.disabled).toBe(true);
+    expect(refs.apply.disabled).toBe(true);
     expect(refs.detailsToggle.disabled).toBe(true);
+    // Details collapsed by default — the view must set the `hidden` attribute
+    // (the CSS `.details[hidden]` rule makes it actually disappear).
+    expect(refs.details.hidden).toBe(true);
     expect(refs.history.textContent).toContain("No history");
   });
 
@@ -72,7 +73,7 @@ describe("popup view", () => {
     expect(refs.generate.textContent).toContain("Generating");
   });
 
-  it("render enables save/details and lists history when a scheme is current", () => {
+  it("render enables apply/details and lists history when a scheme is current", () => {
     const refs = mount();
     populateModes(refs.mode);
     const state: PopupState = {
@@ -82,7 +83,7 @@ describe("popup view", () => {
       applied: true,
     };
     render(state, refs);
-    expect(refs.save.disabled).toBe(false);
+    expect(refs.apply.disabled).toBe(false);
     expect(refs.detailsToggle.disabled).toBe(false);
     expect(refs.status.textContent).toContain("Applied");
     // two history entries, most-recent first

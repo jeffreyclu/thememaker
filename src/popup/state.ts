@@ -7,8 +7,9 @@
  * small document), so a single reducer keeps it simple.
  */
 import { dequeueScheme } from "../lib/theme-engine";
-import { DEFAULT_INTENSITY } from "../types";
+import { clampIntensity, DEFAULT_INTENSITY } from "../types";
 import type { ColorMode, Intensity, Scheme, SchemeDetails } from "../types";
+import type { Settings, SiteState } from "../lib/storage";
 
 export type ModeSelection = ColorMode | "random";
 
@@ -51,6 +52,41 @@ export const initialPopupState: PopupState = {
   error: null,
 };
 
+/** Inputs for {@link hydratePartial}: persisted storage + active-tab state. */
+export interface HydrateInputs {
+  settings: Settings;
+  history: Scheme[];
+  origin: string | null;
+  site: SiteState;
+  /** Whether the active tab already has a Thememaker style applied. */
+  applied: boolean;
+}
+
+/**
+ * Computes the popup's initial state patch from persisted storage + the active
+ * tab. Crucially it restores this origin's saved theme as `current` (with its
+ * saved intensity) so the intensity slider / details / re-apply work after a
+ * reload or a popup reopen on a persisted site: the popup is recreated every
+ * time it opens, so without this `current` is null and the slider is a no-op
+ * even though the content script already themed the page.
+ */
+export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
+  const savedScheme = inputs.site.savedScheme ?? null;
+  const savedIntensity = savedScheme?.schemeDetails?.intensity;
+  return {
+    mode: inputs.settings.mode,
+    // Prefer the saved scheme's intensity so the dial matches what is on the
+    // page; clamp to the selectable range (migrates old/out-of-range values).
+    intensity: clampIntensity(savedIntensity ?? inputs.settings.intensity),
+    surprise: inputs.settings.surprise,
+    history: inputs.history,
+    origin: inputs.origin,
+    siteEnabled: inputs.site.enabled,
+    applied: inputs.applied,
+    current: savedScheme,
+  };
+};
+
 export type PopupAction =
   | { type: "hydrate"; partial: Partial<PopupState> }
   | { type: "selectMode"; mode: ModeSelection }
@@ -63,7 +99,7 @@ export type PopupAction =
   | { type: "applied"; applied: boolean }
   | { type: "reset" }
   | { type: "toggleDetails" }
-  | { type: "toggleSite" };
+  | { type: "setSiteEnabled"; enabled: boolean };
 
 /** Pure reducer for all popup state transitions. */
 export const popupReducer = (
@@ -102,11 +138,17 @@ export const popupReducer = (
     case "applied":
       return { ...state, applied: action.applied };
     case "reset":
-      return { ...state, current: null, applied: false, error: null };
+      return {
+        ...state,
+        current: null,
+        applied: false,
+        siteEnabled: false,
+        error: null,
+      };
     case "toggleDetails":
       return { ...state, showDetails: !state.showDetails };
-    case "toggleSite":
-      return { ...state, siteEnabled: !state.siteEnabled };
+    case "setSiteEnabled":
+      return { ...state, siteEnabled: action.enabled };
     default:
       return state;
   }

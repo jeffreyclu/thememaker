@@ -31,6 +31,72 @@ import type { ApplyOptions } from "../types";
 export const STYLE_ELEMENT_ID = "themeMaker";
 
 /**
+ * Namespaced `localStorage` key under which we cache the EXACT base background
+ * the engine painted onto html/body for THIS origin. The content script reads it
+ * SYNCHRONOUSLY at `document_start` — before any async `chrome.storage` read —
+ * to paint the themed base on the very first frame, eliminating the reload
+ * flash. Kept in sync with the inlined string literal inside `applyAdaptiveScheme`
+ * / `removeSchemeStyle` (those are serialized and can't reference this constant).
+ */
+export const BASE_CACHE_KEY = "__thememaker_base__";
+
+/**
+ * The themed page background (html/body base surface) a palette resolves to when
+ * the page has NO own body background — which is the common case: a default page
+ * body's computed `background-color` is transparent, so the engine's base blend
+ * `mix(originalBodyBg, themedBase, factor)` returns `themedBase` in full (mixing
+ * from an unparseable/transparent source yields the destination). So the engine
+ * paints `roles.bg` (the theme's page color) directly, and this returns exactly
+ * that. Used as the FALLBACK early paint when no per-origin cache exists yet
+ * (first themed load); once the engine runs it caches the EXACT resolved base,
+ * so later loads read that instead and the early paint matches the final paint.
+ *
+ * `options` is accepted for signature stability (the base equals `roles.bg`
+ * regardless of intensity for a transparent body) and future use.
+ *
+ * Importable (bundled, NOT serialized): it may use the canonical color core.
+ */
+export const baseBackgroundFor = (
+  palette: Palette,
+  _options: ApplyOptions,
+): string => {
+  const surfaces = palette.surfaces ?? [];
+  return palette.roles?.bg ?? surfaces[surfaces.length - 1] ?? "#808080";
+};
+
+/**
+ * Reads the cached base background hex for the current origin from the page's
+ * own `localStorage` (synchronous, same-origin). Returns `null` when absent or
+ * when `localStorage` is unavailable / throws (private-mode, blocked, etc.).
+ */
+export const readBaseCache = (): string | null => {
+  try {
+    return window.localStorage.getItem(BASE_CACHE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+/** Caches `hex` as this origin's base background. Silent on any failure. */
+export const writeBaseCache = (hex: string): void => {
+  try {
+    window.localStorage.setItem(BASE_CACHE_KEY, hex);
+  } catch {
+    // localStorage unavailable / quota / blocked — early paint just won't have
+    // a cache next load; not fatal.
+  }
+};
+
+/** Clears this origin's cached base so a reset/disabled site won't early-paint. */
+export const clearBaseCache = (): void => {
+  try {
+    window.localStorage.removeItem(BASE_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+};
+
+/**
  * Writes `css` into the Thememaker <style> element, creating it only if missing
  * (never remove-then-append, so there is no themeless gap / flash on re-apply).
  * Self-contained: safe to pass to `executeScript({ func: applySchemeStyle })`.
@@ -73,6 +139,14 @@ export function removeSchemeStyle(): boolean {
   w.__themeMakerNextId = undefined;
   // Drop the original-style cache so a fresh apply re-captures true originals.
   w.__themeMakerOriginals = undefined;
+  // Clear the cached base background so a reset/disabled site does NOT
+  // early-paint a stale theme on its next load. Inlined (self-contained) key,
+  // kept in sync with BASE_CACHE_KEY. Best-effort.
+  try {
+    window.localStorage.removeItem("__thememaker_base__");
+  } catch {
+    // localStorage unavailable — nothing to clear.
+  }
   const old = document.getElementById(STYLE_ID);
   if (old) {
     old.remove();
@@ -603,6 +677,16 @@ export function applyAdaptiveScheme(
     ? originalStyleOf(document.body)
     : { bg: null, fg: null };
   const baseBackground = mix(bodyOriginal.bg || "#ffffff", themedBase, factor);
+  // Cache the EXACT resolved base for this origin in the page's own
+  // localStorage, so the content script can synchronously paint it at
+  // document_start on the NEXT load (before any async chrome.storage read) and
+  // eliminate the reload flash. Inlined (self-contained) string literal kept in
+  // sync with BASE_CACHE_KEY. Best-effort: silent if localStorage is blocked.
+  try {
+    window.localStorage.setItem("__thememaker_base__", baseBackground);
+  } catch {
+    // localStorage unavailable — no early-paint cache next load; not fatal.
+  }
   // Page base ink carries the faintly-tinted body (textPrimary) slot.
   const baseText = blendedText(
     bodyOriginal.fg || "#111111",

@@ -26,6 +26,16 @@ module.exports = {
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-non-null-assertion": "off",
     "no-console": "off",
+    // Allow intentionally-unused identifiers prefixed with `_` (e.g. params kept
+    // for signature stability / future use).
+    "@typescript-eslint/no-unused-vars": [
+      "error",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      },
+    ],
   },
   ignorePatterns: ["dist/", "node_modules/", "*.config.js"],
 };

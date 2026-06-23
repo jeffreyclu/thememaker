@@ -13,6 +13,7 @@
 import "./popup.css";
 
 import {
+  hydratePartial,
   initialPopupState,
   popupReducer,
   type ModeSelection,
@@ -20,9 +21,17 @@ import {
   type PopupState,
 } from "./state";
 import { bindEvents, populateModes, queryRefs, render } from "./view";
-import { applyPayloadForScheme, generateForSelection } from "./engine-bridge";
+import {
+  applyPayloadForScheme,
+  generateForSelection,
+  schemeWithIntensity,
+} from "./engine-bridge";
 import { sendMessage } from "../lib/messages";
-import { createChromeStorage, originFromUrl } from "../lib/storage";
+import {
+  createChromeStorage,
+  originFromUrl,
+  DEFAULT_SITE_STATE,
+} from "../lib/storage";
 import { siteStateReducer } from "../lib/site-state";
 import { clampIntensity } from "../types";
 import type { Intensity } from "../types";
@@ -51,7 +60,7 @@ const hydrate = async (): Promise<void> => {
     storage.getHistory(),
     activeOrigin(),
   ]);
-  const site = origin ? await storage.getSiteState(origin) : { enabled: false };
+  const site = origin ? await storage.getSiteState(origin) : DEFAULT_SITE_STATE;
 
   // Ask the background whether a Thememaker style is already on the tab.
   let applied = false;
@@ -62,19 +71,14 @@ const hydrate = async (): Promise<void> => {
     // Non-injectable tab (chrome://, etc.) — leave applied=false.
   }
 
+  // Restore this origin's persisted theme (palette + saved intensity) as the
+  // popup's `current` scheme, so the intensity slider / details / re-apply have
+  // something to act on after a reload or popup reopen on a persisted site —
+  // otherwise `current` is null and the slider is a no-op even though the
+  // content script already themed the page.
   dispatch({
     type: "hydrate",
-    partial: {
-      mode: settings.mode,
-      // Clamp persisted intensity into the selectable range (migrates any old
-      // 0 / out-of-range value forward).
-      intensity: clampIntensity(settings.intensity),
-      surprise: settings.surprise,
-      history,
-      origin,
-      siteEnabled: site.enabled,
-      applied,
-    },
+    partial: hydratePartial({ settings, history, origin, site, applied }),
   });
 };
 
@@ -102,10 +106,30 @@ const applyCurrentScheme = async (): Promise<void> => {
 };
 
 /**
+ * While the per-site toggle is ON, mirror the CURRENTLY-applied look into the
+ * persisted `savedScheme` (palette + the LIVE intensity), so a reload restores
+ * the latest result — this is what makes Generate / history re-apply / slider
+ * moves persist across loads. No-op when the site is disabled or there's
+ * nothing applied. Reads fresh per-site state so we never clobber `enabled`.
+ */
+const persistSavedSchemeIfEnabled = async (): Promise<void> => {
+  if (!state.origin || !state.siteEnabled || !state.current) {
+    return;
+  }
+  const scheme = schemeWithIntensity(state.current, state.intensity);
+  const next = siteStateReducer(await storage.getSiteState(state.origin), {
+    type: "rememberScheme",
+    scheme,
+  });
+  await storage.setSiteState(state.origin, next);
+};
+
+/**
  * Debounced commit of the intensity slider: persists the new value and, when a
  * theme is currently applied, LIVE re-applies the same palette at the new
  * intensity. Debounced so dragging the slider doesn't flood the page with
- * executeScript calls; the latest value always wins.
+ * executeScript calls; the latest value always wins. When the per-site toggle
+ * is on, also updates the saved scheme so the new intensity survives a reload.
  */
 const INTENSITY_DEBOUNCE_MS = 120;
 let intensityTimer: ReturnType<typeof setTimeout> | null = null;
@@ -120,6 +144,7 @@ const scheduleIntensityCommit = (): void => {
       if (state.current && state.applied) {
         await applyCurrentScheme();
       }
+      await persistSavedSchemeIfEnabled();
     })();
   }, INTENSITY_DEBOUNCE_MS);
 };
@@ -147,18 +172,25 @@ const handlers = {
     }
     const history = await storage.pushHistory(result.scheme);
     dispatch({ type: "generateSuccess", scheme: result.scheme, history });
+    // While the site is enabled, a new generate updates what gets reapplied on
+    // the next load.
+    await persistSavedSchemeIfEnabled();
   },
 
-  onSave: async (): Promise<void> => {
+  onApply: async (): Promise<void> => {
     if (!state.current || !state.origin) {
       return;
     }
+    // Persist the live look (palette + current intensity) for this origin AND
+    // enable auto-reapply, so the theme sticks across reloads. This is what the
+    // old "Apply on this site" toggle used to do, now folded into one button.
     const next = siteStateReducer(await storage.getSiteState(state.origin), {
-      type: "rememberScheme",
-      scheme: state.current,
+      type: "enable",
+      scheme: schemeWithIntensity(state.current, state.intensity),
     });
     await storage.setSiteState(state.origin, next);
-    refs.status.textContent = "Saved for this site.";
+    dispatch({ type: "setSiteEnabled", enabled: true });
+    refs.status.textContent = "Applied to this site.";
   },
 
   onReset: async (): Promise<void> => {
@@ -168,10 +200,11 @@ const handlers = {
       return;
     }
     if (state.origin) {
-      const next = siteStateReducer(await storage.getSiteState(state.origin), {
-        type: "forgetScheme",
+      // Stop auto-reapply and forget the saved look for this origin.
+      await storage.setSiteState(state.origin, {
+        enabled: false,
+        savedScheme: undefined,
       });
-      await storage.setSiteState(state.origin, next);
     }
     dispatch({ type: "reset" });
   },
@@ -199,20 +232,11 @@ const handlers = {
     dispatch({ type: "toggleDetails" });
   },
 
-  onToggleSite: async (): Promise<void> => {
-    dispatch({ type: "toggleSite" });
-    if (!state.origin) {
-      return;
-    }
-    const next = siteStateReducer(await storage.getSiteState(state.origin), {
-      type: "toggle",
-    });
-    await storage.setSiteState(state.origin, next);
-  },
-
   onSelectHistory: async (index: number): Promise<void> => {
     dispatch({ type: "selectHistory", index });
     await applyCurrentScheme();
+    // Re-applying a history entry while enabled updates the reapply target.
+    await persistSavedSchemeIfEnabled();
   },
 };
 

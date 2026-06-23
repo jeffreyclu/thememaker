@@ -10,8 +10,12 @@ variables instead of painting bare tags) and a **popup + Shadow DOM UI**.
 - **Color source:** local-first generation (HSL harmony) for instant/offline/deterministic
   schemes; `thecolorapi.com` kept as an optional "surprise me" source with caching + fallback.
 - **UI:** popup is the primary control surface; any in-page UI lives in an isolated Shadow DOM.
-- **Permissions:** `activeTab` + `scripting` (inject on demand) instead of blanket `<all_urls>`,
-  to drop the scary install warning and ease store review.
+- **Permissions:** `activeTab` + `scripting` (inject on demand) for the popup path.
+  **Updated in Phase 3:** an always-on `<all_urls>` content script was added for
+  per-site auto-reapply on revisit, which RE-INTRODUCES the broad host install
+  warning — an accepted trade-off for persistence (the user chose always-on over
+  optional per-site permissions). `permissions` stays `activeTab` + `scripting` +
+  `storage`; the host access comes from the content-script `matches`.
 
 ## How to test (every phase keeps this green)
 
@@ -94,10 +98,26 @@ variables instead of painting bare tags) and a **popup + Shadow DOM UI**.
 
 - [ ] Manual seed-color picker + mode selector.
 - [ ] Named favorites (multiple) + persistent history with swatch previews.
-- [ ] Per-site memory: auto-reapply theme on revisit.
+- [x] Per-site memory: auto-reapply theme on revisit. **Always-on content
+      script** (`src/content/index.ts`, `<all_urls>` @ `document_start`) reads
+      `site:<origin>` from `chrome.storage.local` on every load and reapplies the
+      saved scheme (palette + intensity) via the EXISTING `applyAdaptiveScheme`
+      engine — no logic duplication, shared isolated world + single
+      `<style id="themeMaker">` with the popup's on-demand `executeScript` path
+      (no double-apply). The popup persists the live look on enable and keeps it
+      updated on generate / history re-apply / slider while enabled; disabling
+      stops auto-apply but keeps the scheme so re-enabling restores it. Flash is
+      minimized by reading storage first and painting the themed base onto
+      `<html>` before the body exists, then running the full engine on
+      DOM-ready; a tiny flash window before the async read resolves is inherent.
+      **Permission trade-off (accepted):** the `<all_urls>` content script
+      RE-INTRODUCES the "read and change all your data on all websites" install
+      warning — the deliberate cost of always-on persistence.
 - [ ] Keyboard shortcut (`commands` API).
 - [ ] Options page for defaults.
-- **Tests:** favorites CRUD, per-site reapply logic.
+- **Tests:** favorites CRUD, per-site reapply logic (`loadDecision` verdict +
+  content-script flow + persistence wiring — see
+  `tests/content.test.ts`, `tests/site-persistence.test.ts`).
 
 ## Phase 4 — Polish & store readiness
 

@@ -236,6 +236,12 @@ body {
   gap: 4px;
 }
 
+/* `.details` sets display:flex, which overrides the `[hidden]` attribute's
+   display:none — so the disclosure must re-assert it to actually collapse. */
+.details[hidden] {
+  display: none;
+}
+
 .details__seed {
   color: var(--tm-text-muted);
 }
@@ -306,6 +312,17 @@ body {
   outline-offset: 1px;
 }
 
+/* Number + theme name on the left; grows to fill and truncates with an
+   ellipsis so a long name never pushes the swatches off-row. */
+.history__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Swatches stay their natural size, pinned to the right by the label's flex. */
 .history__swatches {
   display: flex;
   gap: 2px;
