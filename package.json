@@ -11,6 +11,8 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
     "test:e2e:only": "playwright test",
+    "test:e2e:headed": "npm run build && HEADED=1 playwright test --headed",
+    "test:e2e:headed:only": "HEADED=1 playwright test --headed",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write ."
   },

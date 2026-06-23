@@ -71,9 +71,16 @@ on reload via the content script, and resetting.
 
 ```bash
 npx playwright install chromium   # one-time: download the browser
-npm run test:e2e                  # builds dist/, then runs the suite
+npm run test:e2e                  # builds dist/, then runs the suite (headless)
 npm run test:e2e:only             # skip the build (reuse an existing dist/)
+npm run test:e2e:headed           # builds, then runs in a REAL visible window
+npm run test:e2e:headed:only      # headed, no rebuild
 ```
+
+Headless is the default (no display needed, runs in CI). To WATCH the engine
+theme the fixtures in a real window, use the `:headed` scripts — they set
+`HEADED=1`, which the fixture reads to launch a visible Chromium. Both modes load
+the extension the same way and assert identical computed styles.
 
 How it works: `e2e/support/fixtures.ts` loads the BUILT extension from `dist/`
 into a persistent Chromium context (`--load-extension`, `channel: "chromium"`,

@@ -83,11 +83,15 @@ export const test = base.extend<ExtensionFixtures>({
     // profile dir closes in ~60ms. Each test gets a fresh profile so per-site
     // storage from one test never leaks into the next.
     const userDataDir = mkdtempSync(resolve(tmpdir(), "thememaker-e2e-"));
+    // Headed runs are opt-in via HEADED=1 (or PWHEADED=1) so you can WATCH the
+    // engine theme the fixtures in a real window — useful for debugging. Default
+    // is headless. Both modes use the "chromium" channel + new headless, which is
+    // what lets Chromium load the MV3 extension and run its service worker; the
+    // assertions (computed styles, contrast, variables) are identical either way.
+    const headed = process.env.HEADED === "1" || process.env.PWHEADED === "1";
     const context = await chromium.launchPersistentContext(userDataDir, {
       channel: "chromium",
-      // Playwright maps headless:true to the new headless mode for the
-      // "chromium" channel, which is required for MV3 service workers.
-      headless: true,
+      headless: !headed,
       args: [
         `--disable-extensions-except=${DIST_DIR}`,
         `--load-extension=${DIST_DIR}`,
