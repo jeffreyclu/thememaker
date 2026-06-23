@@ -62,6 +62,31 @@ npm test          # run the Vitest suite once (jsdom environment)
 npm run test:watch
 ```
 
+### End-to-end (Playwright)
+
+The Vitest suite runs in jsdom; the **e2e suite proves the adaptive engine works
+in a REAL Chromium** on live pages — applying a theme, enforcing WCAG AA contrast
+against the actually-rendered background, remapping CSS variables, auto-reapplying
+on reload via the content script, and resetting.
+
+```bash
+npx playwright install chromium   # one-time: download the browser
+npm run test:e2e                  # builds dist/, then runs the suite
+npm run test:e2e:only             # skip the build (reuse an existing dist/)
+```
+
+How it works: `e2e/support/fixtures.ts` loads the BUILT extension from `dist/`
+into a persistent Chromium context (`--load-extension`, `channel: "chromium"`,
+new headless), resolves the extension id from the service worker, and serves
+local HTML fixtures (`e2e/fixtures/`) over `http://127.0.0.1` (a real origin, so
+the per-site content script runs). Specs live in `e2e/specs/`.
+
+> The extension ships only `activeTab` + `scripting` (no host permissions), so a
+> headless popup can't `executeScript` into a tab without an action-button
+> gesture. The specs therefore drive theming through the production **content
+> script auto-reapply** path (seed `chrome.storage.local`, load the page, assert
+> the real engine's output) — the same path that powers per-site persistence.
+
 ### Lint & format
 
 ```bash

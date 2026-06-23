@@ -9,11 +9,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:only": "playwright test",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.26",
+    "@playwright/test": "^1.61.0",
     "@types/chrome": "^0.0.268",
     "@typescript-eslint/eslint-plugin": "^7.13.0",
     "@typescript-eslint/parser": "^7.13.0",

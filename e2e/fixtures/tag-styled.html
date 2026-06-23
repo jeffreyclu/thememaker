@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thememaker E2E — Tag-styled fixture</title>
+    <style>
+      /*
+       * A deliberately TAG-STYLED page (no CSS custom properties): every element
+       * carries an explicit, opaque color so the adaptive engine has a concrete
+       * "original" computed color to detect, map onto the palette, and enforce
+       * contrast against. This is the page the engine is supposed to be good at:
+       * real backgrounds + real text, not bare unstyled tags.
+       */
+      html,
+      body {
+        background-color: #ffffff;
+        color: #1a1a1a;
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+      }
+      h1 {
+        color: #0b3d91;
+        background-color: #ffffff;
+      }
+      h2 {
+        color: #1a5276;
+      }
+      h3 {
+        color: #515a5a;
+      }
+      p {
+        color: #2c2c2c;
+      }
+      a {
+        color: #1565c0;
+      }
+      small,
+      .muted {
+        color: #6b6b6b;
+      }
+      blockquote {
+        background-color: #f2f2f2;
+        color: #333333;
+        border-left: 4px solid #cccccc;
+        padding: 8px 16px;
+        margin: 16px 0;
+      }
+      pre,
+      code {
+        background-color: #f5f5f5;
+        color: #222222;
+        font-family: ui-monospace, monospace;
+      }
+      pre {
+        padding: 12px;
+        border-radius: 6px;
+      }
+      header {
+        background-color: #fafafa;
+        color: #111111;
+        padding: 12px;
+      }
+      article {
+        background-color: #ffffff;
+        color: #1a1a1a;
+        padding: 16px;
+        border: 1px solid #e0e0e0;
+      }
+      .btn-primary {
+        background-color: #1565c0;
+        color: #ffffff;
+        border: none;
+        padding: 8px 16px;
+        cursor: pointer;
+      }
+      .btn-secondary {
+        background-color: #e0e0e0;
+        color: #1a1a1a;
+        border: none;
+        padding: 8px 16px;
+        cursor: pointer;
+      }
+      footer {
+        background-color: #f7f7f7;
+        color: #444444;
+        padding: 12px;
+        margin-top: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <header><strong>Thememaker</strong> tag-styled fixture</header>
+
+    <article>
+      <h1 id="title">A Headline About Color</h1>
+      <h2 id="subtitle">A secondary heading</h2>
+      <h3 id="subsubtitle">A tertiary heading</h3>
+
+      <p id="lead">
+        This is a paragraph of body copy with a
+        <a id="link" href="#somewhere">real hyperlink</a> embedded in it. The
+        adaptive engine should keep all of this readable after theming.
+      </p>
+
+      <p>
+        Another paragraph with
+        <small id="caption">muted caption text</small> and some
+        <strong>emphasized</strong> content.
+      </p>
+
+      <blockquote id="quote">
+        A quoted passage that lives on its own tinted surface.
+      </blockquote>
+
+      <pre id="code"><code>const theme = makeTheme();
+console.log(theme);</code></pre>
+
+      <p class="actions">
+        <button id="primary" class="btn-primary" type="button">Submit</button>
+        <button id="secondary" class="btn-secondary" type="button">
+          Cancel
+        </button>
+      </p>
+    </article>
+
+    <footer id="footer">Footer text, slightly muted.</footer>
+  </body>
+</html>

@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thememaker E2E — CSS-variable-driven fixture</title>
+    <style>
+      /*
+       * A CSS-VARIABLE-DRIVEN page: the visual design is sourced entirely from
+       * :root custom properties. The adaptive engine detects these (it looks for
+       * a surface-classified var AND a text-classified var on :root/html), treats
+       * the page as "variable-driven", and REMAPS the variables in place rather
+       * than only repainting tags. The var names below are chosen so the engine's
+       * classifier routes them: --bg/--surface/--surface-alt -> surface,
+       * --color-text/--text-muted/--heading/--link -> text, --border -> border.
+       */
+      :root {
+        --bg: #ffffff;
+        --surface: #f4f4f4;
+        --surface-alt: #ebebeb;
+        --color-text: #1b1b1b;
+        --text-muted: #6a6a6a;
+        --heading: #0b3d91;
+        --link: #1565c0;
+        --border: #d4d4d4;
+      }
+
+      html,
+      body {
+        background-color: var(--bg);
+        color: var(--color-text);
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 24px;
+      }
+
+      h1,
+      h2 {
+        color: var(--heading);
+      }
+
+      a {
+        color: var(--link);
+      }
+
+      .muted {
+        color: var(--text-muted);
+      }
+
+      .card {
+        background-color: var(--surface);
+        color: var(--color-text);
+        border: 1px solid var(--border);
+        padding: 16px;
+        margin: 16px 0;
+      }
+
+      .panel {
+        background-color: var(--surface-alt);
+        color: var(--color-text);
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Variable-driven Design</h1>
+
+    <div class="card" id="card">
+      <h2 id="card-title">A card on a variable surface</h2>
+      <p id="card-body">
+        Body text inside a card, plus a
+        <a id="link" href="#x">variable-driven link</a>.
+      </p>
+      <p class="muted" id="muted">Muted helper text driven by a variable.</p>
+    </div>
+
+    <div class="panel" id="panel">
+      <p>A secondary panel using the alternate surface variable.</p>
+    </div>
+  </body>
+</html>
