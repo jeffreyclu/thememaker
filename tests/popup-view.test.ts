@@ -13,6 +13,9 @@ import { mockScheme, mockScheme2 } from "./mocks";
 
 const POPUP_HTML = `
   <select id="mode"></select>
+  <input id="seed-color" type="color" value="#4f46e5" />
+  <input id="seed-hex" type="text" value="#4f46e5" />
+  <button id="seed-random" aria-checked="true"></button>
   <input id="intensity" type="range" min="10" max="100" step="1" value="80" />
   <output id="intensity-value">80</output>
   <button id="surprise-toggle" aria-checked="false"></button>
@@ -22,6 +25,9 @@ const POPUP_HTML = `
   <p id="status"></p>
   <button id="details-toggle" aria-expanded="false"></button>
   <div id="details" hidden></div>
+  <input id="favorite-name" type="text" />
+  <button id="favorite-save"></button>
+  <ul id="favorites"></ul>
   <ul id="history"></ul>
 `;
 
@@ -37,8 +43,13 @@ const noopHandlers = (): PopupHandlers => ({
   onSelectMode: vi.fn(),
   onSelectIntensity: vi.fn(),
   onToggleSurprise: vi.fn(),
+  onSelectSeed: vi.fn(),
+  onToggleRandomSeed: vi.fn(),
   onToggleDetails: vi.fn(),
   onSelectHistory: vi.fn(),
+  onSaveFavorite: vi.fn(),
+  onSelectFavorite: vi.fn(),
+  onDeleteFavorite: vi.fn(),
 });
 
 describe("popup view", () => {
@@ -121,6 +132,118 @@ describe("popup view", () => {
     expect(refs.intensity.value).toBe("80");
     expect(refs.intensityValue.textContent).toBe("80");
     expect(refs.surpriseToggle.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("seed picker reflects the chosen seed + random flag", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render(
+      { ...initialPopupState, seed: "#abcdef", useRandomSeed: false },
+      refs,
+    );
+    expect(refs.seedHex.value).toBe("#abcdef");
+    expect(refs.seedColor.value).toBe("#abcdef");
+    expect(refs.seedRandom.getAttribute("aria-checked")).toBe("false");
+    // chosen seed → picker enabled
+    expect(refs.seedColor.disabled).toBe(false);
+    expect(refs.seedHex.disabled).toBe(false);
+  });
+
+  it("seed picker is disabled (informational) while random is on", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render({ ...initialPopupState, useRandomSeed: true }, refs);
+    expect(refs.seedRandom.getAttribute("aria-checked")).toBe("true");
+    expect(refs.seedColor.disabled).toBe(true);
+    expect(refs.seedHex.disabled).toBe(true);
+  });
+
+  it("favorites render with name + swatches; save disabled without a scheme", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render(
+      {
+        ...initialPopupState,
+        favorites: [
+          { id: "a", name: "My Fave", scheme: mockScheme },
+          { id: "b", name: "Other", scheme: mockScheme2 },
+        ],
+      },
+      refs,
+    );
+    const items = refs.favorites.querySelectorAll("[data-favorite-id]");
+    expect(items).toHaveLength(2);
+    expect(refs.favorites.textContent).toContain("My Fave");
+    expect(
+      refs.favorites.querySelectorAll(".favorites__swatch").length,
+    ).toBeGreaterThan(0);
+    // each row has a delete control
+    expect(
+      refs.favorites.querySelectorAll("[data-favorite-delete]"),
+    ).toHaveLength(2);
+    // no current scheme → cannot save
+    expect(refs.favoriteSave.disabled).toBe(true);
+  });
+
+  it("favorites empty state + save enabled when a scheme is current", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render({ ...initialPopupState, current: mockScheme }, refs);
+    expect(refs.favorites.textContent).toContain("No favorites");
+    expect(refs.favoriteSave.disabled).toBe(false);
+  });
+
+  it("bindEvents wires seed picker + random toggle", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    const handlers = noopHandlers();
+    bindEvents(refs, handlers);
+
+    refs.seedColor.value = "#112233";
+    refs.seedColor.dispatchEvent(new Event("input"));
+    expect(handlers.onSelectSeed).toHaveBeenCalledWith("#112233");
+
+    refs.seedHex.value = "#445566";
+    refs.seedHex.dispatchEvent(new Event("change"));
+    expect(handlers.onSelectSeed).toHaveBeenCalledWith("#445566");
+
+    refs.seedRandom.click();
+    expect(handlers.onToggleRandomSeed).toHaveBeenCalled();
+  });
+
+  it("bindEvents wires favorite save / apply / delete", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    const handlers = noopHandlers();
+    bindEvents(refs, handlers);
+
+    refs.favoriteName.value = "Sunset";
+    refs.favoriteSave.click();
+    expect(handlers.onSaveFavorite).toHaveBeenCalledWith("Sunset");
+
+    render(
+      {
+        ...initialPopupState,
+        favorites: [{ id: "fav-1", name: "Sunset", scheme: mockScheme }],
+      },
+      refs,
+    );
+
+    // clicking the row body applies; the delete control deletes (and does NOT
+    // also fire apply, thanks to the delegated handler's early return).
+    const apply = refs.favorites.querySelector(
+      "[data-favorite-id]",
+    ) as HTMLElement;
+    apply.click();
+    expect(handlers.onSelectFavorite).toHaveBeenCalledWith("fav-1");
+
+    const del = refs.favorites.querySelector(
+      "[data-favorite-delete]",
+    ) as HTMLElement;
+    del.click();
+    expect(handlers.onDeleteFavorite).toHaveBeenCalledWith("fav-1");
+    // delete didn't double-fire apply
+    expect(handlers.onSelectFavorite).toHaveBeenCalledTimes(1);
   });
 
   it("bindEvents wires clicks to handlers (generate, mode, history)", () => {

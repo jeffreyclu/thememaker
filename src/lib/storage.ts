@@ -42,13 +42,43 @@ export interface Settings {
   intensity: Intensity;
   /** Whether to use thecolorapi.com ("surprise me") instead of local generation. */
   surprise: boolean;
+  /**
+   * The user-chosen seed color (normalized `#rrggbb`). Only used when
+   * {@link Settings.useRandomSeed} is false; persisted so the picker reopens on
+   * the last choice.
+   */
+  seed: string;
+  /**
+   * Whether Generate picks a fresh RANDOM seed (the default behavior) instead of
+   * honoring the chosen {@link Settings.seed}.
+   */
+  useRandomSeed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   mode: "random",
   intensity: DEFAULT_INTENSITY,
   surprise: false,
+  seed: "#4f46e5",
+  useRandomSeed: true,
 };
+
+/**
+ * A named, GLOBAL (not per-site) favorite scheme the user saved. Stored as a
+ * bounded list in `sync` under {@link KEYS.favorites} so it roams with the
+ * profile.
+ */
+export interface Favorite {
+  /** Stable id (used as the list key + delete target). */
+  id: string;
+  /** User-facing name (defaults to the scheme's color name + mode). */
+  name: string;
+  /** The saved scheme (carries its palette + intensity for faithful re-apply). */
+  scheme: Scheme;
+}
+
+/** Max number of favorites retained (bounds `sync` usage). */
+export const MAX_FAVORITES = 50;
 
 /** Storage key prefix for cached palettes (keyed by seed+mode). */
 const PALETTE_CACHE_PREFIX = "cache:";
@@ -163,6 +193,41 @@ export class ThememakerStorage {
   ): Promise<SiteState> {
     const next = { ...(await this.getSiteState(origin)), ...patch };
     await this.local.set(KEYS.sitePrefix + origin, next);
+    return next;
+  }
+
+  /** @returns the persisted GLOBAL favorites (insertion order), or `[]`. */
+  async getFavorites(): Promise<Favorite[]> {
+    return (await this.sync.get<Favorite[]>(KEYS.favorites)) ?? [];
+  }
+
+  /**
+   * Appends `favorite` to the bounded favorites list and persists it to `sync`.
+   * Re-saving an id REPLACES the existing entry (so a rename/overwrite is
+   * idempotent); the list is capped at {@link MAX_FAVORITES} (oldest dropped).
+   * @returns the new favorites array.
+   */
+  async saveFavorite(
+    favorite: Favorite,
+    max: number = MAX_FAVORITES,
+  ): Promise<Favorite[]> {
+    const existing = await this.getFavorites();
+    const without = existing.filter((f) => f.id !== favorite.id);
+    const next = [...without, favorite];
+    while (next.length > max) {
+      next.shift();
+    }
+    await this.sync.set(KEYS.favorites, next);
+    return next;
+  }
+
+  /**
+   * Removes the favorite with `id` and persists the result.
+   * @returns the new favorites array (unchanged when `id` is absent).
+   */
+  async deleteFavorite(id: string): Promise<Favorite[]> {
+    const next = (await this.getFavorites()).filter((f) => f.id !== id);
+    await this.sync.set(KEYS.favorites, next);
     return next;
   }
 

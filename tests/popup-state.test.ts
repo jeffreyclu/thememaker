@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   currentSchemeDetails,
+  defaultFavoriteName,
   historyLabel,
   initialPopupState,
   popupReducer,
@@ -10,8 +11,10 @@ import {
 } from "../src/popup/state";
 import {
   applyPayloadForScheme,
+  generateForSelection,
   modesForSelection,
   resolveMode,
+  resolveSeed,
   schemeFromPalette,
 } from "../src/popup/engine-bridge";
 import { modes } from "../src/config";
@@ -145,6 +148,49 @@ describe("popupReducer", () => {
     expect(popupReducer(on, { type: "toggleSurprise" }).surprise).toBe(false);
   });
 
+  it("setSeed records the seed AND turns off random (choosing implies intent)", () => {
+    const next = popupReducer(initialPopupState, {
+      type: "setSeed",
+      seed: "#abcdef",
+    });
+    expect(next.seed).toBe("#abcdef");
+    expect(next.useRandomSeed).toBe(false);
+  });
+
+  it("toggleRandomSeed flips the random-seed flag", () => {
+    // initial is useRandomSeed: true
+    const off = popupReducer(initialPopupState, { type: "toggleRandomSeed" });
+    expect(off.useRandomSeed).toBe(false);
+    expect(popupReducer(off, { type: "toggleRandomSeed" }).useRandomSeed).toBe(
+      true,
+    );
+  });
+
+  it("setFavorites replaces the favorites list", () => {
+    const favorites = [{ id: "a", name: "A", scheme: mockScheme }];
+    const next = popupReducer(initialPopupState, {
+      type: "setFavorites",
+      favorites,
+    });
+    expect(next.favorites).toStrictEqual(favorites);
+  });
+
+  it("applyFavorite sets current + applied without touching history", () => {
+    const state: PopupState = {
+      ...initialPopupState,
+      history: [mockScheme2],
+    };
+    const next = popupReducer(state, {
+      type: "applyFavorite",
+      scheme: mockScheme,
+    });
+    expect(next.current).toStrictEqual(mockScheme);
+    expect(next.applied).toBe(true);
+    expect(next.error).toBeNull();
+    // history is untouched (favorites don't push history)
+    expect(next.history).toStrictEqual([mockScheme2]);
+  });
+
   it("does not mutate the input state", () => {
     const before = { ...initialPopupState };
     popupReducer(initialPopupState, { type: "selectMode", mode: "triad" });
@@ -177,6 +223,12 @@ describe("popup selectors / helpers", () => {
     expect(
       currentSchemeDetails({ ...initialPopupState, current: mockScheme }),
     ).toStrictEqual(mockScheme.schemeDetails);
+  });
+
+  it("defaultFavoriteName uses the color name + mode", () => {
+    expect(defaultFavoriteName(mockScheme)).toBe(
+      "Brandy Rose (analogic-complement)",
+    );
   });
 });
 
@@ -222,5 +274,66 @@ describe("engine-bridge palette glue", () => {
     expect(palette.seed).toBe("#b98790"); // normalized from rootColor
     expect(palette.mode).toBe(mockScheme.schemeDetails.colorMode);
     expect(palette.surfaces.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("resolveSeed (chosen seed vs random fallback)", () => {
+  it("honors a valid chosen seed, normalized to #rrggbb", () => {
+    expect(resolveSeed("#abc")).toBe("#aabbcc");
+    expect(resolveSeed("FF8800")).toBe("#ff8800");
+    expect(resolveSeed("#1A2B3C")).toBe("#1a2b3c");
+  });
+
+  it("falls back to a random #rrggbb when no seed is given", () => {
+    expect(resolveSeed()).toMatch(/^#[0-9a-f]{6}$/);
+    expect(resolveSeed(undefined)).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("falls back to random for an unparseable seed (never throws)", () => {
+    expect(resolveSeed("nope")).toMatch(/^#[0-9a-f]{6}$/);
+    expect(resolveSeed("#12")).toMatch(/^#[0-9a-f]{6}$/);
+  });
+});
+
+describe("generateForSelection — seed resolution into generation", () => {
+  it("uses the CHOSEN seed for the generated palette (deterministic)", async () => {
+    const result = await generateForSelection({
+      selection: "triad",
+      intensity: 80,
+      surprise: false,
+      seed: "#6f928b",
+    });
+    // local generation is pure: the palette seed is exactly the chosen color.
+    expect(result.palette.seed).toBe("#6f928b");
+    expect(result.scheme.schemeDetails.rootColor).toBe("#6f928b");
+    // names derive from the seed, so a chosen seed yields a real name.
+    expect(result.scheme.schemeDetails.rootColorName).toBeTruthy();
+  });
+
+  it("falls back to a random seed when none is supplied (today's behavior)", async () => {
+    const a = await generateForSelection({
+      selection: "triad",
+      intensity: 80,
+      surprise: false,
+    });
+    const b = await generateForSelection({
+      selection: "triad",
+      intensity: 80,
+      surprise: false,
+    });
+    // two random draws → valid hex seeds, overwhelmingly distinct.
+    expect(a.palette.seed).toMatch(/^#[0-9a-f]{6}$/);
+    expect(b.palette.seed).toMatch(/^#[0-9a-f]{6}$/);
+    expect(a.palette.seed).not.toBe("#6f928b");
+  });
+
+  it("falls back to random for an invalid chosen seed", async () => {
+    const result = await generateForSelection({
+      selection: "triad",
+      intensity: 80,
+      surprise: false,
+      seed: "not-a-color",
+    });
+    expect(result.palette.seed).toMatch(/^#[0-9a-f]{6}$/);
   });
 });

@@ -13,6 +13,7 @@
 import "./popup.css";
 
 import {
+  defaultFavoriteName,
   hydratePartial,
   initialPopupState,
   popupReducer,
@@ -31,8 +32,10 @@ import {
   createChromeStorage,
   originFromUrl,
   DEFAULT_SITE_STATE,
+  type Favorite,
 } from "../lib/storage";
 import { siteStateReducer } from "../lib/site-state";
+import { isHexColor, normalizeHex } from "../lib/color";
 import { clampIntensity } from "../types";
 import type { Intensity } from "../types";
 
@@ -55,9 +58,10 @@ const activeOrigin = async (): Promise<string | null> => {
 
 /** Hydrates initial popup state from storage + the active tab. */
 const hydrate = async (): Promise<void> => {
-  const [settings, history, origin] = await Promise.all([
+  const [settings, history, favorites, origin] = await Promise.all([
     storage.getSettings(),
     storage.getHistory(),
+    storage.getFavorites(),
     activeOrigin(),
   ]);
   const site = origin ? await storage.getSiteState(origin) : DEFAULT_SITE_STATE;
@@ -78,8 +82,16 @@ const hydrate = async (): Promise<void> => {
   // content script already themed the page.
   dispatch({
     type: "hydrate",
-    partial: hydratePartial({ settings, history, origin, site, applied }),
+    partial: hydratePartial({
+      settings,
+      history,
+      favorites,
+      origin,
+      site,
+      applied,
+    }),
   });
+  syncFavoriteName();
 };
 
 const applyCurrentScheme = async (): Promise<void> => {
@@ -149,6 +161,23 @@ const scheduleIntensityCommit = (): void => {
   }, INTENSITY_DEBOUNCE_MS);
 };
 
+/**
+ * Pre-fills the favorite-name input with the current scheme's default name
+ * (color name + mode) whenever the field is empty, so a one-click Save just
+ * works. Leaves a name the user is editing alone.
+ */
+const syncFavoriteName = (): void => {
+  if (state.current && refs.favoriteName.value.trim() === "") {
+    refs.favoriteName.value = defaultFavoriteName(state.current);
+  }
+};
+
+/** @returns a stable, collision-resistant favorite id. */
+const newFavoriteId = (): string =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `fav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
 const handlers = {
   onGenerate: async (): Promise<void> => {
     dispatch({ type: "generateStart" });
@@ -158,6 +187,9 @@ const handlers = {
       selection: state.mode,
       intensity: state.intensity,
       surprise: state.surprise,
+      // When "random" is on, omit the seed so the engine picks a fresh color
+      // (today's behavior); otherwise Generate uses the chosen seed.
+      seed: state.useRandomSeed ? undefined : state.seed,
       deps: { fetchImpl: fetch, cache: storage.paletteCacheStore() },
     });
     const resp = await sendMessage({
@@ -172,6 +204,7 @@ const handlers = {
     }
     const history = await storage.pushHistory(result.scheme);
     dispatch({ type: "generateSuccess", scheme: result.scheme, history });
+    syncFavoriteName();
     // While the site is enabled, a new generate updates what gets reapplied on
     // the next load.
     await persistSavedSchemeIfEnabled();
@@ -228,6 +261,22 @@ const handlers = {
     await storage.setSettings({ surprise: state.surprise });
   },
 
+  onSelectSeed: async (hex: string): Promise<void> => {
+    // Ignore unparseable input (e.g. a half-typed hex); the view re-renders the
+    // last valid value. A valid pick also turns OFF random (reducer does this).
+    if (!isHexColor(hex)) {
+      return;
+    }
+    const seed = normalizeHex(hex);
+    dispatch({ type: "setSeed", seed });
+    await storage.setSettings({ seed, useRandomSeed: false });
+  },
+
+  onToggleRandomSeed: async (): Promise<void> => {
+    dispatch({ type: "toggleRandomSeed" });
+    await storage.setSettings({ useRandomSeed: state.useRandomSeed });
+  },
+
   onToggleDetails: (): void => {
     dispatch({ type: "toggleDetails" });
   },
@@ -237,6 +286,39 @@ const handlers = {
     await applyCurrentScheme();
     // Re-applying a history entry while enabled updates the reapply target.
     await persistSavedSchemeIfEnabled();
+  },
+
+  onSaveFavorite: async (name: string): Promise<void> => {
+    if (!state.current) {
+      return;
+    }
+    const trimmed = name.trim();
+    const favorite: Favorite = {
+      id: newFavoriteId(),
+      name: trimmed === "" ? defaultFavoriteName(state.current) : trimmed,
+      scheme: state.current,
+    };
+    const favorites = await storage.saveFavorite(favorite);
+    dispatch({ type: "setFavorites", favorites });
+    refs.favoriteName.value = "";
+    syncFavoriteName();
+  },
+
+  onSelectFavorite: async (id: string): Promise<void> => {
+    const favorite = state.favorites.find((f) => f.id === id);
+    if (!favorite) {
+      return;
+    }
+    // Make the favorite the current scheme, then apply it live via the same
+    // path history re-apply uses (so intensity / Apply-to-site / Details work).
+    dispatch({ type: "applyFavorite", scheme: favorite.scheme });
+    await applyCurrentScheme();
+    await persistSavedSchemeIfEnabled();
+  },
+
+  onDeleteFavorite: async (id: string): Promise<void> => {
+    const favorites = await storage.deleteFavorite(id);
+    dispatch({ type: "setFavorites", favorites });
   },
 };
 

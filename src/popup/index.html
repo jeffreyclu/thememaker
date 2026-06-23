@@ -18,6 +18,38 @@
       </div>
 
       <div class="popup__row">
+        <label class="popup__label" for="seed-color">Seed</label>
+        <input
+          id="seed-color"
+          class="seed__color"
+          type="color"
+          value="#4f46e5"
+          aria-label="Seed color"
+        />
+        <input
+          id="seed-hex"
+          class="seed__hex"
+          type="text"
+          value="#4f46e5"
+          maxlength="7"
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Seed color hex"
+        />
+        <button
+          id="seed-random"
+          class="toggle"
+          type="button"
+          role="switch"
+          aria-checked="true"
+          aria-label="Use a random seed"
+          title="Use a random seed each time"
+        >
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </button>
+      </div>
+
+      <div class="popup__row">
         <label class="popup__label" for="intensity">Intensity</label>
         <input
           id="intensity"
@@ -74,6 +106,31 @@
           Details
         </button>
         <div id="details" class="details" hidden></div>
+      </section>
+
+      <section class="popup__section">
+        <h2 class="popup__subtitle">Favorites</h2>
+        <div class="favorites__save">
+          <input
+            id="favorite-name"
+            class="favorites__name"
+            type="text"
+            placeholder="Name this scheme"
+            maxlength="60"
+            spellcheck="false"
+            autocomplete="off"
+            aria-label="Favorite name"
+          />
+          <button
+            id="favorite-save"
+            class="btn btn--small"
+            type="button"
+            disabled
+          >
+            Save
+          </button>
+        </div>
+        <ul id="favorites" class="favorites" aria-label="Saved favorites"></ul>
       </section>
 
       <section class="popup__section">

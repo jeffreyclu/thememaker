@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
   KEYS,
+  MAX_FAVORITES,
   ThememakerStorage,
   chromeArea,
   createChromeStorage,
   originFromUrl,
+  type Favorite,
   type StorageArea,
 } from "../src/lib/storage";
 import { getChromeMock } from "./chrome-mock";
@@ -130,6 +132,73 @@ describe("ThememakerStorage", () => {
     // cache entries live under a prefixed key, not the bare key
     expect(await local.get("k")).toBeUndefined();
   });
+
+  describe("favorites (GLOBAL, stored in sync)", () => {
+    const fav = (id: string, name: string): Favorite => ({
+      id,
+      name,
+      scheme: mockScheme,
+    });
+
+    it("returns an empty list by default", async () => {
+      expect(await storage.getFavorites()).toStrictEqual([]);
+    });
+
+    it("saveFavorite appends and persists to the SYNC area", async () => {
+      const list = await storage.saveFavorite(fav("a", "Brandy"));
+      expect(list).toHaveLength(1);
+      expect(list[0]).toStrictEqual(fav("a", "Brandy"));
+      // global → sync, never local
+      expect(await sync.get(KEYS.favorites)).toHaveLength(1);
+      expect(await local.get(KEYS.favorites)).toBeUndefined();
+    });
+
+    it("lists favorites in insertion order", async () => {
+      await storage.saveFavorite(fav("a", "First"));
+      await storage.saveFavorite(fav("b", "Second"));
+      const list = await storage.getFavorites();
+      expect(list.map((f) => f.id)).toStrictEqual(["a", "b"]);
+    });
+
+    it("re-saving an existing id REPLACES (rename/overwrite is idempotent)", async () => {
+      await storage.saveFavorite(fav("a", "Old name"));
+      const list = await storage.saveFavorite(fav("a", "New name"));
+      expect(list).toHaveLength(1);
+      expect(list[0].name).toBe("New name");
+    });
+
+    it("deleteFavorite removes by id and persists the result", async () => {
+      await storage.saveFavorite(fav("a", "A"));
+      await storage.saveFavorite(fav("b", "B"));
+      const list = await storage.deleteFavorite("a");
+      expect(list.map((f) => f.id)).toStrictEqual(["b"]);
+      expect(await storage.getFavorites()).toHaveLength(1);
+    });
+
+    it("deleteFavorite is a no-op for an unknown id", async () => {
+      await storage.saveFavorite(fav("a", "A"));
+      const list = await storage.deleteFavorite("missing");
+      expect(list.map((f) => f.id)).toStrictEqual(["a"]);
+    });
+
+    it("bounds the list to the cap (oldest dropped)", async () => {
+      for (let i = 0; i < MAX_FAVORITES + 5; i += 1) {
+        await storage.saveFavorite(fav(`id-${i}`, `Fav ${i}`));
+      }
+      const list = await storage.getFavorites();
+      expect(list).toHaveLength(MAX_FAVORITES);
+      // the first 5 ids were evicted; the newest is last
+      expect(list[0].id).toBe("id-5");
+      expect(list[list.length - 1].id).toBe(`id-${MAX_FAVORITES + 4}`);
+    });
+
+    it("honors a custom cap", async () => {
+      await storage.saveFavorite(fav("a", "A"), 2);
+      await storage.saveFavorite(fav("b", "B"), 2);
+      const list = await storage.saveFavorite(fav("c", "C"), 2);
+      expect(list.map((f) => f.id)).toStrictEqual(["b", "c"]);
+    });
+  });
 });
 
 describe("chromeArea / createChromeStorage (against the chrome mock)", () => {
@@ -157,5 +226,14 @@ describe("chromeArea / createChromeStorage (against the chrome mock)", () => {
       ...DEFAULT_SETTINGS,
       mode: "quad",
     });
+  });
+
+  it("createChromeStorage round-trips favorites through chrome.storage.sync", async () => {
+    const storage = createChromeStorage();
+    await storage.saveFavorite({ id: "a", name: "A", scheme: mockScheme });
+    expect(getChromeMock().storage.sync.store[KEYS.favorites]).toHaveLength(1);
+    // favorites are global → never in the local area
+    expect(getChromeMock().storage.local.store[KEYS.favorites]).toBeUndefined();
+    expect(await storage.getFavorites()).toHaveLength(1);
   });
 });

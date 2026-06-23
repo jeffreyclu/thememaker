@@ -4,7 +4,13 @@ import { hydratePartial } from "../src/popup/state";
 import type { Settings, SiteState } from "../src/lib/storage";
 import type { Scheme } from "../src/types";
 
-const settings: Settings = { mode: "random", intensity: 80, surprise: false };
+const settings: Settings = {
+  mode: "random",
+  intensity: 80,
+  surprise: false,
+  seed: "#4f46e5",
+  useRandomSeed: true,
+};
 
 describe("hydratePartial — restoring a persisted theme into a fresh popup", () => {
   it("restores the saved scheme as `current` with its saved intensity", () => {
@@ -23,6 +29,7 @@ describe("hydratePartial — restoring a persisted theme into a fresh popup", ()
     const partial = hydratePartial({
       settings,
       history: [],
+      favorites: [],
       origin: "https://github.com",
       site,
       applied: true,
@@ -40,6 +47,7 @@ describe("hydratePartial — restoring a persisted theme into a fresh popup", ()
     const partial = hydratePartial({
       settings,
       history: [],
+      favorites: [],
       origin: "https://example.com",
       site: { enabled: false },
       applied: false,

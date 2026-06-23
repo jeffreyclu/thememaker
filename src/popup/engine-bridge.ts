@@ -11,6 +11,7 @@
 import { modes } from "../config";
 import { randomHexColor, randomMode } from "../lib/theme-engine";
 import { describeColor } from "../lib/color-names";
+import { isHexColor, normalizeHex } from "../lib/color";
 import { localPalette, apiPalette } from "../lib/color-source";
 import type { PaletteSourceDeps } from "../lib/color-source";
 import type { Palette } from "../lib/palette";
@@ -33,6 +34,15 @@ export const modesForSelection = (selection: ModeSelection): string[] =>
 /** Picks a concrete mode for a selection ("random" → a random configured mode). */
 export const resolveMode = (selection: ModeSelection): ColorMode =>
   selection === "random" ? randomMode(modes) : selection;
+
+/**
+ * Resolves the concrete seed hex Generate should use. When the caller supplies a
+ * valid chosen seed it is honored (normalized to `#rrggbb`); otherwise — no
+ * seed, or an unparseable one — we fall back to today's behavior of a fresh
+ * RANDOM color. Pure + total: always returns a normalized `#rrggbb`.
+ */
+export const resolveSeed = (seed?: string): string =>
+  seed && isHexColor(seed) ? normalizeHex(seed) : `#${randomHexColor()}`;
 
 /**
  * Builds a display-only `Scheme` from a palette so history/details panels keep
@@ -68,6 +78,11 @@ export interface GeneratePaletteOptions {
   intensity: Intensity;
   /** Use thecolorapi.com ("surprise me") instead of local generation. */
   surprise: boolean;
+  /**
+   * The user-chosen seed (`#rrggbb`). When absent or invalid, Generate falls
+   * back to a fresh random color (today's behavior) via {@link resolveSeed}.
+   */
+  seed?: string;
   /** Injected source deps (fetch + cache) for the API path. */
   deps?: PaletteSourceDeps;
 }
@@ -86,9 +101,10 @@ export interface GenerateResult {
 export const generateForSelection = async (
   opts: GeneratePaletteOptions,
 ): Promise<GenerateResult> => {
-  const seed = randomHexColor();
   const mode = resolveMode(opts.selection);
-  const seedHex = `#${seed}`;
+  // Honor the chosen seed when provided + valid; otherwise pick a fresh random
+  // color exactly as before.
+  const seedHex = resolveSeed(opts.seed);
 
   const palette: Palette = opts.surprise
     ? await apiPalette(seedHex, mode, opts.deps)

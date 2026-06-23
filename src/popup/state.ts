@@ -10,7 +10,12 @@ import { dequeueScheme } from "../lib/theme-engine";
 import { describeColor } from "../lib/color-names";
 import { clampIntensity, DEFAULT_INTENSITY } from "../types";
 import type { ColorMode, Intensity, Scheme, SchemeDetails } from "../types";
-import type { Settings, SiteState } from "../lib/storage";
+import {
+  DEFAULT_SETTINGS,
+  type Favorite,
+  type Settings,
+  type SiteState,
+} from "../lib/storage";
 
 export type ModeSelection = ColorMode | "random";
 
@@ -25,6 +30,12 @@ export interface PopupState {
   intensity: Intensity;
   /** Whether to use thecolorapi.com ("surprise me") instead of local generation. */
   surprise: boolean;
+  /** The user-chosen seed color (`#rrggbb`) the picker reflects. */
+  seed: string;
+  /** When true, Generate uses a fresh RANDOM seed (ignores {@link PopupState.seed}). */
+  useRandomSeed: boolean;
+  /** Saved GLOBAL favorites (insertion order). */
+  favorites: Favorite[];
   /** Whether a Thememaker style is applied on the active tab. */
   applied: boolean;
   /** Active tab origin, for the per-site toggle. */
@@ -45,6 +56,9 @@ export const initialPopupState: PopupState = {
   mode: "random",
   intensity: DEFAULT_INTENSITY,
   surprise: false,
+  seed: DEFAULT_SETTINGS.seed,
+  useRandomSeed: DEFAULT_SETTINGS.useRandomSeed,
+  favorites: [],
   applied: false,
   origin: null,
   siteEnabled: false,
@@ -57,6 +71,8 @@ export const initialPopupState: PopupState = {
 export interface HydrateInputs {
   settings: Settings;
   history: Scheme[];
+  /** Saved GLOBAL favorites. */
+  favorites: Favorite[];
   origin: string | null;
   site: SiteState;
   /** Whether the active tab already has a Thememaker style applied. */
@@ -80,6 +96,9 @@ export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
     // page; clamp to the selectable range (migrates old/out-of-range values).
     intensity: clampIntensity(savedIntensity ?? inputs.settings.intensity),
     surprise: inputs.settings.surprise,
+    seed: inputs.settings.seed,
+    useRandomSeed: inputs.settings.useRandomSeed,
+    favorites: inputs.favorites,
     history: inputs.history,
     origin: inputs.origin,
     siteEnabled: inputs.site.enabled,
@@ -93,6 +112,10 @@ export type PopupAction =
   | { type: "selectMode"; mode: ModeSelection }
   | { type: "selectIntensity"; intensity: Intensity }
   | { type: "toggleSurprise" }
+  | { type: "setSeed"; seed: string }
+  | { type: "toggleRandomSeed" }
+  | { type: "setFavorites"; favorites: Favorite[] }
+  | { type: "applyFavorite"; scheme: Scheme }
   | { type: "generateStart" }
   | { type: "generateSuccess"; scheme: Scheme; history: Scheme[] }
   | { type: "generateError"; error: string }
@@ -116,6 +139,22 @@ export const popupReducer = (
       return { ...state, intensity: action.intensity };
     case "toggleSurprise":
       return { ...state, surprise: !state.surprise };
+    case "setSeed":
+      // Choosing a seed implies the user wants THAT color, not a random one.
+      return { ...state, seed: action.seed, useRandomSeed: false };
+    case "toggleRandomSeed":
+      return { ...state, useRandomSeed: !state.useRandomSeed };
+    case "setFavorites":
+      return { ...state, favorites: action.favorites };
+    case "applyFavorite":
+      // A favorite becomes the current scheme (so the slider / Apply / Details
+      // act on it) and is marked applied; history is untouched.
+      return {
+        ...state,
+        current: action.scheme,
+        applied: true,
+        error: null,
+      };
     case "generateStart":
       return { ...state, loading: true, error: null };
     case "generateSuccess":
@@ -188,3 +227,14 @@ export const schemeDetailRows = (
 /** @returns the seed metadata for the current scheme, if any. */
 export const currentSchemeDetails = (state: PopupState): SchemeDetails | null =>
   state.current?.schemeDetails ?? null;
+
+/**
+ * @returns the default favorite name for a scheme: its color name + mode (the
+ * same friendly label the details/history derive), e.g. "Brandy Rose
+ * (analogic-complement)". Used to pre-fill the save-favorite input.
+ */
+export const defaultFavoriteName = (scheme: Scheme): string => {
+  const { rootColorName, rootColor, colorMode } = scheme.schemeDetails;
+  const name = rootColorName ?? describeColor(rootColor);
+  return `${name} (${colorMode})`;
+};
