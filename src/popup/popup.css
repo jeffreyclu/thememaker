@@ -276,6 +276,20 @@ body {
   cursor: not-allowed;
 }
 
+/* Collapsible content under a `.disclosure` header (Favorites, History). The
+   explicit `[hidden]` rule re-asserts display:none, which the flex layout would
+   otherwise override (same gotcha as `.details`). */
+.disclosure-panel {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.disclosure-panel[hidden] {
+  display: none;
+}
+
 .details {
   margin-top: 6px;
   font-size: 12px;

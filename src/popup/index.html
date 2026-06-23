@@ -93,33 +93,57 @@
       </section>
 
       <section class="popup__section">
-        <h2 class="popup__subtitle">Favorites</h2>
-        <div class="favorites__save">
-          <input
-            id="favorite-name"
-            class="favorites__name"
-            type="text"
-            placeholder="Name this scheme"
-            maxlength="60"
-            spellcheck="false"
-            autocomplete="off"
-            aria-label="Favorite name"
-          />
-          <button
-            id="favorite-save"
-            class="btn btn--small"
-            type="button"
-            disabled
-          >
-            Save
-          </button>
+        <button
+          id="favorites-toggle"
+          class="disclosure"
+          type="button"
+          aria-expanded="false"
+          aria-controls="favorites-panel"
+        >
+          Favorites
+        </button>
+        <div id="favorites-panel" class="disclosure-panel" hidden>
+          <div class="favorites__save">
+            <input
+              id="favorite-name"
+              class="favorites__name"
+              type="text"
+              placeholder="Name this scheme"
+              maxlength="60"
+              spellcheck="false"
+              autocomplete="off"
+              aria-label="Favorite name"
+            />
+            <button
+              id="favorite-save"
+              class="btn btn--small"
+              type="button"
+              disabled
+            >
+              Save
+            </button>
+          </div>
+          <ul
+            id="favorites"
+            class="favorites"
+            aria-label="Saved favorites"
+          ></ul>
         </div>
-        <ul id="favorites" class="favorites" aria-label="Saved favorites"></ul>
       </section>
 
       <section class="popup__section">
-        <h2 class="popup__subtitle">History</h2>
-        <ul id="history" class="history" aria-label="Scheme history"></ul>
+        <button
+          id="history-toggle"
+          class="disclosure"
+          type="button"
+          aria-expanded="false"
+          aria-controls="history-panel"
+        >
+          History
+        </button>
+        <div id="history-panel" class="disclosure-panel" hidden>
+          <ul id="history" class="history" aria-label="Scheme history"></ul>
+        </div>
       </section>
     </main>
     <script type="module" src="./index.ts"></script>

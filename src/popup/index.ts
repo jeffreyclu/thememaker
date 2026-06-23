@@ -277,6 +277,14 @@ const handlers = {
     dispatch({ type: "toggleDetails" });
   },
 
+  onToggleFavorites: (): void => {
+    dispatch({ type: "toggleFavorites" });
+  },
+
+  onToggleHistory: (): void => {
+    dispatch({ type: "toggleHistory" });
+  },
+
   onSelectHistory: async (index: number): Promise<void> => {
     dispatch({ type: "selectHistory", index });
     await applyCurrentScheme();

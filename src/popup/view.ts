@@ -34,12 +34,18 @@ export interface PopupRefs {
   status: HTMLElement;
   detailsToggle: HTMLButtonElement;
   details: HTMLElement;
+  /** Favorites disclosure header + collapsible panel. */
+  favoritesToggle: HTMLButtonElement;
+  favoritesPanel: HTMLElement;
   /** Name input for saving the current scheme as a favorite. */
   favoriteName: HTMLInputElement;
   /** Save-favorite button. */
   favoriteSave: HTMLButtonElement;
   /** Saved-favorites list. */
   favorites: HTMLElement;
+  /** History disclosure header + collapsible panel. */
+  historyToggle: HTMLButtonElement;
+  historyPanel: HTMLElement;
   history: HTMLElement;
 }
 
@@ -56,6 +62,8 @@ export interface PopupHandlers {
   /** Fired when the random-seed switch is toggled. */
   onToggleRandomSeed: () => void;
   onToggleDetails: () => void;
+  onToggleFavorites: () => void;
+  onToggleHistory: () => void;
   onSelectHistory: (index: number) => void;
   /** Save the current scheme as a named favorite. */
   onSaveFavorite: (name: string) => void;
@@ -89,9 +97,13 @@ export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
     status: byId<HTMLElement>("status"),
     detailsToggle: byId<HTMLButtonElement>("details-toggle"),
     details: byId<HTMLElement>("details"),
+    favoritesToggle: byId<HTMLButtonElement>("favorites-toggle"),
+    favoritesPanel: byId<HTMLElement>("favorites-panel"),
     favoriteName: byId<HTMLInputElement>("favorite-name"),
     favoriteSave: byId<HTMLButtonElement>("favorite-save"),
     favorites: byId<HTMLElement>("favorites"),
+    historyToggle: byId<HTMLButtonElement>("history-toggle"),
+    historyPanel: byId<HTMLElement>("history-panel"),
     history: byId<HTMLElement>("history"),
   };
 };
@@ -120,6 +132,8 @@ export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.apply.addEventListener("click", handlers.onApply);
   refs.reset.addEventListener("click", handlers.onReset);
   refs.detailsToggle.addEventListener("click", handlers.onToggleDetails);
+  refs.favoritesToggle.addEventListener("click", handlers.onToggleFavorites);
+  refs.historyToggle.addEventListener("click", handlers.onToggleHistory);
   refs.mode.addEventListener("change", () =>
     handlers.onSelectMode(refs.mode.value as ModeSelection),
   );
@@ -342,9 +356,16 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.details.hidden = !state.showDetails;
   renderDetails(state, refs.details);
 
+  refs.favoritesToggle.setAttribute(
+    "aria-expanded",
+    String(state.showFavorites),
+  );
+  refs.favoritesPanel.hidden = !state.showFavorites;
   // Can only save a favorite when there's a current scheme to save.
   refs.favoriteSave.disabled = !state.current;
   renderFavorites(state.favorites, refs.favorites);
 
+  refs.historyToggle.setAttribute("aria-expanded", String(state.showHistory));
+  refs.historyPanel.hidden = !state.showHistory;
   renderHistory(state, refs.history);
 };

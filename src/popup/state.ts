@@ -42,6 +42,10 @@ export interface PopupState {
   siteEnabled: boolean;
   /** Whether the details disclosure is open. */
   showDetails: boolean;
+  /** Whether the favorites disclosure is open. */
+  showFavorites: boolean;
+  /** Whether the history disclosure is open. */
+  showHistory: boolean;
   /** Whether a generate request is in flight. */
   loading: boolean;
   /** Last error message, if the most recent action failed. */
@@ -60,6 +64,8 @@ export const initialPopupState: PopupState = {
   origin: null,
   siteEnabled: false,
   showDetails: false,
+  showFavorites: false,
+  showHistory: false,
   loading: false,
   error: null,
 };
@@ -118,6 +124,8 @@ export type PopupAction =
   | { type: "applied"; applied: boolean }
   | { type: "reset" }
   | { type: "toggleDetails" }
+  | { type: "toggleFavorites" }
+  | { type: "toggleHistory" }
   | { type: "setSiteEnabled"; enabled: boolean };
 
 /** Pure reducer for all popup state transitions. */
@@ -180,6 +188,10 @@ export const popupReducer = (
       };
     case "toggleDetails":
       return { ...state, showDetails: !state.showDetails };
+    case "toggleFavorites":
+      return { ...state, showFavorites: !state.showFavorites };
+    case "toggleHistory":
+      return { ...state, showHistory: !state.showHistory };
     case "setSiteEnabled":
       return { ...state, siteEnabled: action.enabled };
     default:

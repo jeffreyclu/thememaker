@@ -134,6 +134,16 @@ describe("popupReducer", () => {
     ).toBe(false);
   });
 
+  it("toggleFavorites and toggleHistory flip their disclosure flags", () => {
+    expect(
+      popupReducer(initialPopupState, { type: "toggleFavorites" })
+        .showFavorites,
+    ).toBe(true);
+    expect(
+      popupReducer(initialPopupState, { type: "toggleHistory" }).showHistory,
+    ).toBe(true);
+  });
+
   it("selectIntensity sets the numeric intensity", () => {
     const next = popupReducer(initialPopupState, {
       type: "selectIntensity",

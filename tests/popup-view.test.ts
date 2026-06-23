@@ -24,10 +24,16 @@ const POPUP_HTML = `
   <p id="status"></p>
   <button id="details-toggle" aria-expanded="false"></button>
   <div id="details" hidden></div>
-  <input id="favorite-name" type="text" />
-  <button id="favorite-save"></button>
-  <ul id="favorites"></ul>
-  <ul id="history"></ul>
+  <button id="favorites-toggle" aria-expanded="false"></button>
+  <div id="favorites-panel" hidden>
+    <input id="favorite-name" type="text" />
+    <button id="favorite-save"></button>
+    <ul id="favorites"></ul>
+  </div>
+  <button id="history-toggle" aria-expanded="false"></button>
+  <div id="history-panel" hidden>
+    <ul id="history"></ul>
+  </div>
 `;
 
 const mount = () => {
@@ -44,6 +50,8 @@ const noopHandlers = (): PopupHandlers => ({
   onSelectSeed: vi.fn(),
   onToggleRandomSeed: vi.fn(),
   onToggleDetails: vi.fn(),
+  onToggleFavorites: vi.fn(),
+  onToggleHistory: vi.fn(),
   onSelectHistory: vi.fn(),
   onSaveFavorite: vi.fn(),
   onSelectFavorite: vi.fn(),
@@ -241,6 +249,36 @@ describe("popup view", () => {
     expect(handlers.onDeleteFavorite).toHaveBeenCalledWith("fav-1");
     // delete didn't double-fire apply
     expect(handlers.onSelectFavorite).toHaveBeenCalledTimes(1);
+  });
+
+  it("favorites/history are collapsible panels and wire their toggles", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+
+    // collapsed by default
+    render(initialPopupState, refs);
+    expect(refs.favoritesPanel.hidden).toBe(true);
+    expect(refs.historyPanel.hidden).toBe(true);
+    expect(refs.favoritesToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(refs.historyToggle.getAttribute("aria-expanded")).toBe("false");
+
+    // expanded when open
+    render(
+      { ...initialPopupState, showFavorites: true, showHistory: true },
+      refs,
+    );
+    expect(refs.favoritesPanel.hidden).toBe(false);
+    expect(refs.historyPanel.hidden).toBe(false);
+    expect(refs.favoritesToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(refs.historyToggle.getAttribute("aria-expanded")).toBe("true");
+
+    // toggles wire to handlers
+    const handlers = noopHandlers();
+    bindEvents(refs, handlers);
+    refs.favoritesToggle.click();
+    expect(handlers.onToggleFavorites).toHaveBeenCalled();
+    refs.historyToggle.click();
+    expect(handlers.onToggleHistory).toHaveBeenCalled();
   });
 
   it("bindEvents wires clicks to handlers (generate, mode, history)", () => {
