@@ -181,12 +181,13 @@ const newFavoriteId = (): string =>
 const handlers = {
   onGenerate: async (): Promise<void> => {
     dispatch({ type: "generateStart" });
-    // Local generation is instant + offline; the API "surprise" path falls back
-    // to local on any failure, so generation never returns undefined.
+    // Always use the online color source for new requests; the API path falls
+    // back to local generation on any failure, and we skip the network entirely
+    // when the browser reports it's offline. Either way generation never throws.
     const result = await generateForSelection({
       selection: state.mode,
       intensity: state.intensity,
-      surprise: state.surprise,
+      online: typeof navigator === "undefined" || navigator.onLine !== false,
       // When "random" is on, omit the seed so the engine picks a fresh color
       // (today's behavior); otherwise Generate uses the chosen seed.
       seed: state.useRandomSeed ? undefined : state.seed,
@@ -254,11 +255,6 @@ const handlers = {
     // Lightly debounce: persist + LIVE re-apply (reusing the applied palette,
     // NO color regeneration) once the user pauses dragging.
     scheduleIntensityCommit();
-  },
-
-  onToggleSurprise: async (): Promise<void> => {
-    dispatch({ type: "toggleSurprise" });
-    await storage.setSettings({ surprise: state.surprise });
   },
 
   onSelectSeed: async (hex: string): Promise<void> => {

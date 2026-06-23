@@ -4,9 +4,10 @@
  * The popup CANNOT see the target page's computed styles, so it only generates
  * the PALETTE + OPTIONS; the adaptive detection/mapping/contrast/inject runs
  * in-page (see `inject.ts`). This module wires the dropdown selection to a
- * concrete seed + mode, resolves a palette from the chosen source (local by
- * default, thecolorapi.com when "surprise me" is on, with caching + fallback),
- * and builds a lightweight display `Scheme` for history/swatches.
+ * concrete seed + mode, resolves a palette from the online source
+ * (thecolorapi.com, with caching) when the browser is online — falling back to
+ * local generation offline or on any failure — and builds a lightweight display
+ * `Scheme` for history/swatches.
  */
 import { modes } from "../config";
 import { randomHexColor, randomMode } from "../lib/theme-engine";
@@ -76,8 +77,13 @@ export const schemeFromPalette = (
 export interface GeneratePaletteOptions {
   selection: ModeSelection;
   intensity: Intensity;
-  /** Use thecolorapi.com ("surprise me") instead of local generation. */
-  surprise: boolean;
+  /**
+   * Use the online color source (thecolorapi.com) for this request. The caller
+   * passes the browser's online status; when `true` the API is used (with a
+   * built-in fallback to local generation on any failure), when `false`
+   * generation is done locally with no network attempt.
+   */
+  online: boolean;
   /**
    * The user-chosen seed (`#rrggbb`). When absent or invalid, Generate falls
    * back to a fresh random color (today's behavior) via {@link resolveSeed}.
@@ -94,9 +100,9 @@ export interface GenerateResult {
 }
 
 /**
- * Generates a palette for the current selection. Local by default (instant,
- * offline); thecolorapi.com when `surprise` is set (with caching + a real
- * fallback to local generation, so this NEVER returns undefined or throws).
+ * Generates a palette for the current selection. Uses the online source
+ * (thecolorapi.com, cached) when `online` is set, with a real fallback to local
+ * generation on any failure; generates locally when offline. NEVER throws.
  */
 export const generateForSelection = async (
   opts: GeneratePaletteOptions,
@@ -106,7 +112,7 @@ export const generateForSelection = async (
   // color exactly as before.
   const seedHex = resolveSeed(opts.seed);
 
-  const palette: Palette = opts.surprise
+  const palette: Palette = opts.online
     ? await apiPalette(seedHex, mode, opts.deps)
     : localPalette(seedHex, mode);
 

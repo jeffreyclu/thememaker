@@ -18,7 +18,6 @@ const POPUP_HTML = `
   <button id="seed-random" aria-checked="true"></button>
   <input id="intensity" type="range" min="10" max="100" step="1" value="80" />
   <output id="intensity-value">80</output>
-  <button id="surprise-toggle" aria-checked="false"></button>
   <button id="generate"></button>
   <button id="apply"></button>
   <button id="reset"></button>
@@ -42,7 +41,6 @@ const noopHandlers = (): PopupHandlers => ({
   onReset: vi.fn(),
   onSelectMode: vi.fn(),
   onSelectIntensity: vi.fn(),
-  onToggleSurprise: vi.fn(),
   onSelectSeed: vi.fn(),
   onToggleRandomSeed: vi.fn(),
   onToggleDetails: vi.fn(),
@@ -125,13 +123,12 @@ describe("popup view", () => {
     expect(refs.status.classList.contains("popup__status--error")).toBe(true);
   });
 
-  it("render reflects intensity + surprise state", () => {
+  it("render reflects intensity state", () => {
     const refs = mount();
     populateModes(refs.mode);
-    render({ ...initialPopupState, intensity: 80, surprise: true }, refs);
+    render({ ...initialPopupState, intensity: 80 }, refs);
     expect(refs.intensity.value).toBe("80");
     expect(refs.intensityValue.textContent).toBe("80");
-    expect(refs.surpriseToggle.getAttribute("aria-checked")).toBe("true");
   });
 
   it("seed picker reflects the chosen seed + random flag", () => {
@@ -262,9 +259,6 @@ describe("popup view", () => {
     refs.intensity.value = "80";
     refs.intensity.dispatchEvent(new Event("input"));
     expect(handlers.onSelectIntensity).toHaveBeenCalledWith(80);
-
-    refs.surpriseToggle.click();
-    expect(handlers.onToggleSurprise).toHaveBeenCalled();
 
     // history click resolves the index from the clicked item
     render({ ...initialPopupState, history: [mockScheme, mockScheme2] }, refs);

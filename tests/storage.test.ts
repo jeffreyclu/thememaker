@@ -94,11 +94,11 @@ describe("ThememakerStorage", () => {
     expect(await local.get(KEYS.history)).toBeTruthy();
   });
 
-  it("persists the intensity + surprise settings", async () => {
-    await storage.setSettings({ intensity: 80, surprise: true });
+  it("persists settings (merged over defaults)", async () => {
+    await storage.setSettings({ intensity: 80, seed: "#123456" });
     const settings = await storage.getSettings();
     expect(settings.intensity).toBe(80);
-    expect(settings.surprise).toBe(true);
+    expect(settings.seed).toBe("#123456");
     // unchanged keys keep their defaults
     expect(settings.mode).toBe(DEFAULT_SETTINGS.mode);
   });

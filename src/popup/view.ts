@@ -28,7 +28,6 @@ export interface PopupRefs {
   intensity: HTMLInputElement;
   /** Numeric read-out next to the slider. */
   intensityValue: HTMLElement;
-  surpriseToggle: HTMLButtonElement;
   generate: HTMLButtonElement;
   apply: HTMLButtonElement;
   reset: HTMLButtonElement;
@@ -52,7 +51,6 @@ export interface PopupHandlers {
   onSelectMode: (mode: ModeSelection) => void;
   /** Fired as the slider is dragged (debounced live re-apply). */
   onSelectIntensity: (intensity: Intensity) => void;
-  onToggleSurprise: () => void;
   /** Fired when the user picks a seed color (from picker or hex field). */
   onSelectSeed: (hex: string) => void;
   /** Fired when the random-seed switch is toggled. */
@@ -85,7 +83,6 @@ export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
     seedRandom: byId<HTMLButtonElement>("seed-random"),
     intensity: byId<HTMLInputElement>("intensity"),
     intensityValue: byId<HTMLElement>("intensity-value"),
-    surpriseToggle: byId<HTMLButtonElement>("surprise-toggle"),
     generate: byId<HTMLButtonElement>("generate"),
     apply: byId<HTMLButtonElement>("apply"),
     reset: byId<HTMLButtonElement>("reset"),
@@ -131,7 +128,6 @@ export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.intensity.addEventListener("input", () =>
     handlers.onSelectIntensity(Number(refs.intensity.value)),
   );
-  refs.surpriseToggle.addEventListener("click", handlers.onToggleSurprise);
 
   // Seed picker: the native color input streams `input` as the user drags;
   // the hex field commits on `change` (Enter / blur) so partial typing isn't
@@ -315,7 +311,6 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.intensity.value = String(state.intensity);
   refs.intensity.setAttribute("aria-valuenow", String(state.intensity));
   refs.intensityValue.textContent = String(state.intensity);
-  refs.surpriseToggle.setAttribute("aria-checked", String(state.surprise));
 
   // Seed picker reflects the chosen color; native <input type="color"> only
   // accepts a 6-digit hex, so guard against a half-typed value in the hex field.

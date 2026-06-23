@@ -40,8 +40,6 @@ export interface Settings {
   mode: ColorMode | "random";
   /** Surface-coverage dial (0–100) the adaptive engine repaints with. */
   intensity: Intensity;
-  /** Whether to use thecolorapi.com ("surprise me") instead of local generation. */
-  surprise: boolean;
   /**
    * The user-chosen seed color (normalized `#rrggbb`). Only used when
    * {@link Settings.useRandomSeed} is false; persisted so the picker reopens on
@@ -58,7 +56,6 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   mode: "random",
   intensity: DEFAULT_INTENSITY,
-  surprise: false,
   seed: "#4f46e5",
   useRandomSeed: true,
 };

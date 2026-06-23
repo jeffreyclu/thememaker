@@ -28,8 +28,6 @@ export interface PopupState {
   mode: ModeSelection;
   /** Surface-coverage dial (0–100) the in-page engine repaints with. */
   intensity: Intensity;
-  /** Whether to use thecolorapi.com ("surprise me") instead of local generation. */
-  surprise: boolean;
   /** The user-chosen seed color (`#rrggbb`) the picker reflects. */
   seed: string;
   /** When true, Generate uses a fresh RANDOM seed (ignores {@link PopupState.seed}). */
@@ -55,7 +53,6 @@ export const initialPopupState: PopupState = {
   history: [],
   mode: "random",
   intensity: DEFAULT_INTENSITY,
-  surprise: false,
   seed: DEFAULT_SETTINGS.seed,
   useRandomSeed: DEFAULT_SETTINGS.useRandomSeed,
   favorites: [],
@@ -95,7 +92,6 @@ export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
     // Prefer the saved scheme's intensity so the dial matches what is on the
     // page; clamp to the selectable range (migrates old/out-of-range values).
     intensity: clampIntensity(savedIntensity ?? inputs.settings.intensity),
-    surprise: inputs.settings.surprise,
     seed: inputs.settings.seed,
     useRandomSeed: inputs.settings.useRandomSeed,
     favorites: inputs.favorites,
@@ -111,7 +107,6 @@ export type PopupAction =
   | { type: "hydrate"; partial: Partial<PopupState> }
   | { type: "selectMode"; mode: ModeSelection }
   | { type: "selectIntensity"; intensity: Intensity }
-  | { type: "toggleSurprise" }
   | { type: "setSeed"; seed: string }
   | { type: "toggleRandomSeed" }
   | { type: "setFavorites"; favorites: Favorite[] }
@@ -137,8 +132,6 @@ export const popupReducer = (
       return { ...state, mode: action.mode };
     case "selectIntensity":
       return { ...state, intensity: action.intensity };
-    case "toggleSurprise":
-      return { ...state, surprise: !state.surprise };
     case "setSeed":
       // Choosing a seed implies the user wants THAT color, not a random one.
       return { ...state, seed: action.seed, useRandomSeed: false };

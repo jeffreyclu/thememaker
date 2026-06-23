@@ -142,12 +142,6 @@ describe("popupReducer", () => {
     expect(next.intensity).toBe(80);
   });
 
-  it("toggleSurprise flips the surprise flag", () => {
-    const on = popupReducer(initialPopupState, { type: "toggleSurprise" });
-    expect(on.surprise).toBe(true);
-    expect(popupReducer(on, { type: "toggleSurprise" }).surprise).toBe(false);
-  });
-
   it("setSeed records the seed AND turns off random (choosing implies intent)", () => {
     const next = popupReducer(initialPopupState, {
       type: "setSeed",
@@ -300,7 +294,7 @@ describe("generateForSelection — seed resolution into generation", () => {
     const result = await generateForSelection({
       selection: "triad",
       intensity: 80,
-      surprise: false,
+      online: false,
       seed: "#6f928b",
     });
     // local generation is pure: the palette seed is exactly the chosen color.
@@ -314,12 +308,12 @@ describe("generateForSelection — seed resolution into generation", () => {
     const a = await generateForSelection({
       selection: "triad",
       intensity: 80,
-      surprise: false,
+      online: false,
     });
     const b = await generateForSelection({
       selection: "triad",
       intensity: 80,
-      surprise: false,
+      online: false,
     });
     // two random draws → valid hex seeds, overwhelmingly distinct.
     expect(a.palette.seed).toMatch(/^#[0-9a-f]{6}$/);
@@ -331,7 +325,7 @@ describe("generateForSelection — seed resolution into generation", () => {
     const result = await generateForSelection({
       selection: "triad",
       intensity: 80,
-      surprise: false,
+      online: false,
       seed: "not-a-color",
     });
     expect(result.palette.seed).toMatch(/^#[0-9a-f]{6}$/);

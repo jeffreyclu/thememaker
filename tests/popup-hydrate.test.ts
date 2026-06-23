@@ -7,7 +7,6 @@ import type { Scheme } from "../src/types";
 const settings: Settings = {
   mode: "random",
   intensity: 80,
-  surprise: false,
   seed: "#4f46e5",
   useRandomSeed: true,
 };
