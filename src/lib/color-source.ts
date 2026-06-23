@@ -64,11 +64,12 @@ export const paletteFromApiResponse = (
     return null;
   }
 
-  // Reuse local generation for the structured surface/accent ramps (which the
-  // API doesn't provide), but seed the SWATCHES from the API's harmony so the
-  // "surprise" actually shows through.
-  const local = generatePalette(normalizeHex(seed), mode);
-  return { ...local, swatches: hexes };
+  // Build the local palette from the API's FIRST color as the seed (falling back
+  // to the requested seed), so the "surprise" drives the actual painted roles.
+  // We deliberately do NOT override `swatches`/`themeColors`: those are the
+  // SOURCE OF TRUTH (the colors the engine paints), so they must stay derived
+  // from the roles — never the raw API harmony, which the engine doesn't paint.
+  return generatePalette(hexes[0] ?? seed, mode);
 };
 
 export interface PaletteSourceDeps {

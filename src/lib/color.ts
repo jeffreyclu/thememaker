@@ -242,6 +242,56 @@ export const ensureContrast = (
 };
 
 /**
+ * Nudges `color` to the NEAREST shade of ITS OWN hue that meets WCAG AA against
+ * `bg`, by walking lightness in fine steps (preserving hue + saturation).
+ *
+ * This is the anti-monochrome contrast strategy: when a saturated accent role
+ * (a colorful link/heading/button) fails AA against the background it lands on,
+ * we keep it COLORFUL — we shift only its lightness to the closest AA-passing
+ * version of the SAME hue, rather than collapsing it to black/white (which is
+ * what made multi-hue palettes read as grayscale). Only if no shade of the hue
+ * can reach AA in either direction do we fall back to `ensureContrast` (which
+ * ends at the better black/white extreme). Saturation is preserved so the role
+ * keeps its identity; the result is GUARANTEED to meet AA.
+ */
+export const nudgeToAA = (color: string, bg: string, large = false): string => {
+  const target = large ? AA_LARGE : AA_NORMAL;
+  if (contrastRatio(color, bg) >= target) {
+    return normalizeHex(color);
+  }
+  const base = hexToHsl(color);
+  const search = (dir: 1 | -1): string | null => {
+    for (let step = 1; step <= 100; step += 1) {
+      const l = base.l + dir * step;
+      if (l < 0 || l > 100) {
+        break;
+      }
+      // Preserve hue + saturation; only lightness moves.
+      const candidate = hslToHex({ h: base.h, s: base.s, l });
+      if (contrastRatio(candidate, bg) >= target) {
+        return candidate;
+      }
+    }
+    return null;
+  };
+  const darker = search(-1);
+  const lighter = search(1);
+  if (darker && lighter) {
+    const dDelta = Math.abs(hexToHsl(darker).l - base.l);
+    const lDelta = Math.abs(hexToHsl(lighter).l - base.l);
+    return dDelta <= lDelta ? darker : lighter;
+  }
+  if (darker) {
+    return darker;
+  }
+  if (lighter) {
+    return lighter;
+  }
+  // No saturated shade of this hue reaches AA — fall back to the safe extreme.
+  return ensureContrast(color, bg, large);
+};
+
+/**
  * Linearly blends `from` toward `to` in sRGB space by factor `t` in [0, 1].
  * `t = 0` returns `from`, `t = 1` returns `to`. This is the core of the
  * intensity dial: "how much of the theme is applied vs. the original".

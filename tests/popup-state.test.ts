@@ -192,8 +192,11 @@ describe("engine-bridge palette glue", () => {
     expect(scheme.schemeDetails.rootColor).toBe(mockPalette.seed);
     expect(scheme.schemeDetails.colorMode).toBe(mockPalette.mode);
     expect(scheme.schemeDetails.rootColorName).toBe("Sea Green");
-    // swatches surfaced as pseudo-keys for the display renderers
-    expect(scheme.swatch1).toBe(mockPalette.swatches[0]);
+    // SOURCE-OF-TRUTH theme colors surfaced as ROLE-labeled pseudo-keys for the
+    // display renderers (so a swatch == a painted color, labeled by role).
+    expect(scheme.primary).toBe(mockPalette.roles.primary);
+    expect(scheme.primary).toBe(mockPalette.seed); // primary = the root color
+    expect(scheme.heading).toBe(mockPalette.roles.heading);
   });
 
   it("applyPayloadForScheme uses the stored palette when present", () => {

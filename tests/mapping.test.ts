@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildMapping,
   blendFactor,
+  classifyButton,
+  classifySurface,
+  classifyText,
   classifyVarName,
   isVariableDriven,
   remapVariables,
+  textRoleColor,
   HTML_SELECTOR,
   BODY_SELECTOR,
   type DetectedNode,
@@ -14,6 +18,8 @@ import {
 import {
   contrastRatio,
   AA_NORMAL,
+  AA_LARGE,
+  hexToHsl,
   isHexColor,
   luminanceOf,
 } from "../src/lib/color";
@@ -21,6 +27,12 @@ import { generatePalette } from "../src/lib/palette";
 import type { ApplyOptions } from "../src/types";
 
 const palette = generatePalette("#3a7bd5", "triad");
+
+/** Circular hue distance in [0, 180]. */
+const hueDist = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
 
 // Numeric intensities (0–100). Intensity is a blend: theme vs. original.
 const LOW: ApplyOptions = { intensity: 10 };
@@ -275,8 +287,9 @@ describe("buildMapping — text against EFFECTIVE background (bug #3)", () => {
     );
     // The panel mapped onto the DARK end of the palette.
     expect(panel?.background).toBe(palette.surfaces[0]);
-    // The label's color is AA against the panel's NEW dark background — this is
-    // the invisible-text fix: contrast is enforced vs the effective ancestor bg.
+    // The label's color is AA against the panel's NEW dark background — the
+    // invisible-text floor holds even at full intensity (the swatch color is
+    // relit only if it would be unreadable on the effective ancestor bg).
     expect(
       contrastRatio(label?.color as string, panel?.background as string),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
@@ -329,6 +342,10 @@ describe("buildMapping — AA GUARANTEE across intensities", () => {
     { name: "--panel-bg", value: "#0d0d0d" },
   ];
 
+  // The AA / invisible-text guarantee holds at EVERY intensity, including full.
+  // Even though full intensity paints the swatch color as the source of truth,
+  // it is floored through `nudgeToAA`, so a truly-unreadable swatch color is
+  // minimally relit (same hue) rather than left invisible.
   for (const opts of [LOW, MID, MAX]) {
     it(`every surface's text passes AA against its new bg (intensity ${opts.intensity})`, () => {
       const result = buildMapping(nodes, vars, palette, opts);
@@ -373,5 +390,262 @@ describe("buildMapping — AA GUARANTEE across intensities", () => {
     const ruleCount = (result.css.match(/\{/g) ?? []).length;
     // 1 :root + html + body + 4 surfaces + 3 text = 9
     expect(ruleCount).toBe(1 + 2 + nodes.length);
+  });
+
+  it("at FULL intensity paints the EXACT swatch colors when readable (source of truth)", () => {
+    // The product rule: at 100% a swatch == what lands in the DOM, UNLESS the
+    // color would be unreadable on its background (then it's minimally relit to
+    // the nearest readable shade of the SAME hue — the readability floor).
+    const page: DetectedNode[] = [
+      surfaceNode("body", "#ffffff", { tagName: "body" }),
+      textNode("[h1]", { tagName: "h1", parent: 0 }),
+      textNode("[p]", { tagName: "p", parent: 0 }),
+      surfaceNode("[btn]", "#dddddd", {
+        tagName: "button",
+        buttonLike: true,
+        textColor: "#000000",
+      }),
+    ];
+    const { decisions } = buildMapping(page, [], palette, MAX);
+    const colorOf = (sel: string) =>
+      decisions.find((d) => d.selector === sel)?.color?.toLowerCase();
+    const bgOf = (sel: string) =>
+      decisions.find((d) => d.selector === sel)?.background?.toLowerCase();
+    // heading + body are readable on a light bg → painted EXACTLY.
+    expect(colorOf("[h1]")).toBe(palette.roles.heading.toLowerCase());
+    expect(colorOf("[p]")).toBe(palette.roles.textPrimary.toLowerCase());
+    // surfaces/backgrounds are never floored → the primary button bg is exactly
+    // the user's ROOT color, always.
+    expect(bgOf("[btn]")).toBe(palette.roles.primary.toLowerCase());
+    expect(bgOf("[btn]")).toBe(palette.seed.toLowerCase());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ANTI-MONOCHROME GATE. These would FAIL on the old behavior, where every text
+// run was colored from `accents[0]` (clamped for contrast) and every surface
+// from a single desaturated ramp — collapsing multi-hue palettes to grayscale.
+// ---------------------------------------------------------------------------
+
+describe("classification heuristics", () => {
+  it("classifyText routes tags to distinct semantic roles", () => {
+    expect(
+      classifyText({ selector: "", role: "text", tagName: "a", luminance: 0 }),
+    ).toBe("link");
+    expect(
+      classifyText({ selector: "", role: "text", tagName: "h1", luminance: 0 }),
+    ).toBe("heading");
+    expect(
+      classifyText({ selector: "", role: "text", tagName: "h2", luminance: 0 }),
+    ).toBe("heading");
+    expect(
+      classifyText({ selector: "", role: "text", tagName: "h3", luminance: 0 }),
+    ).toBe("subheading");
+    expect(
+      classifyText({
+        selector: "",
+        role: "text",
+        tagName: "small",
+        luminance: 0,
+      }),
+    ).toBe("muted");
+    expect(
+      classifyText({ selector: "", role: "text", tagName: "p", luminance: 0 }),
+    ).toBe("body");
+    expect(
+      classifyText({
+        selector: "",
+        role: "text",
+        tagName: "span",
+        luminance: 0,
+        className: "text-muted",
+      }),
+    ).toBe("muted");
+  });
+
+  it("classifySurface splits buttons / code / cards / generic", () => {
+    expect(
+      classifySurface(
+        { selector: "", role: "surface", tagName: "button", luminance: 0.8 },
+        0,
+      ),
+    ).toBe("primaryButton");
+    expect(
+      classifySurface(
+        { selector: "", role: "surface", tagName: "pre", luminance: 0.4 },
+        0,
+      ),
+    ).toBe("code");
+    expect(
+      classifySurface(
+        { selector: "", role: "surface", tagName: "section", luminance: 0.9 },
+        0,
+      ),
+    ).toBe("card");
+    expect(
+      classifySurface(
+        { selector: "", role: "surface", tagName: "div", luminance: 0.5 },
+        0,
+      ),
+    ).toBe("surface");
+  });
+
+  it("classifyButton: class > text > order heuristic for primary vs secondary", () => {
+    const base = {
+      selector: "",
+      role: "surface" as const,
+      tagName: "button",
+      luminance: 0.8,
+    };
+    // class wins
+    expect(classifyButton({ ...base, className: "btn-secondary" }, 0)).toBe(
+      "secondaryButton",
+    );
+    expect(classifyButton({ ...base, className: "btn btn-primary" }, 5)).toBe(
+      "primaryButton",
+    );
+    // then text
+    expect(classifyButton({ ...base, text: "Cancel" }, 0)).toBe(
+      "secondaryButton",
+    );
+    expect(classifyButton({ ...base, text: "Save changes" }, 5)).toBe(
+      "primaryButton",
+    );
+    // then order: first button = dominant CTA, rest = secondary
+    expect(classifyButton(base, 0)).toBe("primaryButton");
+    expect(classifyButton(base, 1)).toBe("secondaryButton");
+  });
+
+  it("textRoleColor pulls a DIFFERENT palette slot per role", () => {
+    const r = palette.roles;
+    expect(textRoleColor("heading", r)).toBe(r.heading);
+    expect(textRoleColor("link", r)).toBe(r.link);
+    expect(textRoleColor("muted", r)).toBe(r.textSecondary);
+    expect(textRoleColor("body", r)).toBe(r.textPrimary);
+    // and those slots are themselves distinct on a triad
+    const set = new Set([r.heading, r.link, r.textSecondary, r.textPrimary]);
+    expect(set.size).toBe(4);
+  });
+});
+
+describe("buildMapping — spends the WHOLE palette (anti-monochrome)", () => {
+  // A representative page: heading, body, link, muted text, two buttons, on a
+  // white page background. Triad palette → should use several hues.
+  const text = (
+    tagName: string,
+    extra: Partial<DetectedNode> = {},
+  ): DetectedNode => ({
+    selector: `[${tagName}]`,
+    role: "text",
+    tagName,
+    textColor: "#000000",
+    luminance: 0,
+    parent: 0,
+    ...extra,
+  });
+  const page = (): DetectedNode[] => [
+    surfaceNode("body", "#ffffff", { tagName: "body" }),
+    text("h1"),
+    text("p"),
+    text("a"),
+    text("small"),
+    surfaceNode("[btn1]", "#dddddd", {
+      tagName: "button",
+      buttonLike: true,
+      textColor: "#000000",
+    }),
+    surfaceNode("[btn2]", "#dddddd", {
+      tagName: "button",
+      buttonLike: true,
+      textColor: "#000000",
+    }),
+  ];
+
+  const colorOf = (
+    decisions: ReturnType<typeof buildMapping>["decisions"],
+    sel: string,
+  ) => (decisions.find((d) => d.selector === sel)?.color ?? "").toLowerCase();
+  const bgOf = (
+    decisions: ReturnType<typeof buildMapping>["decisions"],
+    sel: string,
+  ) =>
+    (decisions.find((d) => d.selector === sel)?.background ?? "").toLowerCase();
+
+  it("uses ≥4 DISTINCT colors across roles (would be ~2 on the old engine)", () => {
+    const { decisions } = buildMapping(page(), [], palette, MAX);
+    const used = new Set<string>();
+    for (const d of decisions) {
+      if (d.color) used.add(d.color.toLowerCase());
+      if (d.background) used.add(d.background.toLowerCase());
+    }
+    expect(used.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("heading, link, body, and primary-button colors are MUTUALLY distinct", () => {
+    const { decisions } = buildMapping(page(), [], palette, MAX);
+    const h1 = colorOf(decisions, "[h1]");
+    const p = colorOf(decisions, "[p]");
+    const a = colorOf(decisions, "[a]");
+    const primaryBg = bgOf(decisions, "[btn1]");
+    const four = new Set([h1, p, a, primaryBg]);
+    expect(four.size).toBe(4);
+  });
+
+  it("role differentiation: h1 ≠ p ≠ a ≠ muted; primary btn bg ≠ secondary btn bg", () => {
+    const { decisions } = buildMapping(page(), [], palette, MAX);
+    const h1 = colorOf(decisions, "[h1]");
+    const p = colorOf(decisions, "[p]");
+    const a = colorOf(decisions, "[a]");
+    const small = colorOf(decisions, "[small]");
+    expect(h1).not.toBe(p);
+    expect(p).not.toBe(a);
+    expect(a).not.toBe(small);
+    expect(h1).not.toBe(a);
+    expect(bgOf(decisions, "[btn1]")).not.toBe(bgOf(decisions, "[btn2]"));
+  });
+
+  it("link and heading keep DIFFERENT hues after AA enforcement", () => {
+    const { decisions } = buildMapping(page(), [], palette, MAX);
+    const a = colorOf(decisions, "[a]");
+    const h1 = colorOf(decisions, "[h1]");
+    // Both are real colors (not gray), separated in hue — the anti-monochrome
+    // guarantee survives the contrast pass.
+    expect(hexToHsl(a).s).toBeGreaterThan(15);
+    expect(hexToHsl(h1).s).toBeGreaterThan(15);
+    expect(hueDist(hexToHsl(a).h, hexToHsl(h1).h)).toBeGreaterThan(40);
+  });
+
+  // AA holds for accent-colored text at EVERY intensity, including full: the
+  // readability floor relit any unreadable swatch color to a readable shade of
+  // the same hue, so the invisible-text guarantee survives the source-of-truth
+  // rule.
+  for (const opts of [LOW, MID, MAX]) {
+    it(`AA holds for EVERY accent-colored text/effective-bg pair (intensity ${opts.intensity})`, () => {
+      const result = buildMapping(page(), [], palette, opts);
+      const bg = result.baseBackground; // every text node's parent is body
+      for (const d of result.decisions) {
+        if (d.role === "text" && d.color) {
+          const large = d.semantic === "heading" || d.semantic === "subheading";
+          expect(contrastRatio(d.color, bg)).toBeGreaterThanOrEqual(
+            large ? AA_LARGE : AA_NORMAL,
+          );
+        }
+      }
+      // and button labels are AA against their fills.
+      for (const sel of ["[btn1]", "[btn2]"]) {
+        const d = result.decisions.find((x) => x.selector === sel);
+        expect(
+          contrastRatio(d?.color as string, d?.background as string),
+        ).toBeGreaterThanOrEqual(AA_NORMAL);
+      }
+    });
+  }
+
+  it("primary button is the saturated accent; secondary is subtler", () => {
+    const { decisions } = buildMapping(page(), [], palette, MAX);
+    const primaryBg = bgOf(decisions, "[btn1]");
+    const secondaryBg = bgOf(decisions, "[btn2]");
+    // primary carries more saturation than secondary (the visual hierarchy).
+    expect(hexToHsl(primaryBg).s).toBeGreaterThan(hexToHsl(secondaryBg).s);
   });
 });

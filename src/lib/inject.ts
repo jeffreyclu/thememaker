@@ -279,6 +279,51 @@ export function applyAdaptiveScheme(
       : "#ffffff";
   };
 
+  // Nudge a color to the NEAREST shade of ITS OWN hue that meets AA against bg
+  // (preserving hue + saturation), only falling back to black/white when no
+  // shade of the hue can reach AA. This is the anti-monochrome contrast path:
+  // a colorful accent (link/heading/button) stays its color, just relit. Port
+  // of `nudgeToAA` in src/lib/color.ts.
+  const nudgeToAA = (color: string, bg: string, large: boolean): string => {
+    const target = large ? 3 : 4.5;
+    if (contrast(color, bg) >= target) {
+      return color;
+    }
+    const rgb = parseColor(color) || [51, 51, 51];
+    const base = rgbToHsl(rgb);
+    const search = (dir: number): string | null => {
+      for (let step = 1; step <= 100; step += 1) {
+        const l = base[2] + dir * step;
+        if (l < 0 || l > 100) {
+          break;
+        }
+        const cand = hslToHex([base[0], base[1], l]);
+        if (contrast(cand, bg) >= target) {
+          return cand;
+        }
+      }
+      return null;
+    };
+    const darker = search(-1);
+    const lighter = search(1);
+    if (darker && lighter) {
+      const dDelta = Math.abs(
+        rgbToHsl(parseColor(darker) as [number, number, number])[2] - base[2],
+      );
+      const lDelta = Math.abs(
+        rgbToHsl(parseColor(lighter) as [number, number, number])[2] - base[2],
+      );
+      return dDelta <= lDelta ? darker : lighter;
+    }
+    if (darker) {
+      return darker;
+    }
+    if (lighter) {
+      return lighter;
+    }
+    return ensureContrast(color, bg, large);
+  };
+
   const bucketOf = (hex: string): "dark" | "medium" | "light" => {
     const l = lumOfHex(hex);
     if (l < 0.15) {
@@ -306,12 +351,45 @@ export function applyAdaptiveScheme(
     }
     return surfaces[Math.floor(surfaces.length / 2)];
   };
-  const textSeed = accents[0] || swatches[0] || "#333333";
   const borderSeed =
     accents[accents.length - 1] || swatches[swatches.length - 1] || "#888888";
 
+  // ---- semantic role colors (the anti-monochrome layer) -------------------
+  // Distinct palette slots for distinct semantic roles, so a multi-hue palette
+  // spends its whole harmony (heading ≠ link ≠ body ≠ primary button). The
+  // `roles` object is derived purely in src/lib/palette.ts; we read it with
+  // safe fallbacks so a legacy palette (no roles) degrades to the old behavior.
+  const fallbackInk = accents[0] || swatches[0] || "#333333";
+  const roles = (palette.roles || {}) as Partial<{
+    bg: string;
+    surface: string;
+    surfaceAlt: string;
+    textPrimary: string;
+    textSecondary: string;
+    heading: string;
+    link: string;
+    primary: string;
+    onPrimary: string;
+    secondary: string;
+    onSecondary: string;
+    border: string;
+    accent: string;
+  }>;
+  const roleTextPrimary = roles.textPrimary || fallbackInk;
+  const roleTextSecondary = roles.textSecondary || fallbackInk;
+  const roleHeading = roles.heading || fallbackInk;
+  const roleLink = roles.link || fallbackInk;
+  const roleAccent = roles.accent || fallbackInk;
+  const rolePrimary = roles.primary || surfaceFor("medium");
+  const roleOnPrimary = roles.onPrimary || "#ffffff";
+  const roleSecondary = roles.secondary || surfaceFor("light");
+  const roleOnSecondary = roles.onSecondary || "#111111";
+  const roleSurface = roles.surface || surfaceFor("light");
+  const roleSurfaceAlt = roles.surfaceAlt || surfaceFor("medium");
+  const roleBorder = roles.border || borderSeed;
+
   // The fully-themed base surface (html/body) before blending.
-  const themedBase = surfaceFor("light");
+  const themedBase = roles.bg || surfaceFor("light");
 
   // ---- intensity → BLEND factor (theme vs. original) ----------------------
   // Intensity is "how much of the theme is applied versus the original": every
@@ -336,19 +414,28 @@ export function applyAdaptiveScheme(
     ]);
   };
 
-  // Pick an AA color for `bg`, blend the ORIGINAL text toward it, keep it only
-  // while it stays AA — so text is never unreadable at any intensity.
+  // Text color from a ROLE SEED. SOURCE-OF-TRUTH with a READABILITY FLOOR: at
+  // full intensity (t>=1) paint the EXACT seed, but passed through `nudgeToAA` —
+  // which returns it UNCHANGED when already readable (so the swatch == the DOM
+  // color), and only nudges a truly-unreadable color to the nearest readable
+  // shade of the SAME hue. Below full intensity, blend toward the seed and keep
+  // it readable. Mirrors `blendedText` in src/lib/mapping.ts.
   const blendedText = (
     originalText: string | null,
     bg: string,
+    seed: string,
     t: number,
+    large: boolean,
   ): string => {
-    const themed = ensureContrast(textSeed, bg, false);
-    if (!originalText || t >= 1) {
+    if (t >= 1) {
+      return nudgeToAA(seed, bg, large);
+    }
+    const themed = nudgeToAA(seed, bg, large);
+    if (!originalText) {
       return themed;
     }
     const cand = mix(originalText, themed, t);
-    return ensureContrast(cand, bg, false);
+    return nudgeToAA(cand, bg, large);
   };
 
   const classifyVarName = (
@@ -444,11 +531,21 @@ export function applyAdaptiveScheme(
         const mapped = surfaceFor(bucketOf(v.value));
         varDecls.push(`${v.name}: ${mix(v.value, mapped, factor)} !important;`);
       } else if (v.role === "text") {
+        // Route text vars to the matching ROLE color so heading/link vars carry
+        // their own accent hue (not all one seed), then AA-nudge (hue-preserving).
+        const n = v.name.toLowerCase();
+        const seed = /heading|title/.test(n)
+          ? roleHeading
+          : /link|anchor/.test(n)
+            ? roleLink
+            : /muted|secondary|subtle/.test(n)
+              ? roleTextSecondary
+              : roleTextPrimary;
         varDecls.push(
-          `${v.name}: ${blendedText(v.value, primarySurface, factor)} !important;`,
+          `${v.name}: ${blendedText(v.value, primarySurface, seed, factor, false)} !important;`,
         );
       } else if (v.role === "border") {
-        const mapped = ensureContrast(borderSeed, primarySurface, true);
+        const mapped = nudgeToAA(roleBorder, primarySurface, true);
         varDecls.push(`${v.name}: ${mix(v.value, mapped, factor)} !important;`);
       }
     }
@@ -506,11 +603,152 @@ export function applyAdaptiveScheme(
     ? originalStyleOf(document.body)
     : { bg: null, fg: null };
   const baseBackground = mix(bodyOriginal.bg || "#ffffff", themedBase, factor);
+  // Page base ink carries the faintly-tinted body (textPrimary) slot.
   const baseText = blendedText(
     bodyOriginal.fg || "#111111",
     baseBackground,
+    roleTextPrimary,
     factor,
+    false,
   );
+
+  // ---- semantic element classification (port of src/lib/mapping.ts) -------
+  // These mirror the pure core's `classifyText` / `classifySurface` /
+  // `classifyButton`, so the in-page engine spends the whole palette by role.
+  const HEADING_TAGS = " h1 h2 ";
+  const SUBHEADING_TAGS = " h3 h4 h5 h6 ";
+  const MUTED_TAGS = " small figcaption caption time label ";
+  const EMPHASIS_TAGS = " strong em b i mark dfn th ";
+  const QUOTE_TAGS = " blockquote q cite ";
+  const CODE_TAGS = " pre code kbd samp ";
+  const CARD_TAGS =
+    " article section figure dialog details fieldset blockquote ";
+  const BANNER_TAGS = " header nav ";
+  const COMPLEMENTARY_TAGS = " aside footer ";
+  const MUTED_CLASS =
+    /(^|[-_ ])(muted|secondary|subtle|meta|caption|help|hint|dim|faint|footnote)([-_ ]|$)/;
+  const PRIMARY_CLASS =
+    /(^|[-_ ])(primary|cta|submit|btn-primary|is-primary|accent|main)([-_ ]|$)/;
+  const SECONDARY_CLASS =
+    /(^|[-_ ])(secondary|ghost|outline|tertiary|cancel|link-button|btn-secondary|is-secondary)([-_ ]|$)/;
+  const PRIMARY_TEXT =
+    /\b(submit|save|continue|sign up|sign in|log in|buy|checkout|get started|subscribe|confirm|next|send|apply|create|add)\b/;
+  const SECONDARY_TEXT =
+    /\b(cancel|back|skip|dismiss|close|learn more|details|reset|edit|more)\b/;
+
+  // Stable document-order index of every button-like element, so "the first
+  // button is the dominant CTA" is deterministic across re-applies/observer
+  // updates (a monotonic counter would drift on incremental walks).
+  const buttonOrder = new Map<Element, number>();
+  try {
+    const btns = document.querySelectorAll(
+      'button, [role="button"], input[type="submit"], input[type="button"], .btn, .button',
+    );
+    for (let i = 0; i < btns.length; i += 1) {
+      buttonOrder.set(btns[i], i);
+    }
+  } catch {
+    // best-effort
+  }
+
+  const isButtonLike = (el: HTMLElement): boolean => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "button") {
+      return true;
+    }
+    if (el.getAttribute("role") === "button") {
+      return true;
+    }
+    if (tag === "input") {
+      const t = (el.getAttribute("type") || "").toLowerCase();
+      if (t === "submit" || t === "button" || t === "reset") {
+        return true;
+      }
+    }
+    const cls = (el.getAttribute("class") || "").toLowerCase();
+    return /(^|[-_ ])(btn|button)([-_ ]|$)/.test(cls);
+  };
+
+  /** primaryButton | secondaryButton — see `classifyButton` in mapping.ts. */
+  const classifyButton = (el: HTMLElement): "primary" | "secondary" => {
+    const cls = (el.getAttribute("class") || "").toLowerCase();
+    const txt = (el.textContent || "").toLowerCase().trim();
+    if (SECONDARY_CLASS.test(cls)) {
+      return "secondary";
+    }
+    if (PRIMARY_CLASS.test(cls)) {
+      return "primary";
+    }
+    if (SECONDARY_TEXT.test(txt)) {
+      return "secondary";
+    }
+    if (PRIMARY_TEXT.test(txt)) {
+      return "primary";
+    }
+    return (buttonOrder.get(el) ?? 0) === 0 ? "primary" : "secondary";
+  };
+
+  /**
+   * The surface fill + label seed for an element. Buttons → primary/secondary
+   * fills with their on-color; code/card → dedicated tinted surfaces; generic
+   * surfaces → null (fall back to luminance-bucket mapping so the page's own
+   * dark/light hierarchy is preserved).
+   */
+  const surfaceFillFor = (
+    el: HTMLElement,
+  ): { bg: string; label: string } | null => {
+    const tag = el.tagName.toLowerCase();
+    if (isButtonLike(el)) {
+      return classifyButton(el) === "primary"
+        ? { bg: rolePrimary, label: roleOnPrimary }
+        : { bg: roleSecondary, label: roleOnSecondary };
+    }
+    if (CODE_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { bg: roleSurfaceAlt, label: roleTextPrimary };
+    }
+    if (BANNER_TAGS.indexOf(` ${tag} `) >= 0) {
+      // Header/nav get their OWN hued surface tint (heading hue → bg).
+      return { bg: mix(roleHeading, themedBase, 0.86), label: roleTextPrimary };
+    }
+    if (COMPLEMENTARY_TAGS.indexOf(` ${tag} `) >= 0) {
+      // Aside/footer get a different hued tint (link hue → bg).
+      return { bg: mix(roleLink, themedBase, 0.86), label: roleTextPrimary };
+    }
+    if (CARD_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { bg: roleSurface, label: roleTextPrimary };
+    }
+    return null;
+  };
+
+  /**
+   * The TEXT role seed + AA size for an element: a → link; h1/h2 → heading;
+   * h3–h6 → accent (subheading); strong/em/… → primary (emphasis);
+   * blockquote/cite → secondary (quote); small/caption/muted-class → muted;
+   * else body. Mirrors `classifyText` + `textRoleColor` in mapping.ts.
+   */
+  const textSeedFor = (el: HTMLElement): { seed: string; large: boolean } => {
+    const tag = el.tagName.toLowerCase();
+    const cls = (el.getAttribute("class") || "").toLowerCase();
+    if (tag === "a") {
+      return { seed: roleLink, large: false };
+    }
+    if (HEADING_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { seed: roleHeading, large: true };
+    }
+    if (SUBHEADING_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { seed: roleAccent, large: true };
+    }
+    if (MUTED_TAGS.indexOf(` ${tag} `) >= 0 || MUTED_CLASS.test(cls)) {
+      return { seed: roleTextSecondary, large: false };
+    }
+    if (EMPHASIS_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { seed: rolePrimary, large: false };
+    }
+    if (QUOTE_TAGS.indexOf(` ${tag} `) >= 0) {
+      return { seed: roleSecondary, large: false };
+    }
+    return { seed: roleTextPrimary, large: false };
+  };
 
   /**
    * Process ONE element subtree (the element + its descendants): tag each in
@@ -567,10 +805,14 @@ export function applyAdaptiveScheme(
         w.__themeMakerWriting = false;
       }
       const originalBg = toHex(bgRgb);
-      const mapped = surfaceFor(bucketOf(originalBg));
+      // Role-aware fill: buttons/code/cards pull dedicated palette slots; other
+      // surfaces fall back to luminance-bucket mapping (preserves dark/light).
+      const fill = surfaceFillFor(el);
+      const mapped = fill ? fill.bg : surfaceFor(bucketOf(originalBg));
       const background = mix(originalBg, mapped, factor);
       paintedBg.set(el, background);
-      const color = blendedText(orig.fg, background, factor);
+      const labelSeed = fill ? fill.label : roleTextPrimary;
+      const color = blendedText(orig.fg, background, labelSeed, factor, false);
       out.push(
         `[${ATTR}="${id}"] { background-color: ${background} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`,
       );
@@ -629,7 +871,11 @@ export function applyAdaptiveScheme(
         w.__themeMakerWriting = false;
       }
       const effBg = effectiveBg(el);
-      const color = blendedText(origFg, effBg, factor);
+      // Role-aware seed: link/heading/subheading/muted/body each pull their own
+      // palette slot, so multi-hue palettes spend the whole harmony — AA-nudged
+      // (hue-preserving) against the effective rendered background.
+      const ts = textSeedFor(el);
+      const color = blendedText(origFg, effBg, ts.seed, factor, ts.large);
       out.push(
         `[${ATTR}="${id}"] { color: ${color} !important; text-shadow: none !important; }`,
       );

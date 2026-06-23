@@ -15,10 +15,17 @@ import {
   meetsContrast,
   mixHex,
   normalizeHex,
+  nudgeToAA,
   relativeLuminance,
   rgbToHex,
   rgbToHsl,
 } from "../src/lib/color";
+
+/** Circular hue distance in [0, 180]. */
+const hueDist = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
 
 describe("normalizeHex / isHexColor", () => {
   it("normalizes shorthand and casing to #rrggbb", () => {
@@ -176,6 +183,56 @@ describe("ensureContrast (WCAG AA enforcement)", () => {
     const once = ensureContrast("#f0f0f0", "#ffffff");
     const twice = ensureContrast(once, "#ffffff");
     expect(twice).toBe(once);
+  });
+});
+
+describe("nudgeToAA (hue-preserving AA, anti-monochrome)", () => {
+  it("leaves an already-compliant accent unchanged", () => {
+    expect(nudgeToAA("#0a3d91", "#ffffff")).toBe("#0a3d91");
+  });
+
+  it("guarantees AA for a saturated accent that fails on the bg", () => {
+    // A saturated link color too light to read on white.
+    const fixed = nudgeToAA("#7bd5ff", "#ffffff");
+    expect(contrastRatio(fixed, "#ffffff")).toBeGreaterThanOrEqual(AA_NORMAL);
+  });
+
+  it("KEEPS the accent's own hue instead of collapsing to black/white", () => {
+    // This is the core anti-monochrome guarantee: a colorful link stays its
+    // color (hue preserved), it is only re-lit to reach AA.
+    const seedHue = hexToHsl("#7bd5ff").h; // cyan-ish
+    const fixed = nudgeToAA("#7bd5ff", "#ffffff");
+    expect(hueDist(hexToHsl(fixed).h, seedHue)).toBeLessThan(8);
+    // it is NOT pure black or white
+    expect(fixed).not.toBe("#000000");
+    expect(fixed).not.toBe("#ffffff");
+    // and it retains real saturation (still "a color", not gray)
+    expect(hexToHsl(fixed).s).toBeGreaterThan(30);
+  });
+
+  it("distinct accent hues stay distinct after nudging onto the same bg", () => {
+    // Two different harmony hues must remain visibly different (this is what
+    // the old textSeed-clamp behavior destroyed).
+    const a = nudgeToAA("#d53a7b", "#ffffff"); // magenta
+    const b = nudgeToAA("#3ad57b", "#ffffff"); // green
+    expect(hueDist(hexToHsl(a).h, hexToHsl(b).h)).toBeGreaterThan(60);
+  });
+
+  it("honors the large-text threshold (3:1)", () => {
+    const fixed = nudgeToAA("#9a9a9a", "#aaaaaa", true);
+    expect(contrastRatio(fixed, "#aaaaaa")).toBeGreaterThanOrEqual(AA_LARGE);
+  });
+
+  it("falls back to the safe extreme when no shade of the hue reaches AA", () => {
+    // A mid bg where neither lightness direction of a saturated hue can hit AA.
+    const fixed = nudgeToAA("#ffd000", "#808080");
+    expect(contrastRatio(fixed, "#808080")).toBeGreaterThanOrEqual(AA_NORMAL);
+    expect(isHexColor(fixed)).toBe(true);
+  });
+
+  it("is idempotent (re-running on a fixed pair is a no-op)", () => {
+    const once = nudgeToAA("#7bd5ff", "#ffffff");
+    expect(nudgeToAA(once, "#ffffff")).toBe(once);
   });
 });
 

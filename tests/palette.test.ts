@@ -84,27 +84,145 @@ describe("generatePalette", () => {
       expect(hueDist(h[0], h[2])).toBeLessThan(45);
     });
 
-    it("monochrome → a single hue spread across lightness", () => {
+    it("monochrome → ONE dominant swatch (the root color), one hue", () => {
+      // SOURCE OF TRUTH: a monochrome theme is a single color. The swatch list
+      // folds to the one dominant color (the seed/primary); the page still has
+      // hierarchy via lightness in the role set, but the SWATCH count is honest.
       const p = generatePalette(SEED, "monochrome");
-      expect(p.swatches.length).toBeGreaterThanOrEqual(3);
+      expect(p.swatches).toHaveLength(1);
+      expect(p.swatches[0]).toBe(p.roles.primary);
+      // The full role set still spans lightness (theme isn't flat): bg ≠ ink.
+      expect(hexToHsl(p.roles.bg).l).toBeGreaterThan(
+        hexToHsl(p.roles.textPrimary).l,
+      );
+      // and every role keeps the seed hue (within rounding).
       const seedHue = hexToHsl(SEED).h;
-      const lums = p.swatches.map(luminanceOf);
-      for (const s of p.swatches) {
-        // hue preserved (within rounding) for all mono swatches
-        expect(hueDist(hexToHsl(s).h, seedHue)).toBeLessThan(8);
+      for (const c of [p.roles.heading, p.roles.link, p.roles.accent]) {
+        expect(hueDist(hexToHsl(c).h, seedHue)).toBeLessThan(8);
       }
-      // distinct lightness steps → distinct luminance
-      expect(new Set(lums.map((l) => l.toFixed(3))).size).toBeGreaterThan(1);
     });
 
-    it("monochrome-dark biases darker than monochrome-light", () => {
+    it("monochrome-dark biases the page surface darker than monochrome-light", () => {
+      // The primary swatch is the seed verbatim (same for both); the polarity
+      // bias now lives in the SURFACE roles, so compare those.
       const dark = generatePalette(SEED, "monochrome-dark");
       const light = generatePalette(SEED, "monochrome-light");
-      const avg = (xs: number[]): number =>
-        xs.reduce((a, b) => a + b, 0) / xs.length;
-      expect(avg(dark.swatches.map(luminanceOf))).toBeLessThan(
-        avg(light.swatches.map(luminanceOf)),
+      expect(luminanceOf(dark.roles.bg)).toBeLessThan(
+        luminanceOf(light.roles.bg),
       );
+    });
+  });
+
+  describe("semantic roles (the anti-monochrome layer)", () => {
+    it("derives a full, valid role set for every mode", () => {
+      const keys = [
+        "bg",
+        "surface",
+        "surfaceAlt",
+        "textPrimary",
+        "textSecondary",
+        "heading",
+        "link",
+        "primary",
+        "onPrimary",
+        "secondary",
+        "onSecondary",
+        "border",
+        "accent",
+      ] as const;
+      for (const mode of modes) {
+        const { roles } = generatePalette(SEED, mode);
+        for (const k of keys) {
+          expect(isHexColor(roles[k])).toBe(true);
+        }
+      }
+    });
+
+    it("multi-hue modes pull DIFFERENT hues for heading vs link vs primary", () => {
+      // The whole point of the fix: distinct roles get distinct HUES on modes
+      // that provide more than one. Old behavior reused one seed → grayscale.
+      for (const mode of ["triad", "quad", "analogic-complement"]) {
+        const { roles } = generatePalette(SEED, mode);
+        const hH = hexToHsl(roles.heading).h;
+        const lH = hexToHsl(roles.link).h;
+        const pH = hexToHsl(roles.primary).h;
+        // heading, link, primary are mutually hue-separated (≥20° apart).
+        expect(hueDist(hH, lH)).toBeGreaterThan(20);
+        expect(hueDist(lH, pH)).toBeGreaterThan(20);
+        expect(hueDist(hH, pH)).toBeGreaterThan(20);
+      }
+    });
+
+    it("primary is the ROOT color verbatim (the user's pick drives the page)", () => {
+      for (const mode of modes) {
+        const p = generatePalette(SEED, mode);
+        // The seed the user chose IS the primary role + the leading swatch.
+        expect(p.roles.primary).toBe(p.seed);
+        expect(p.swatches[0]).toBe(p.seed);
+      }
+    });
+
+    it("swatch COUNT is honest to the harmony (no padded duplicates)", () => {
+      // The user's complaint: a 2-color complement showed 6 swatches w/ dupes.
+      // The SOT swatch list folds to the mode's real distinct-color count.
+      const counts: Record<string, number> = {
+        monochrome: 1,
+        "monochrome-dark": 1,
+        "monochrome-light": 1,
+        complement: 2,
+        triad: 3,
+        quad: 4,
+        "analogic-complement": 4,
+      };
+      for (const mode of modes) {
+        const p = generatePalette(SEED, mode);
+        expect(p.swatches.length).toBe(counts[mode]);
+        // no duplicate swatches
+        expect(new Set(p.swatches).size).toBe(p.swatches.length);
+      }
+    });
+
+    it("monochrome differentiates roles by LIGHTNESS steps (one hue)", () => {
+      const { roles } = generatePalette(SEED, "monochrome");
+      const seedHue = hexToHsl(SEED).h;
+      // All accent roles share (near) the seed hue...
+      for (const c of [roles.heading, roles.link, roles.accent]) {
+        expect(hueDist(hexToHsl(c).h, seedHue)).toBeLessThan(12);
+      }
+      // ...but are separated by distinct lightness steps so hierarchy reads.
+      const ls = [roles.heading, roles.link, roles.accent].map(
+        (c) => hexToHsl(c).l,
+      );
+      expect(new Set(ls.map((l) => l.toFixed(1))).size).toBe(3);
+      // heading is the darkest (strongest) accent step.
+      expect(ls[0]).toBeLessThan(ls[1]);
+      expect(ls[1]).toBeLessThan(ls[2]);
+    });
+
+    it("backgrounds are mostly-neutral tints; accents carry real saturation", () => {
+      const { roles } = generatePalette(SEED, "triad");
+      // page/surface are low-saturation "paper".
+      expect(hexToHsl(roles.bg).s).toBeLessThan(25);
+      expect(hexToHsl(roles.surface).s).toBeLessThan(25);
+      // links/headings/primary are saturated "colorful but readable".
+      expect(hexToHsl(roles.link).s).toBeGreaterThan(35);
+      expect(hexToHsl(roles.heading).s).toBeGreaterThan(35);
+      expect(hexToHsl(roles.primary).s).toBeGreaterThan(35);
+    });
+
+    it("primary and secondary button fills are visibly distinct", () => {
+      for (const mode of modes) {
+        const { roles } = generatePalette(SEED, mode);
+        expect(roles.primary.toLowerCase()).not.toBe(
+          roles.secondary.toLowerCase(),
+        );
+      }
+    });
+
+    it("monochrome-dark biases backgrounds dark, monochrome-light light", () => {
+      const dark = generatePalette(SEED, "monochrome-dark").roles;
+      const light = generatePalette(SEED, "monochrome-light").roles;
+      expect(luminanceOf(dark.bg)).toBeLessThan(luminanceOf(light.bg));
     });
   });
 });

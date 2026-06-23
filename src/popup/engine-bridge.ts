@@ -52,10 +52,12 @@ export const schemeFromPalette = (
     intensity,
   };
   const scheme = { schemeDetails: details } as Scheme;
-  // Surface the palette swatches as pseudo-keys so the existing swatch/detail
-  // renderers (which iterate scheme entries) show the real palette colors.
-  palette.swatches.forEach((color, i) => {
-    scheme[`swatch${i + 1}`] = color;
+  // Surface the SOURCE-OF-TRUTH theme colors as role-labeled pseudo-keys, so the
+  // swatch/detail renderers show EXACTLY the colors the engine paints (a swatch
+  // == a painted color), labeled by role, with no duplicates and a count that
+  // matches the theme's real number of distinct colors.
+  palette.themeColors.forEach((tc) => {
+    scheme[tc.role] = tc.color;
   });
   return scheme;
 };

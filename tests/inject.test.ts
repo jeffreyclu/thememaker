@@ -8,7 +8,7 @@ import {
   removeSchemeStyle,
 } from "../src/lib/inject";
 import { generatePalette } from "../src/lib/palette";
-import { contrastRatio } from "../src/lib/color";
+import { contrastRatio, hexToHsl } from "../src/lib/color";
 import type { ApplyOptions } from "../src/types";
 
 // The injected functions run in the page world; jsdom provides document.
@@ -206,6 +206,99 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     const span = document.querySelector("span") as HTMLElement;
     expect(div.getAttribute("data-thememaker")).not.toBeNull();
     expect(span.getAttribute("data-thememaker")).not.toBeNull();
+  });
+
+  it("spends the WHOLE palette in-page: ≥4 distinct role colors (anti-monochrome)", () => {
+    // A representative page with heading/body/link/muted/buttons. The in-page
+    // port must mirror the pure core: distinct roles → distinct colors.
+    document.body.innerHTML =
+      '<h1 style="color: rgb(0,0,0)">Title</h1>' +
+      '<p style="color: rgb(0,0,0)">Body text here</p>' +
+      '<a href="#" style="color: rgb(0,0,255)">A link</a>' +
+      '<small style="color: rgb(90,90,90)">muted note</small>' +
+      '<button style="background-color: rgb(220,220,220); color: rgb(0,0,0)">Submit</button>' +
+      '<button class="btn-secondary" style="background-color: rgb(220,220,220); color: rgb(0,0,0)">Cancel</button>';
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+    const all = [
+      ...css.matchAll(/(?:background-)?color:\s*(#[0-9a-f]{6})/gi),
+    ].map((m) => m[1].toLowerCase());
+    // The old single-seed engine produced ~2 colors; the role engine many more.
+    expect(new Set(all).size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("a multi-hue page is NOT monochrome AND a quad shows more hues than a complement", () => {
+    // The page must spend the palette (not collapse to grayscale), and the
+    // number of hue families it paints scales HONESTLY with the mode's harmony:
+    // a quad paints more distinct hue families than a complement. (We no longer
+    // invent extra hues to pad a 2-color complement up to six.)
+    const richPage =
+      '<header style="background-color: rgb(245,245,245)"><nav>' +
+      '<a href="#" style="color: rgb(0,0,238)">Home</a></nav></header>' +
+      '<article style="background-color: rgb(250,250,250)">' +
+      '<h1 style="color: rgb(0,0,0)">Title</h1>' +
+      '<h3 style="color: rgb(0,0,0)">Section</h3>' +
+      '<p style="color: rgb(30,30,30)">Body with ' +
+      '<strong style="color: rgb(30,30,30)">emphasis</strong> and a ' +
+      '<a href="#" style="color: rgb(0,0,238)">link</a>.</p>' +
+      '<blockquote style="color: rgb(80,80,80)">Quoted</blockquote>' +
+      '<small style="color: rgb(120,120,120)">muted</small>' +
+      '<pre style="background-color: rgb(240,240,240)">' +
+      '<code style="color: rgb(0,0,0)">code()</code></pre>' +
+      '<button style="background-color: rgb(220,220,220); color: rgb(0,0,0)">Submit</button>' +
+      "</article>" +
+      '<aside style="background-color: rgb(248,248,248)">' +
+      '<p style="color: rgb(50,50,50)">sidebar</p></aside>';
+
+    const familiesFor = (mode: string): number => {
+      document.body.innerHTML = richPage;
+      document.body.style.backgroundColor = "rgb(255,255,255)";
+      document.body.style.color = "rgb(20,20,20)";
+      applyAdaptiveScheme(generatePalette("#3a7bd5", mode), { intensity: 100 });
+      const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+      const colors = [
+        ...css.matchAll(/(?:background-)?color:\s*(#[0-9a-f]{6})/gi),
+      ].map((m) => m[1].toLowerCase());
+      const families = new Set(
+        [...new Set(colors)]
+          .map((c) => hexToHsl(c))
+          .filter((hsl) => hsl.s >= 12)
+          .map((hsl) => Math.round(hsl.h / 30)),
+      );
+      removeSchemeStyle();
+      document.body.innerHTML = "";
+      document.head.innerHTML = "";
+      return families.size;
+    };
+
+    const complementFamilies = familiesFor("complement");
+    const quadFamilies = familiesFor("quad");
+    // Not monochrome: a complement still paints at least its two hue families.
+    expect(complementFamilies).toBeGreaterThanOrEqual(2);
+    // Honest harmony: a quad paints strictly more hue families than a complement.
+    expect(quadFamilies).toBeGreaterThan(complementFamilies);
+  });
+
+  it("in-page: the two buttons get DIFFERENT backgrounds (primary ≠ secondary)", () => {
+    document.body.innerHTML =
+      '<button class="btn-primary" style="background-color: rgb(200,200,200); color: rgb(0,0,0)">Save</button>' +
+      '<button class="btn-secondary" style="background-color: rgb(200,200,200); color: rgb(0,0,0)">Cancel</button>';
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+    const btns = document.querySelectorAll("button");
+    const bgFor = (el: Element): string => {
+      const id = el.getAttribute("data-thememaker");
+      const m = new RegExp(
+        `\\[data-thememaker="${id}"\\] \\{[^}]*background-color:\\s*(#[0-9a-f]{6})`,
+        "i",
+      ).exec(css);
+      return (m?.[1] ?? "").toLowerCase();
+    };
+    const a = bgFor(btns[0]);
+    const b = bgFor(btns[1]);
+    expect(a).toBeTruthy();
+    expect(b).toBeTruthy();
+    expect(a).not.toBe(b);
   });
 
   it("re-detects against ORIGINAL colors, not our themed output (no drift)", () => {

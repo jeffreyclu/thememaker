@@ -50,12 +50,17 @@ describe("paletteCacheKey / apiSchemeUrl", () => {
 });
 
 describe("paletteFromApiResponse", () => {
-  it("seeds swatches from the API colors, keeps local ramps", () => {
+  it("drives the palette from the API's first color (the new SEED)", () => {
+    // SOURCE OF TRUTH: the engine paints from `roles`, so the API color becomes
+    // the SEED (= the primary/root color) and swatches stay role-derived — never
+    // the raw API harmony, which the engine doesn't paint.
     const p = paletteFromApiResponse("#6f928b", "triad", {
       colors: [{ hex: { value: "#112233" } }, { hex: { value: "#445566" } }],
     });
     expect(p).not.toBeNull();
-    expect(p?.swatches).toStrictEqual(["#112233", "#445566"]);
+    expect(p?.seed).toBe("#112233");
+    expect(p?.roles.primary).toBe("#112233"); // root color drives the page
+    expect(p?.swatches[0]).toBe("#112233"); // SOT swatches lead with the root
     expect(p?.surfaces.length).toBeGreaterThanOrEqual(3);
   });
   it("returns null for empty/malformed payloads", () => {
@@ -89,7 +94,9 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
     });
-    expect(p.swatches).toStrictEqual(["#112233", "#445566"]);
+    // The API's first color drives the palette (becomes the seed/root color).
+    expect(p.seed).toBe("#112233");
+    expect(p.roles.primary).toBe("#112233");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(cache.store.size).toBe(1);
   });
@@ -155,7 +162,7 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
     });
-    expect(p.swatches).toStrictEqual(["#abcdef"]);
+    expect(p.seed).toBe("#abcdef"); // API color became the seed
     expect(cache.store.size).toBe(1);
   });
 
@@ -173,6 +180,6 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
     });
-    expect(p.swatches).toStrictEqual(["#010203"]);
+    expect(p.seed).toBe("#010203"); // reached the network; API color = seed
   });
 });
