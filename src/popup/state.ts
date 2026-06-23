@@ -7,6 +7,7 @@
  * small document), so a single reducer keeps it simple.
  */
 import { dequeueScheme } from "../lib/theme-engine";
+import { describeColor } from "../lib/color-names";
 import { clampIntensity, DEFAULT_INTENSITY } from "../types";
 import type { ColorMode, Intensity, Scheme, SchemeDetails } from "../types";
 import type { Settings, SiteState } from "../lib/storage";
@@ -156,8 +157,11 @@ export const popupReducer = (
 
 /** @returns the friendly label for a scheme history entry. */
 export const historyLabel = (scheme: Scheme, index: number): string => {
-  const { rootColorName, colorMode } = scheme.schemeDetails;
-  return `${index + 1}. ${rootColorName ?? "scheme"} (${colorMode})`;
+  const { rootColorName, rootColor, colorMode } = scheme.schemeDetails;
+  // Fall back to naming the root color on the fly so legacy entries (saved
+  // before names were stored) show a real name instead of "scheme".
+  const name = rootColorName ?? describeColor(rootColor);
+  return `${index + 1}. ${name} (${colorMode})`;
 };
 
 /**

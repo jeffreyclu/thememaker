@@ -12,6 +12,7 @@ import {
   type PopupState,
 } from "./state";
 import { modes } from "../config";
+import { describeColor } from "../lib/color-names";
 import type { Intensity } from "../types";
 
 export interface PopupRefs {
@@ -117,10 +118,11 @@ const renderDetails = (state: PopupState, container: HTMLElement): void => {
   if (!state.current) {
     return;
   }
-  const { rootColorName, colorMode } = state.current.schemeDetails;
+  const { rootColorName, rootColor, colorMode } = state.current.schemeDetails;
   const seed = document.createElement("p");
   seed.className = "details__seed";
-  seed.textContent = `${rootColorName ?? "scheme"} (${colorMode})`;
+  const name = rootColorName ?? describeColor(rootColor);
+  seed.textContent = `${name} (${colorMode})`;
   container.appendChild(seed);
 
   for (const { tags, color } of schemeDetailRows(state.current)) {
