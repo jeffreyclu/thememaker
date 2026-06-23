@@ -1,0 +1,277 @@
+/**
+ * Pure color math — conversions, WCAG luminance/contrast, contrast enforcement,
+ * and luminance bucketing.
+ *
+ * NOTHING here touches the DOM or `chrome.*`; it is fully unit-testable. The
+ * in-page adaptive engine (`inject.ts`) carries a self-contained PORT of the
+ * contrast/bucket logic (it cannot import across the `executeScript` boundary),
+ * so this module is the canonical, tested reference for that math. Keep the two
+ * in lockstep.
+ */
+
+export interface RGB {
+  r: number; // 0..255
+  g: number; // 0..255
+  b: number; // 0..255
+}
+
+export interface HSL {
+  h: number; // 0..360
+  s: number; // 0..100
+  l: number; // 0..100
+}
+
+const clamp = (n: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, n));
+
+/** Normalizes a hex string to a 6-digit lowercase form WITH a leading '#'. */
+export const normalizeHex = (hex: string): string => {
+  let h = hex.trim().toLowerCase();
+  if (h.startsWith("#")) {
+    h = h.slice(1);
+  }
+  if (/^[0-9a-f]{3}$/.test(h)) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (!/^[0-9a-f]{6}$/.test(h)) {
+    throw new Error(`invalid hex color: ${hex}`);
+  }
+  return `#${h}`;
+};
+
+/** @returns true if `hex` is a parseable 3- or 6-digit hex color. */
+export const isHexColor = (hex: string): boolean => {
+  try {
+    normalizeHex(hex);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Hex (`#rgb`/`#rrggbb`, with or without '#') → RGB (0..255). */
+export const hexToRgb = (hex: string): RGB => {
+  const h = normalizeHex(hex).slice(1);
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
+};
+
+/** RGB (0..255, rounded/clamped) → `#rrggbb`. */
+export const rgbToHex = ({ r, g, b }: RGB): string => {
+  const to2 = (n: number): string =>
+    Math.round(clamp(n, 0, 255))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+};
+
+/** RGB (0..255) → HSL (h 0..360, s/l 0..100). */
+export const rgbToHsl = ({ r, g, b }: RGB): HSL => {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const delta = max - min;
+
+  let h = 0;
+  if (delta !== 0) {
+    if (max === rn) {
+      h = ((gn - bn) / delta) % 6;
+    } else if (max === gn) {
+      h = (bn - rn) / delta + 2;
+    } else {
+      h = (rn - gn) / delta + 4;
+    }
+    h *= 60;
+    if (h < 0) {
+      h += 360;
+    }
+  }
+
+  const l = (max + min) / 2;
+  const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+
+  return { h, s: s * 100, l: l * 100 };
+};
+
+/** HSL (h 0..360, s/l 0..100) → RGB (0..255). */
+export const hslToRgb = ({ h, s, l }: HSL): RGB => {
+  const hn = ((h % 360) + 360) % 360;
+  const sn = clamp(s, 0, 100) / 100;
+  const ln = clamp(l, 0, 100) / 100;
+
+  const c = (1 - Math.abs(2 * ln - 1)) * sn;
+  const x = c * (1 - Math.abs(((hn / 60) % 2) - 1));
+  const m = ln - c / 2;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  if (hn < 60) {
+    [r, g, b] = [c, x, 0];
+  } else if (hn < 120) {
+    [r, g, b] = [x, c, 0];
+  } else if (hn < 180) {
+    [r, g, b] = [0, c, x];
+  } else if (hn < 240) {
+    [r, g, b] = [0, x, c];
+  } else if (hn < 300) {
+    [r, g, b] = [x, 0, c];
+  } else {
+    [r, g, b] = [c, 0, x];
+  }
+
+  return {
+    r: Math.round((r + m) * 255),
+    g: Math.round((g + m) * 255),
+    b: Math.round((b + m) * 255),
+  };
+};
+
+/** Hex → HSL convenience. */
+export const hexToHsl = (hex: string): HSL => rgbToHsl(hexToRgb(hex));
+
+/** HSL → hex convenience. */
+export const hslToHex = (hsl: HSL): string => rgbToHex(hslToRgb(hsl));
+
+/** sRGB channel (0..255) → linearized component, per WCAG. */
+const linearize = (channel: number): number => {
+  const c = channel / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+};
+
+/**
+ * WCAG relative luminance of an RGB color, in [0, 1].
+ * Black → 0, white → 1.
+ */
+export const relativeLuminance = ({ r, g, b }: RGB): number =>
+  0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+
+/** Relative luminance from a hex color. */
+export const luminanceOf = (hex: string): number =>
+  relativeLuminance(hexToRgb(hex));
+
+/**
+ * WCAG contrast ratio between two colors, in [1, 21].
+ * Symmetric: `contrastRatio(a, b) === contrastRatio(b, a)`.
+ */
+export const contrastRatio = (a: string, b: string): number => {
+  const la = luminanceOf(a);
+  const lb = luminanceOf(b);
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+/** WCAG AA minimums. Large text (>=18pt / 14pt bold) needs only 3:1. */
+export const AA_NORMAL = 4.5;
+export const AA_LARGE = 3;
+
+/** @returns true if `text` on `bg` meets the AA threshold for its size. */
+export const meetsContrast = (
+  text: string,
+  bg: string,
+  large = false,
+): boolean => contrastRatio(text, bg) >= (large ? AA_LARGE : AA_NORMAL);
+
+/**
+ * Adjusts `text`'s LIGHTNESS (preserving hue/saturation where possible) until it
+ * meets WCAG AA against `bg`. Tries darkening AND lightening and keeps whichever
+ * direction reaches the target with the most headroom; if neither hue-preserving
+ * direction can reach it, falls back to pure black or white (whichever wins).
+ *
+ * GUARANTEE: the returned color always satisfies `meetsContrast(result, bg)`.
+ */
+export const ensureContrast = (
+  text: string,
+  bg: string,
+  large = false,
+): string => {
+  const target = large ? AA_LARGE : AA_NORMAL;
+  if (contrastRatio(text, bg) >= target) {
+    return normalizeHex(text);
+  }
+
+  const base = hexToHsl(text);
+
+  // Search both directions for the lightness that first meets the target,
+  // walking in fine steps so we move the MINIMUM needed (least destructive).
+  const search = (dir: 1 | -1): { hex: string; ratio: number } | null => {
+    for (let step = 1; step <= 100; step += 1) {
+      const l = base.l + dir * step;
+      if (l < 0 || l > 100) {
+        break;
+      }
+      const candidate = hslToHex({ ...base, l });
+      const ratio = contrastRatio(candidate, bg);
+      if (ratio >= target) {
+        return { hex: candidate, ratio };
+      }
+    }
+    return null;
+  };
+
+  const darker = search(-1);
+  const lighter = search(1);
+
+  if (darker && lighter) {
+    // Prefer the smaller lightness move; tie-break on ratio headroom.
+    const dDelta = Math.abs(hexToHsl(darker.hex).l - base.l);
+    const lDelta = Math.abs(hexToHsl(lighter.hex).l - base.l);
+    return dDelta <= lDelta ? darker.hex : lighter.hex;
+  }
+  if (darker) {
+    return darker.hex;
+  }
+  if (lighter) {
+    return lighter.hex;
+  }
+
+  // Hue-preserving adjustment can't reach AA (e.g. mid bg) — pick the extreme
+  // with the most contrast. This always meets AA for any realistic threshold.
+  const blackRatio = contrastRatio("#000000", bg);
+  const whiteRatio = contrastRatio("#ffffff", bg);
+  return blackRatio >= whiteRatio ? "#000000" : "#ffffff";
+};
+
+/**
+ * Linearly blends `from` toward `to` in sRGB space by factor `t` in [0, 1].
+ * `t = 0` returns `from`, `t = 1` returns `to`. This is the core of the
+ * intensity dial: "how much of the theme is applied vs. the original".
+ */
+export const mixHex = (from: string, to: string, t: number): string => {
+  const k = clamp(t, 0, 1);
+  const a = hexToRgb(from);
+  const b = hexToRgb(to);
+  return rgbToHex({
+    r: a.r + (b.r - a.r) * k,
+    g: a.g + (b.g - a.g) * k,
+    b: a.b + (b.b - a.b) * k,
+  });
+};
+
+/** Three coarse luminance bands a surface color can fall into. */
+export type LuminanceBucket = "dark" | "medium" | "light";
+
+/**
+ * Classifies a color into a luminance band. Thresholds are tuned so typical
+ * page chrome (near-black, mid-gray, near-white) lands in distinct bands,
+ * preserving a page's visual hierarchy when remapped.
+ */
+export const luminanceBucket = (hex: string): LuminanceBucket => {
+  const l = luminanceOf(hex);
+  if (l < 0.15) {
+    return "dark";
+  }
+  if (l < 0.55) {
+    return "medium";
+  }
+  return "light";
+};
