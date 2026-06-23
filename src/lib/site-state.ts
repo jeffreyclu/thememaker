@@ -90,5 +90,12 @@ export const loadDecision = (
   }
   // Clamp the saved intensity into the selectable range; default if absent.
   const intensity = clampIntensity(details?.intensity ?? DEFAULT_INTENSITY);
-  return { apply: true, palette, options: { intensity } };
+  // Carry any saved per-role overrides so the auto-reapply restores the custom
+  // theme too (the engine AA-floors them just like the generated colors).
+  const overrides = details?.overrides;
+  const options: ApplyOptions =
+    overrides && Object.keys(overrides).length > 0
+      ? { intensity, overrides }
+      : { intensity };
+  return { apply: true, palette, options };
 };

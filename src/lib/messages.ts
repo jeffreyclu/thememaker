@@ -36,6 +36,61 @@ export interface ResetSchemeMessage {
   type: "RESET_SCHEME";
 }
 
+/**
+ * Element-picker messages, sent DIRECTLY from the popup to the active tab's
+ * CONTENT SCRIPT (`chrome.tabs.sendMessage`), NOT through the background hub:
+ * pick mode is an in-page interaction owned by the always-on content script.
+ *
+ * Flow: popup → `START_PICK` → content script enters pick mode (hover highlight +
+ * capture-phase click). On a click the content script classifies the element's
+ * semantic role via `roleOfElement`, replies `ELEMENT_PICKED { role }`, and
+ * exits. `STOP_PICK` cancels pick mode (also fired on Esc, popup close, etc.).
+ */
+export interface StartPickMessage {
+  type: "START_PICK";
+}
+
+/** Cancel pick mode on the active tab's content script. */
+export interface StopPickMessage {
+  type: "STOP_PICK";
+}
+
+/**
+ * Apply a palette + options DIRECTLY in a specific tab's content script.
+ *
+ * Used by the DETACHED picker window (a standalone `chrome.windows` popup that
+ * stays open while the user clicks the page). That window can't use the
+ * background's `chrome.scripting` injector — that path targets the ACTIVE tab in
+ * the CURRENT window, which is now the picker window itself, not the page. So
+ * the picker window sends the palette here, to the page's own content script,
+ * which runs the SAME `applyAdaptiveScheme` engine in place.
+ */
+export interface ApplyLiveMessage {
+  type: "APPLY_LIVE";
+  palette: Palette;
+  options: ApplyOptions;
+}
+
+/**
+ * The content script's reply to a click in pick mode: the override-key for the
+ * clicked element's semantic role (a {@link import("./palette").PaletteRoles}
+ * key, e.g. `heading` / `link` / `primary`). `cancelled` is `true` when pick
+ * mode ended without a pick (Esc / STOP_PICK), so the popup can clear its UI.
+ */
+export interface ElementPickedMessage {
+  type: "ELEMENT_PICKED";
+  /** The palette-role key the user chose to recolor, or null when cancelled. */
+  role: string | null;
+  /** True when pick mode ended without a selection. */
+  cancelled?: boolean;
+}
+
+/** Messages the CONTENT SCRIPT handles (popup → content script, direct). */
+export type ContentMessage =
+  | StartPickMessage
+  | StopPickMessage
+  | ApplyLiveMessage;
+
 /** Query whether the active tab currently has a Thememaker style applied. */
 export interface QueryStateMessage {
   type: "QUERY_STATE";
@@ -82,4 +137,25 @@ export const sendMessage = <M extends ThememakerMessage>(
       }
       resolve(response as ResponseFor[M["type"]]);
     });
+  });
+
+/**
+ * Fire-and-forget send of a {@link ContentMessage} to a specific tab's CONTENT
+ * SCRIPT (`chrome.tabs.sendMessage`). Used by the popup to drive pick mode.
+ * Resolves even if the tab has no listener (a non-injectable tab), swallowing
+ * `lastError` so the popup never rejects on a chrome:// tab.
+ */
+export const sendToContent = (
+  tabId: number,
+  message: ContentMessage,
+): Promise<void> =>
+  new Promise((resolve) => {
+    try {
+      chrome.tabs.sendMessage(tabId, message, () => {
+        void chrome.runtime.lastError; // ignore "no receiving end"
+        resolve();
+      });
+    } catch {
+      resolve();
+    }
   });

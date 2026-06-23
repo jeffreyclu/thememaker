@@ -36,13 +36,15 @@
  * enforced regardless of intensity.
  */
 import {
+  isHexColor,
   luminanceBucket,
   mixHex,
+  normalizeHex,
   nudgeToAA,
   type LuminanceBucket,
 } from "./color";
 import type { Palette, PaletteRoles } from "./palette";
-import type { ApplyOptions, Intensity } from "../types";
+import type { ApplyOptions, Intensity, RoleOverrides } from "../types";
 
 /**
  * The COARSE kind an element plays in the two-pass machinery: surfaces get a
@@ -334,6 +336,112 @@ export const classifyText = (node: DetectedNode): SemanticRole => {
     return "body";
   }
   return "body";
+};
+
+/**
+ * The minimal element shape the single-element classifier needs: the same
+ * lightweight signals the full DOM-walk computes per node (`getComputedStyle`).
+ * The in-page picker (`inject.ts`) builds this from a live `Element`; tests feed
+ * synthetic records. `hasOwnBackground` marks an element that owns a
+ * non-transparent background (so it is a SURFACE), mirroring the walk's pass-1
+ * gate; everything else is treated as TEXT.
+ */
+export interface RoleClassifierInput {
+  tagName: string;
+  className?: string;
+  text?: string;
+  /** True when the element's role/type makes it button-like (button, role=button, .btn). */
+  buttonLike?: boolean;
+  /** True when the element owns a non-transparent background (→ surface). */
+  hasOwnBackground?: boolean;
+  /**
+   * The element's index among button-like elements in document order, so the
+   * "first button is the dominant CTA" heuristic is deterministic. Defaults to 0.
+   */
+  buttonOrder?: number;
+}
+
+/**
+ * Classifies a SINGLE element into its fine semantic role — the SAME
+ * classification the full engine walk uses (`classifyText` / `classifySurface` /
+ * `classifyButton`). This is the reusable core the element-picker calls to turn
+ * one clicked element into the role whose color the user wants to recolor.
+ *
+ * Surface-vs-text follows the walk's pass split: a button-like element or one
+ * that owns a background is a SURFACE (→ card/code/banner/button/surface);
+ * otherwise it is TEXT (→ heading/link/body/muted/…). The in-page port mirrors
+ * this exactly so picker and engine agree on every element.
+ */
+export const roleOfElement = (el: RoleClassifierInput): SemanticRole => {
+  const node: DetectedNode = {
+    selector: "",
+    role: el.hasOwnBackground || el.buttonLike ? "surface" : "text",
+    tagName: el.tagName,
+    className: el.className,
+    text: el.text,
+    buttonLike: el.buttonLike,
+    luminance: 0,
+  };
+  if (el.buttonLike || el.tagName.toLowerCase() === "button") {
+    return classifyButton(node, el.buttonOrder ?? 0);
+  }
+  return el.hasOwnBackground
+    ? classifySurface(node, el.buttonOrder ?? 0)
+    : classifyText(node);
+};
+
+/**
+ * Maps a fine {@link SemanticRole} to the {@link PaletteRoles} KEY whose color an
+ * override should replace. This is the contract the picker speaks: clicking a
+ * heading overrides `heading`, a link overrides `link`, a primary button
+ * overrides `primary`, a card overrides `surface`, etc. Keeping it here (next to
+ * the role definitions) means picker and engine share one mapping.
+ */
+export const OVERRIDE_KEY_BY_ROLE: Record<SemanticRole, keyof PaletteRoles> = {
+  heading: "heading",
+  subheading: "accent",
+  body: "textPrimary",
+  emphasis: "primary",
+  quote: "secondary",
+  muted: "textSecondary",
+  link: "link",
+  primaryButton: "primary",
+  secondaryButton: "secondary",
+  code: "surfaceAlt",
+  card: "surface",
+  banner: "heading",
+  complementary: "link",
+  surface: "surface",
+  page: "bg",
+  divider: "border",
+};
+
+/** The {@link PaletteRoles} key the user recolors by clicking an element. */
+export const overrideKeyForElement = (
+  el: RoleClassifierInput,
+): keyof PaletteRoles => OVERRIDE_KEY_BY_ROLE[roleOfElement(el)];
+
+/**
+ * Returns a NEW `PaletteRoles` with any `overrides` applied (override key →
+ * hex). Invalid/unknown keys and non-hex values are ignored, so a malformed
+ * override can never corrupt the palette. The mapping core then AA-floors every
+ * resulting color exactly as it does the generated ones, so an override is
+ * "exact unless genuinely unreadable" — never collapsing to black/white.
+ */
+export const applyOverridesToRoles = (
+  roles: PaletteRoles,
+  overrides?: RoleOverrides,
+): PaletteRoles => {
+  if (!overrides) {
+    return roles;
+  }
+  const next = { ...roles } as unknown as Record<string, string>;
+  for (const [key, value] of Object.entries(overrides)) {
+    if (key in next && isHexColor(value)) {
+      next[key] = normalizeHex(value);
+    }
+  }
+  return next as unknown as PaletteRoles;
 };
 
 /**
@@ -655,7 +763,10 @@ export const buildMapping = (
   const intensity: Intensity = options.intensity;
   const factor = blendFactor(intensity);
   const variableDriven = isVariableDriven(vars);
-  const roles = palette.roles;
+  // Layer the user's custom-theme overrides on top of the generated roles. Each
+  // overridden role color is still AA-floored downstream (via `blendedText` /
+  // `nudgeToAA`), so an override is exact unless genuinely unreadable.
+  const roles = applyOverridesToRoles(palette.roles, options.overrides);
 
   // ---- base surface: always themed (blended) ----------------------------
   // The themed page background is the `bg` role (the theme's page color).

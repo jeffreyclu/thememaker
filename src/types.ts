@@ -43,10 +43,25 @@ export const clampIntensity = (n: number): Intensity =>
     ),
   );
 
+/**
+ * A custom-theme override map: semantic ROLE key → hex color. Keys are
+ * {@link import("./lib/palette").PaletteRoles} property names (e.g. `heading`,
+ * `link`, `textPrimary`, `primary`, `surface`). An override REPLACES the
+ * generated color for that role; the engine still runs it through the existing
+ * AA readability floor (`nudgeToAA`) so it never paints unreadable text. Roles
+ * absent from the map keep their generated, contrast-safe colors.
+ */
+export type RoleOverrides = Record<string, string>;
+
 /** Options that travel with a palette to the in-page adaptive engine. */
 export interface ApplyOptions {
   /** Theme-vs-original blend dial, {@link MIN_INTENSITY}–100. */
   intensity: Intensity;
+  /**
+   * Optional per-role color overrides (the custom-theme editor's picks), layered
+   * on top of the generated palette. Absent/empty → the pure generated theme.
+   */
+  overrides?: RoleOverrides;
 }
 
 /**
@@ -68,6 +83,12 @@ export interface SchemeDetails {
   palette?: import("./lib/palette").Palette;
   /** The intensity the scheme was generated/applied with. */
   intensity?: Intensity;
+  /**
+   * Per-role color overrides (the custom-theme editor's picks) saved with the
+   * scheme, so favorites + per-site saved schemes carry the custom theme and the
+   * content-script auto-reapply restores it. Absent → no overrides.
+   */
+  overrides?: RoleOverrides;
 }
 
 /**

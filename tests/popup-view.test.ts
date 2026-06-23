@@ -24,6 +24,13 @@ const POPUP_HTML = `
   <p id="status"></p>
   <button id="details-toggle" aria-expanded="false"></button>
   <div id="details" hidden></div>
+  <button id="customize-toggle" aria-expanded="false"></button>
+  <div id="customize-panel" hidden>
+    <button id="pick"></button>
+    <button id="overrides-clear"></button>
+    <p id="customize-hint"></p>
+    <ul id="overrides"></ul>
+  </div>
   <button id="favorites-toggle" aria-expanded="false"></button>
   <div id="favorites-panel" hidden>
     <input id="favorite-name" type="text" />
@@ -50,6 +57,11 @@ const noopHandlers = (): PopupHandlers => ({
   onSelectSeed: vi.fn(),
   onToggleRandomSeed: vi.fn(),
   onToggleDetails: vi.fn(),
+  onToggleCustomize: vi.fn(),
+  onPickElement: vi.fn(),
+  onSetOverride: vi.fn(),
+  onClearOverride: vi.fn(),
+  onClearOverrides: vi.fn(),
   onToggleFavorites: vi.fn(),
   onToggleHistory: vi.fn(),
   onSelectHistory: vi.fn(),

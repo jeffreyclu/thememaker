@@ -9,7 +9,13 @@
 import { dequeueScheme } from "../lib/theme-engine";
 import { describeColor } from "../lib/color-names";
 import { clampIntensity, DEFAULT_INTENSITY } from "../types";
-import type { ColorMode, Intensity, Scheme, SchemeDetails } from "../types";
+import type {
+  ColorMode,
+  Intensity,
+  RoleOverrides,
+  Scheme,
+  SchemeDetails,
+} from "../types";
 import {
   DEFAULT_SETTINGS,
   type Favorite,
@@ -40,8 +46,19 @@ export interface PopupState {
   origin: string | null;
   /** Per-site enabled flag (Phase 3 consumes this for auto-reapply). */
   siteEnabled: boolean;
+  /**
+   * The custom-theme editor's per-role color overrides (override-key → hex),
+   * layered on top of the current scheme's palette. Empty → the pure generated
+   * theme. These ride on the current scheme so Apply-to-site / Save-favorite
+   * capture them.
+   */
+  overrides: RoleOverrides;
+  /** Whether pick mode was requested (waiting on the page for a click). */
+  picking: boolean;
   /** Whether the details disclosure is open. */
   showDetails: boolean;
+  /** Whether the customize (element-picker) disclosure is open. */
+  showCustomize: boolean;
   /** Whether the favorites disclosure is open. */
   showFavorites: boolean;
   /** Whether the history disclosure is open. */
@@ -63,7 +80,10 @@ export const initialPopupState: PopupState = {
   applied: false,
   origin: null,
   siteEnabled: false,
+  overrides: {},
+  picking: false,
   showDetails: false,
+  showCustomize: false,
   showFavorites: false,
   showHistory: false,
   loading: false,
@@ -106,6 +126,9 @@ export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
     siteEnabled: inputs.site.enabled,
     applied: inputs.applied,
     current: savedScheme,
+    // Restore the saved custom-theme overrides so reopening the popup on a
+    // persisted site shows (and keeps re-applying) the user's picks.
+    overrides: savedScheme?.schemeDetails?.overrides ?? {},
   };
 };
 
@@ -123,7 +146,12 @@ export type PopupAction =
   | { type: "selectHistory"; index: number }
   | { type: "applied"; applied: boolean }
   | { type: "reset" }
+  | { type: "setOverride"; role: string; color: string }
+  | { type: "clearOverride"; role: string }
+  | { type: "clearOverrides" }
+  | { type: "setPicking"; picking: boolean }
   | { type: "toggleDetails" }
+  | { type: "toggleCustomize" }
   | { type: "toggleFavorites" }
   | { type: "toggleHistory" }
   | { type: "setSiteEnabled"; enabled: boolean };
@@ -149,16 +177,20 @@ export const popupReducer = (
       return { ...state, favorites: action.favorites };
     case "applyFavorite":
       // A favorite becomes the current scheme (so the slider / Apply / Details
-      // act on it) and is marked applied; history is untouched.
+      // act on it) and is marked applied; history is untouched. Its saved custom
+      // overrides become the live editor state.
       return {
         ...state,
         current: action.scheme,
         applied: true,
         error: null,
+        overrides: action.scheme.schemeDetails.overrides ?? {},
       };
     case "generateStart":
       return { ...state, loading: true, error: null };
     case "generateSuccess":
+      // A fresh palette starts from a clean custom theme (the old picks targeted
+      // the previous palette's roles and no longer apply).
       return {
         ...state,
         loading: false,
@@ -166,6 +198,7 @@ export const popupReducer = (
         current: action.scheme,
         history: action.history,
         applied: true,
+        overrides: {},
       };
     case "generateError":
       return { ...state, loading: false, error: action.error };
@@ -174,7 +207,13 @@ export const popupReducer = (
       if (!scheme) {
         return state;
       }
-      return { ...state, current: scheme, applied: true, error: null };
+      return {
+        ...state,
+        current: scheme,
+        applied: true,
+        error: null,
+        overrides: scheme.schemeDetails.overrides ?? {},
+      };
     }
     case "applied":
       return { ...state, applied: action.applied };
@@ -185,9 +224,27 @@ export const popupReducer = (
         applied: false,
         siteEnabled: false,
         error: null,
+        overrides: {},
+        picking: false,
       };
+    case "setOverride":
+      return {
+        ...state,
+        overrides: { ...state.overrides, [action.role]: action.color },
+      };
+    case "clearOverride": {
+      const next = { ...state.overrides };
+      delete next[action.role];
+      return { ...state, overrides: next };
+    }
+    case "clearOverrides":
+      return { ...state, overrides: {} };
+    case "setPicking":
+      return { ...state, picking: action.picking };
     case "toggleDetails":
       return { ...state, showDetails: !state.showDetails };
+    case "toggleCustomize":
+      return { ...state, showCustomize: !state.showCustomize };
     case "toggleFavorites":
       return { ...state, showFavorites: !state.showFavorites };
     case "toggleHistory":
@@ -232,6 +289,49 @@ export const schemeDetailRows = (
 /** @returns the seed metadata for the current scheme, if any. */
 export const currentSchemeDetails = (state: PopupState): SchemeDetails | null =>
   state.current?.schemeDetails ?? null;
+
+/** A human label for an override row's role key (e.g. `textPrimary` → "Body text"). */
+const OVERRIDE_ROLE_LABELS: Record<string, string> = {
+  bg: "Page background",
+  surface: "Card surface",
+  surfaceAlt: "Code surface",
+  textPrimary: "Body text",
+  textSecondary: "Muted text",
+  heading: "Headings",
+  link: "Links",
+  primary: "Primary button",
+  secondary: "Secondary button",
+  border: "Borders",
+  accent: "Accents",
+};
+
+export const overrideRoleLabel = (role: string): string =>
+  OVERRIDE_ROLE_LABELS[role] ?? role;
+
+/**
+ * The base (generated) color for an override-key from the current scheme's
+ * palette, used to SEED a color input when the user hasn't overridden it yet.
+ * Falls back to a neutral gray when the scheme/palette is absent.
+ */
+export const baseColorForRole = (state: PopupState, role: string): string => {
+  const roles = state.current?.schemeDetails?.palette?.roles as
+    | Record<string, string>
+    | undefined;
+  return roles?.[role] ?? "#808080";
+};
+
+/**
+ * The override rows to render in the customize panel: each currently-overridden
+ * role with its picked color, in insertion order.
+ */
+export const overrideRows = (
+  state: PopupState,
+): Array<{ role: string; color: string; label: string }> =>
+  Object.entries(state.overrides).map(([role, color]) => ({
+    role,
+    color,
+    label: overrideRoleLabel(role),
+  }));
 
 /**
  * @returns the default favorite name for a scheme: its color name + mode (the

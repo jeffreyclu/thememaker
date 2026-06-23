@@ -7,6 +7,7 @@
  */
 import {
   historyLabel,
+  overrideRows,
   schemeDetailRows,
   type ModeSelection,
   type PopupState,
@@ -34,6 +35,17 @@ export interface PopupRefs {
   status: HTMLElement;
   detailsToggle: HTMLButtonElement;
   details: HTMLElement;
+  /** Customize (element-picker) disclosure header + collapsible panel. */
+  customizeToggle: HTMLButtonElement;
+  customizePanel: HTMLElement;
+  /** "Pick element" button — starts in-page pick mode. */
+  pick: HTMLButtonElement;
+  /** "Clear all" overrides button. */
+  overridesClear: HTMLButtonElement;
+  /** Hint/status line for the customize flow. */
+  customizeHint: HTMLElement;
+  /** List of current per-role overrides. */
+  overrides: HTMLElement;
   /** Favorites disclosure header + collapsible panel. */
   favoritesToggle: HTMLButtonElement;
   favoritesPanel: HTMLElement;
@@ -62,6 +74,15 @@ export interface PopupHandlers {
   /** Fired when the random-seed switch is toggled. */
   onToggleRandomSeed: () => void;
   onToggleDetails: () => void;
+  onToggleCustomize: () => void;
+  /** Start in-page element pick mode. */
+  onPickElement: () => void;
+  /** A role's override color changed (live). */
+  onSetOverride: (role: string, color: string) => void;
+  /** Clear a single role's override. */
+  onClearOverride: (role: string) => void;
+  /** Clear all overrides. */
+  onClearOverrides: () => void;
   onToggleFavorites: () => void;
   onToggleHistory: () => void;
   onSelectHistory: (index: number) => void;
@@ -97,6 +118,12 @@ export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
     status: byId<HTMLElement>("status"),
     detailsToggle: byId<HTMLButtonElement>("details-toggle"),
     details: byId<HTMLElement>("details"),
+    customizeToggle: byId<HTMLButtonElement>("customize-toggle"),
+    customizePanel: byId<HTMLElement>("customize-panel"),
+    pick: byId<HTMLButtonElement>("pick"),
+    overridesClear: byId<HTMLButtonElement>("overrides-clear"),
+    customizeHint: byId<HTMLElement>("customize-hint"),
+    overrides: byId<HTMLElement>("overrides"),
     favoritesToggle: byId<HTMLButtonElement>("favorites-toggle"),
     favoritesPanel: byId<HTMLElement>("favorites-panel"),
     favoriteName: byId<HTMLInputElement>("favorite-name"),
@@ -132,6 +159,30 @@ export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.apply.addEventListener("click", handlers.onApply);
   refs.reset.addEventListener("click", handlers.onReset);
   refs.detailsToggle.addEventListener("click", handlers.onToggleDetails);
+  refs.customizeToggle.addEventListener("click", handlers.onToggleCustomize);
+  refs.pick.addEventListener("click", handlers.onPickElement);
+  refs.overridesClear.addEventListener("click", handlers.onClearOverrides);
+  // Delegated: a click on a row's clear (×) control clears that override; a
+  // change on a row's color input live-updates that override.
+  refs.overrides.addEventListener("click", (e) => {
+    const clear = (e.target as HTMLElement).closest<HTMLElement>(
+      "[data-override-clear]",
+    );
+    if (clear) {
+      handlers.onClearOverride(clear.dataset.overrideClear as string);
+    }
+  });
+  refs.overrides.addEventListener("input", (e) => {
+    const input = (e.target as HTMLElement).closest<HTMLInputElement>(
+      "[data-override-color]",
+    );
+    if (input) {
+      handlers.onSetOverride(
+        input.dataset.overrideColor as string,
+        input.value,
+      );
+    }
+  });
   refs.favoritesToggle.addEventListener("click", handlers.onToggleFavorites);
   refs.historyToggle.addEventListener("click", handlers.onToggleHistory);
   refs.mode.addEventListener("change", () =>
@@ -319,6 +370,45 @@ const renderFavorites = (favorites: Favorite[], list: HTMLElement): void => {
   }
 };
 
+/** Renders the list of current per-role overrides (label + color input + clear). */
+const renderOverrides = (state: PopupState, list: HTMLElement): void => {
+  list.innerHTML = "";
+  const rows = overrideRows(state);
+  if (rows.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "overrides__empty";
+    empty.textContent = "No custom colors yet. Pick an element to recolor it.";
+    list.appendChild(empty);
+    return;
+  }
+  for (const { role, color, label } of rows) {
+    const li = document.createElement("li");
+    li.className = "overrides__item";
+
+    const name = document.createElement("span");
+    name.className = "overrides__label";
+    name.textContent = label;
+
+    const input = document.createElement("input");
+    input.type = "color";
+    input.className = "overrides__color";
+    input.value = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#808080";
+    input.dataset.overrideColor = role;
+    input.setAttribute("aria-label", `${label} color`);
+
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "overrides__clear";
+    clear.dataset.overrideClear = role;
+    clear.setAttribute("aria-label", `Clear ${label} override`);
+    clear.title = "Clear";
+    clear.textContent = "×";
+
+    li.append(name, input, clear);
+    list.appendChild(li);
+  }
+};
+
 /** Renders the full popup from `state`. Idempotent. */
 export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.mode.value = state.mode;
@@ -355,6 +445,26 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.detailsToggle.setAttribute("aria-expanded", String(state.showDetails));
   refs.details.hidden = !state.showDetails;
   renderDetails(state, refs.details);
+
+  // Customize: available whenever there is a theme to layer overrides on — a
+  // CURRENT scheme OR a persisted/applied theme on this tab (so it isn't wrongly
+  // disabled when reopening on a persisted site, or right after a pick).
+  const canCustomize = Boolean(state.current) || state.applied;
+  refs.customizeToggle.disabled = !canCustomize;
+  refs.customizeToggle.setAttribute(
+    "aria-expanded",
+    String(state.showCustomize),
+  );
+  refs.customizePanel.hidden = !state.showCustomize;
+  refs.pick.disabled = !canCustomize || state.picking;
+  refs.pick.textContent = state.picking ? "Click an element…" : "Pick element";
+  refs.pick.setAttribute("aria-pressed", String(state.picking));
+  refs.overridesClear.disabled =
+    Object.keys(state.overrides).length === 0 || !canCustomize;
+  refs.customizeHint.textContent = state.picking
+    ? "Switch to the page and click any element to recolor its role."
+    : "";
+  renderOverrides(state, refs.overrides);
 
   refs.favoritesToggle.setAttribute(
     "aria-expanded",

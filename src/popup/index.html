@@ -94,6 +94,35 @@
 
       <section class="popup__section">
         <button
+          id="customize-toggle"
+          class="disclosure"
+          type="button"
+          aria-expanded="false"
+          aria-controls="customize-panel"
+          disabled
+        >
+          Customize
+        </button>
+        <div id="customize-panel" class="disclosure-panel" hidden>
+          <div class="customize__actions">
+            <button id="pick" class="btn btn--small" type="button">
+              Pick element
+            </button>
+            <button id="overrides-clear" class="btn btn--small" type="button">
+              Clear all
+            </button>
+          </div>
+          <p id="customize-hint" class="customize__hint"></p>
+          <ul
+            id="overrides"
+            class="overrides"
+            aria-label="Custom color overrides"
+          ></ul>
+        </div>
+      </section>
+
+      <section class="popup__section">
+        <button
           id="favorites-toggle"
           class="disclosure"
           type="button"

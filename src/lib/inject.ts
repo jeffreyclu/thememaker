@@ -24,6 +24,7 @@
  * The algorithm is a SELF-CONTAINED port of the canonical, unit-tested core in
  * `src/lib/mapping.ts` + `src/lib/color.ts` (kept in lockstep with those).
  */
+import { isHexColor, normalizeHex } from "./color";
 import type { Palette } from "./palette";
 import type { ApplyOptions } from "../types";
 
@@ -58,9 +59,16 @@ export const BASE_CACHE_KEY = "__thememaker_base__";
  */
 export const baseBackgroundFor = (
   palette: Palette,
-  _options: ApplyOptions,
+  options: ApplyOptions,
 ): string => {
   const surfaces = palette.surfaces ?? [];
+  // A `bg` override recolors the page base, so the early paint must honor it too
+  // (otherwise the first frame flashes the generated base before the engine
+  // repaints with the override).
+  const overrideBg = options.overrides?.bg;
+  if (overrideBg && isHexColor(overrideBg)) {
+    return normalizeHex(overrideBg);
+  }
   return palette.roles?.bg ?? surfaces[surfaces.length - 1] ?? "#808080";
 };
 
@@ -434,7 +442,7 @@ export function applyAdaptiveScheme(
   // `roles` object is derived purely in src/lib/palette.ts; we read it with
   // safe fallbacks so a legacy palette (no roles) degrades to the old behavior.
   const fallbackInk = accents[0] || swatches[0] || "#333333";
-  const roles = (palette.roles || {}) as Partial<{
+  const baseRoles = (palette.roles || {}) as Partial<{
     bg: string;
     surface: string;
     surfaceAlt: string;
@@ -449,6 +457,21 @@ export function applyAdaptiveScheme(
     border: string;
     accent: string;
   }>;
+  // ---- custom-theme overrides (role key → hex) ----------------------------
+  // Layer the user's picked colors on top of the generated roles. Invalid keys
+  // or non-hex values are ignored. Each overridden color is still passed through
+  // the SAME AA floor downstream (`blendedText` / `nudgeToAA` for text, and
+  // surfaces re-floor their label), so an override is exact unless unreadable.
+  // Inlined (self-contained) — mirrors `applyOverridesToRoles` in mapping.ts.
+  const overrides = options.overrides || {};
+  const roles: typeof baseRoles = { ...baseRoles };
+  for (const k of Object.keys(overrides)) {
+    const v = overrides[k];
+    if (k in roles && parseColor(v)) {
+      const rgb = parseColor(v) as [number, number, number];
+      (roles as Record<string, string>)[k] = toHex(rgb);
+    }
+  }
   const roleTextPrimary = roles.textPrimary || fallbackInk;
   const roleTextSecondary = roles.textSecondary || fallbackInk;
   const roleHeading = roles.heading || fallbackInk;

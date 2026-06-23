@@ -41,6 +41,8 @@ import {
 } from "../lib/inject";
 import { loadDecision } from "../lib/site-state";
 import { KEYS, type SiteState } from "../lib/storage";
+import { startPick, type PickSession } from "./pick";
+import type { ContentMessage, ElementPickedMessage } from "../lib/messages";
 import type { Palette } from "../lib/palette";
 import type { ApplyOptions } from "../types";
 
@@ -139,6 +141,79 @@ export const runContentScript = async (): Promise<void> => {
   applyWhenReady(decision.palette, decision.options);
 };
 
+// ---- element-picker message handling ------------------------------------
+
+/** The single live pick session (only one tab/element pick at a time). */
+let pickSession: PickSession | null = null;
+
+/**
+ * Reports a pick result back to the popup. The popup is very likely CLOSED by
+ * the time the user clicks the page (clicking focuses the page → the popup
+ * closes), so the PRIMARY channel is `chrome.storage.local` (`pendingPick`),
+ * which the popup reads on its next open. We ALSO broadcast `ELEMENT_PICKED` via
+ * `chrome.runtime.sendMessage` for the rare case the popup is still open (e.g. a
+ * detached/devtools popup), where it can apply live without a reopen.
+ */
+const reportPick = (role: string | null, cancelled: boolean): void => {
+  if (role) {
+    try {
+      chrome.storage.local.set({
+        [KEYS.pendingPick]: { origin: location.origin, role, at: Date.now() },
+      });
+    } catch {
+      // storage blocked — the broadcast below is the fallback.
+    }
+  }
+  const message: ElementPickedMessage = { type: "ELEMENT_PICKED", role };
+  if (cancelled) {
+    message.cancelled = true;
+  }
+  try {
+    chrome.runtime.sendMessage(message, () => {
+      // No receiver (popup closed) is the expected case — swallow lastError.
+      void chrome.runtime.lastError;
+    });
+  } catch {
+    // ignore
+  }
+};
+
+/** Enters pick mode, replacing any existing session. */
+export const beginPick = (): void => {
+  pickSession?.stop();
+  pickSession = startPick({
+    onPicked: (role) => {
+      pickSession = null;
+      reportPick(role, false);
+    },
+    onCancelled: () => {
+      pickSession = null;
+      reportPick(null, true);
+    },
+  });
+};
+
+/** Cancels pick mode if active. */
+export const endPick = (): void => {
+  const s = pickSession;
+  pickSession = null;
+  s?.stop();
+};
+
+/** Handles a popup → content-script {@link ContentMessage}. Exported for tests. */
+export const handleContentMessage = (message: ContentMessage): void => {
+  if (message.type === "START_PICK") {
+    beginPick();
+  } else if (message.type === "STOP_PICK") {
+    endPick();
+  } else if (message.type === "APPLY_LIVE") {
+    // Re-apply the scheme (palette + overrides) directly in this page — the
+    // detached picker window drives live previews this way (it can't use the
+    // background's active-tab injector). Runs the SAME shared engine in place.
+    applyWhenReady(message.palette, message.options);
+  }
+};
+
 // Side-effect entry: kick off on load. Guarded so importing this module in unit
 // tests (which set `__THEMEMAKER_TEST__`) doesn't auto-run against jsdom.
 declare global {
@@ -148,6 +223,15 @@ declare global {
 }
 if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
   void runContentScript();
+  // Listen for the popup's pick-mode messages (direct tab → content script).
+  try {
+    chrome.runtime.onMessage.addListener((message: ContentMessage) => {
+      handleContentMessage(message);
+      // No async response; return undefined (channel closes immediately).
+    });
+  } catch {
+    // chrome.runtime unavailable (non-extension context) — ignore.
+  }
 }
 
 export { EARLY_STYLE_ID, paintEarlyBaseColor, clearEarlyBase, applyWhenReady };

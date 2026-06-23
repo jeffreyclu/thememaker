@@ -301,6 +301,70 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     expect(a).not.toBe(b);
   });
 
+  it("applies a role OVERRIDE in-page (heading recolored, others unchanged)", () => {
+    // The in-page port must honor options.overrides exactly like the pure core.
+    document.body.innerHTML =
+      '<h1 style="color: rgb(0,0,0)">Title</h1>' +
+      '<a href="#" style="color: rgb(0,0,238)">Link</a>';
+    document.body.style.backgroundColor = "rgb(255,255,255)";
+
+    const cssWith = (overrides?: Record<string, string>): string => {
+      applyAdaptiveScheme(palette, { intensity: 100, overrides });
+      const out = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+      return out;
+    };
+
+    const h1 = document.querySelector("h1") as HTMLElement;
+    const a = document.querySelector("a") as HTMLElement;
+    const colorFor = (css: string, el: HTMLElement): string => {
+      const id = el.getAttribute("data-thememaker");
+      const m = new RegExp(
+        `\\[data-thememaker="${id}"\\] \\{[^}]*[^-]color:\\s*(#[0-9a-f]{6})`,
+        "i",
+      ).exec(css);
+      return (m?.[1] ?? "").toLowerCase();
+    };
+
+    // The default palette heading role is a RED/pink (#a8…); overriding it to a
+    // blue must flip the heading into the blue family while leaving the link
+    // role (also blue, untouched) unchanged. Comparing hue families is robust to
+    // the AA floor (which only shifts lightness, preserving hue).
+    const themed = cssWith({ heading: "#1565c0" });
+    const headingHue = hexToHsl(colorFor(themed, h1)).h;
+    expect(headingHue).toBeGreaterThan(180);
+    expect(headingHue).toBeLessThan(260); // blue family — override hue survived
+    // Generated heading role hue is NOT in the blue family (it's the palette's
+    // pink/red heading at ~335°), so the override genuinely changed it.
+    const genHue = hexToHsl(palette.roles.heading).h;
+    expect(genHue < 180 || genHue > 260).toBe(true);
+
+    // The link (untouched role) is identical with and without the override.
+    const linkWithOverride = colorFor(themed, a);
+    removeSchemeStyle();
+    const plain = cssWith(undefined);
+    expect(colorFor(plain, a)).toBe(linkWithOverride);
+  });
+
+  it("in-page: an UNREADABLE override is relit (AA floor holds, not collapsed)", () => {
+    document.body.innerHTML = '<h1 style="color: rgb(0,0,0)">Title</h1>';
+    document.body.style.backgroundColor = "rgb(255,255,255)";
+    applyAdaptiveScheme(palette, {
+      intensity: 100,
+      overrides: { heading: "#fffbe0" }, // pale → unreadable on white
+    });
+    const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+    const h1 = document.querySelector("h1") as HTMLElement;
+    const id = h1.getAttribute("data-thememaker");
+    const m = new RegExp(
+      `\\[data-thememaker="${id}"\\] \\{[^}]*[^-]color:\\s*(#[0-9a-f]{6})`,
+      "i",
+    ).exec(css);
+    const color = (m?.[1] ?? "").toLowerCase();
+    expect(color).not.toBe("#fffbe0"); // was relit
+    // AA-large against a near-white base.
+    expect(contrastRatio(color, "#ffffff")).toBeGreaterThanOrEqual(3);
+  });
+
   it("re-detects against ORIGINAL colors, not our themed output (no drift)", () => {
     document.body.innerHTML =
       '<div style="background-color: rgb(240, 240, 240)">x</div>';

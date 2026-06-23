@@ -32,6 +32,15 @@ export const KEYS = {
   favorites: "favorites",
   /** Per-site state is keyed by `site:<origin>`. */
   sitePrefix: "site:",
+  /**
+   * Transient handoff for the element picker. The content script writes the
+   * picked override-key here when the popup has closed (clicking the page
+   * focuses it → the popup closes), so the popup can read + consume it on its
+   * next open. See `PendingPick`.
+   */
+  pendingPick: "pendingPick",
+  /** Transient live-theme handoff from the action popup to the picker window. */
+  pickerHandoff: "pickerHandoff",
 } as const;
 
 /** Settings persisted in `sync`. */
@@ -94,6 +103,35 @@ export interface SiteState {
 }
 
 export const DEFAULT_SITE_STATE: SiteState = { enabled: false };
+
+/**
+ * A transient element-pick result the content script writes when the popup is
+ * closed during a pick. The popup reads + clears it on open and applies the
+ * override. Scoped by `origin` so a pick on one site doesn't leak to another.
+ */
+export interface PendingPick {
+  /** The origin the pick happened on. */
+  origin: string;
+  /** The override-key (a `PaletteRoles` key) the user picked. */
+  role: string;
+  /** When the pick happened (ms epoch), so the popup can ignore stale picks. */
+  at: number;
+}
+
+/** Picks older than this (ms) are ignored by the popup as stale. */
+export const PENDING_PICK_TTL_MS = 60_000;
+
+/**
+ * The live theme handed off from the ACTION POPUP to the DETACHED PICKER WINDOW.
+ * The picker window is a fresh document that can only see storage, so the popup
+ * stashes the current scheme + overrides + intensity here for it to restore —
+ * even for a theme that was generated but not yet applied-to-site.
+ */
+export interface PickerHandoff {
+  scheme: Scheme;
+  intensity: Intensity;
+  overrides: Record<string, string>;
+}
 
 /**
  * Adapts a real `chrome.storage.StorageArea` to the promise-based
@@ -226,6 +264,46 @@ export class ThememakerStorage {
     const next = (await this.getFavorites()).filter((f) => f.id !== id);
     await this.sync.set(KEYS.favorites, next);
     return next;
+  }
+
+  /** Writes the transient element-pick handoff (content script → popup). */
+  async setPendingPick(pick: PendingPick): Promise<void> {
+    await this.local.set(KEYS.pendingPick, pick);
+  }
+
+  /**
+   * Reads AND clears the pending pick for `origin`, returning the role if a
+   * fresh ({@link PENDING_PICK_TTL_MS}) pick exists for that origin, else null.
+   * Consuming-on-read makes the handoff one-shot so a stale pick can't re-fire.
+   */
+  async consumePendingPick(
+    origin: string,
+    now: number = Date.now(),
+  ): Promise<string | null> {
+    const pick = await this.local.get<PendingPick>(KEYS.pendingPick);
+    if (!pick) {
+      return null;
+    }
+    await this.local.remove(KEYS.pendingPick);
+    if (pick.origin !== origin || now - pick.at > PENDING_PICK_TTL_MS) {
+      return null;
+    }
+    return pick.role;
+  }
+
+  /** Stashes the live theme for the detached picker window to restore. */
+  async setPickerHandoff(handoff: PickerHandoff): Promise<void> {
+    await this.local.set(KEYS.pickerHandoff, handoff);
+  }
+
+  /** Reads (without clearing) the picker handoff, if any. */
+  async getPickerHandoff(): Promise<PickerHandoff | undefined> {
+    return this.local.get<PickerHandoff>(KEYS.pickerHandoff);
+  }
+
+  /** Clears the picker handoff (after the window restores it). */
+  async clearPickerHandoff(): Promise<void> {
+    await this.local.remove(KEYS.pickerHandoff);
   }
 
   /**

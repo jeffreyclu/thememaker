@@ -21,6 +21,7 @@ import type {
   ApplyOptions,
   ColorMode,
   Intensity,
+  RoleOverrides,
   Scheme,
   SchemeDetails,
 } from "../types";
@@ -135,11 +136,19 @@ export const generateForSelection = async (
 export const applyPayloadForScheme = (
   scheme: Scheme,
   intensity: Intensity,
+  overrides?: RoleOverrides,
 ): { palette: Palette; options: ApplyOptions } => {
   const details = scheme.schemeDetails;
   const palette =
     details.palette ?? localPalette(details.rootColor, details.colorMode);
-  return { palette, options: { intensity } };
+  // Prefer explicitly-passed overrides (the popup's live editor state); fall
+  // back to whatever the scheme persisted, so re-applying a saved scheme keeps
+  // its custom theme.
+  const resolved = overrides ?? details.overrides;
+  return {
+    palette,
+    options: resolved ? { intensity, overrides: resolved } : { intensity },
+  };
 };
 
 /**
@@ -152,12 +161,25 @@ export const applyPayloadForScheme = (
 export const schemeWithIntensity = (
   scheme: Scheme,
   intensity: Intensity,
+  overrides?: RoleOverrides,
 ): Scheme => {
   const details = scheme.schemeDetails;
   const palette =
     details.palette ?? localPalette(details.rootColor, details.colorMode);
+  // Bake the live overrides (the custom-theme editor's picks) onto the saved
+  // scheme so favorites + per-site reapply carry the custom theme. An explicit
+  // (possibly empty) overrides arg replaces the stored one; omitting it keeps
+  // whatever the scheme already had. An empty map is dropped to keep schemes
+  // clean (no overrides → no key).
+  const resolved = overrides ?? details.overrides;
+  const hasOverrides = resolved && Object.keys(resolved).length > 0;
   return {
     ...scheme,
-    schemeDetails: { ...details, palette, intensity },
+    schemeDetails: {
+      ...details,
+      palette,
+      intensity,
+      ...(hasOverrides ? { overrides: resolved } : { overrides: undefined }),
+    },
   };
 };
