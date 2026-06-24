@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { generatePalette } from "../src/lib/palette";
+import { generatePalette, invertPalette } from "../src/lib/palette";
 import { hexToHsl, isHexColor, luminanceOf } from "../src/lib/color";
 import { modes } from "../src/config";
 
@@ -199,11 +199,21 @@ describe("generatePalette", () => {
       expect(ls[1]).toBeLessThan(ls[2]);
     });
 
-    it("backgrounds are mostly-neutral tints; accents carry real saturation", () => {
+    it("backgrounds are SATURATED/intense (the theme hue is visible); cards pop off the page", () => {
       const { roles } = generatePalette(SEED, "triad");
-      // page/surface are low-saturation "paper".
-      expect(hexToHsl(roles.bg).s).toBeLessThan(25);
-      expect(hexToHsl(roles.surface).s).toBeLessThan(25);
+      const seedHue = hexToHsl(SEED).h;
+      // page/surface/surfaceAlt carry REAL saturation now (floored ~34–76%) — the
+      // intensity slider is what mutes them, not the palette.
+      expect(hexToHsl(roles.bg).s).toBeGreaterThan(30);
+      expect(hexToHsl(roles.surface).s).toBeGreaterThan(30);
+      expect(hexToHsl(roles.surfaceAlt).s).toBeGreaterThan(30);
+      // ...but still capped (never garish).
+      expect(hexToHsl(roles.bg).s).toBeLessThanOrEqual(76);
+      // The page base + the card carry the theme hue (the seed hue, here).
+      expect(hueDist(hexToHsl(roles.bg).h, seedHue)).toBeLessThan(10);
+      expect(hueDist(hexToHsl(roles.surface).h, seedHue)).toBeLessThan(10);
+      // Cards POP off the page: `surface` is MORE saturated than `bg`.
+      expect(hexToHsl(roles.surface).s).toBeGreaterThan(hexToHsl(roles.bg).s);
       // links/headings/primary are saturated "colorful but readable".
       expect(hexToHsl(roles.link).s).toBeGreaterThan(35);
       expect(hexToHsl(roles.heading).s).toBeGreaterThan(35);
@@ -224,5 +234,55 @@ describe("generatePalette", () => {
       const light = generatePalette(SEED, "monochrome-light").roles;
       expect(luminanceOf(dark.bg)).toBeLessThan(luminanceOf(light.bg));
     });
+  });
+});
+
+describe("invertPalette (light↔dark flip)", () => {
+  it("flips every role's LIGHTNESS while preserving hue + saturation", () => {
+    const p = generatePalette(SEED, "triad");
+    const inv = invertPalette(p);
+    for (const k of Object.keys(p.roles) as Array<keyof typeof p.roles>) {
+      const before = hexToHsl(p.roles[k]);
+      const after = hexToHsl(inv.roles[k]);
+      // lightness inverts (l → 100 − l, within rounding) …
+      expect(after.l).toBeCloseTo(100 - before.l, 0);
+      // … hue + saturation are preserved (hue is meaningless for grays, so only
+      // assert it when the color is actually saturated).
+      expect(after.s).toBeCloseTo(before.s, 0);
+      if (before.s > 2) {
+        expect(hueDist(after.h, before.h)).toBeLessThan(2);
+      }
+    }
+  });
+
+  it("turns a light page into a dark one (bg lightness drops below ink)", () => {
+    const p = generatePalette(SEED, "triad");
+    const inv = invertPalette(p);
+    // The original is a light theme (bg lighter than body ink); inverting makes
+    // the page darker than its (now-light) ink.
+    expect(hexToHsl(p.roles.bg).l).toBeGreaterThan(
+      hexToHsl(p.roles.textPrimary).l,
+    );
+    expect(hexToHsl(inv.roles.bg).l).toBeLessThan(
+      hexToHsl(inv.roles.textPrimary).l,
+    );
+  });
+
+  it("leaves the seed + mode identity untouched", () => {
+    const p = generatePalette(SEED, "triad");
+    const inv = invertPalette(p);
+    expect(inv.seed).toBe(p.seed);
+    expect(inv.mode).toBe(p.mode);
+  });
+
+  it("is self-inverse (mod rounding): inverting twice ≈ the original", () => {
+    const p = generatePalette(SEED, "quad");
+    const back = invertPalette(invertPalette(p));
+    for (const k of Object.keys(p.roles) as Array<keyof typeof p.roles>) {
+      const a = hexToHsl(p.roles[k]);
+      const b = hexToHsl(back.roles[k]);
+      // lightness round-trips within a small rounding tolerance.
+      expect(b.l).toBeCloseTo(a.l, 0);
+    }
   });
 });

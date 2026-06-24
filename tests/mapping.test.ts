@@ -618,17 +618,31 @@ describe("buildMapping — spends the WHOLE palette (anti-monochrome)", () => {
   // AA holds for accent-colored text at EVERY intensity, including full: the
   // readability floor relit any unreadable swatch color to a readable shade of
   // the same hue, so the invisible-text guarantee survives the source-of-truth
-  // rule.
+  // rule. Each text node's parent is the body, which here OWNS a background, so
+  // the engine paints `body` as a SURFACE — and THAT surface paint is the bg that
+  // actually renders behind body-level text (the `body` surface rule shares the
+  // base rule's selector but is emitted later, so it wins). With the now-saturated
+  // palette the body surface paint differs from `baseBackground`, so we MUST floor
+  // against the surface paint, not `baseBackground`.
   for (const opts of [LOW, MID, MAX]) {
     it(`AA holds for EVERY accent-colored text/effective-bg pair (intensity ${opts.intensity})`, () => {
       const result = buildMapping(page(), [], palette, opts);
-      const bg = result.baseBackground; // every text node's parent is body
+      // The bg that actually renders behind body-level text: the `body` SURFACE
+      // decision. The engine emits TWO `body` rules at equal specificity — the
+      // base rule (paints `baseBackground`) FIRST, then the classified surface
+      // rule (its own paint) — so the LAST one wins the cascade. Take the last
+      // `body` surface paint; fall back to baseBackground if body weren't a surface.
+      const bodyPaints = result.decisions.filter(
+        (d) => d.selector === "body" && d.role === "surface" && d.background,
+      );
+      const bg = bodyPaints.at(-1)?.background ?? result.baseBackground;
       for (const d of result.decisions) {
         if (d.role === "text" && d.color) {
           const large = d.semantic === "heading" || d.semantic === "subheading";
-          expect(contrastRatio(d.color, bg)).toBeGreaterThanOrEqual(
-            large ? AA_LARGE : AA_NORMAL,
-          );
+          expect(
+            contrastRatio(d.color, bg),
+            `${d.selector} (${d.semantic}) ${d.color} on ${bg}`,
+          ).toBeGreaterThanOrEqual(large ? AA_LARGE : AA_NORMAL);
         }
       }
       // and button labels are AA against their fills.

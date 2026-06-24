@@ -42,9 +42,19 @@ import {
 import { loadDecision } from "../lib/site-state";
 import { KEYS, type SiteState } from "../lib/storage";
 import { startPick, type PickSession } from "./pick";
-import type { ContentMessage, ElementPickedMessage } from "../lib/messages";
+import {
+  mountPickerPanel,
+  PANEL_HOST_ID,
+  type PanelHandle,
+} from "./picker-panel";
+import {
+  withoutRole,
+  withPickedRole,
+  withRoleColor,
+} from "./picker-panel-model";
+import type { ContentMessage } from "../lib/messages";
 import type { Palette } from "../lib/palette";
-import type { ApplyOptions } from "../types";
+import type { ApplyOptions, RoleOverrides, Scheme } from "../types";
 
 /** Promise-wraps the single per-site read; resolves `undefined` on any error. */
 const readSiteState = (origin: string): Promise<SiteState | undefined> =>
@@ -141,76 +151,175 @@ export const runContentScript = async (): Promise<void> => {
   applyWhenReady(decision.palette, decision.options);
 };
 
-// ---- element-picker message handling ------------------------------------
+// ---- in-page floating picker control ------------------------------------
+//
+// The popup sends SHOW_PICKER (carrying the live theme) then closes. We mount a
+// Shadow DOM panel and a RE-ARMING pick session: clicking page elements adds
+// override rows; editing a row's color (or clearing it) applies live + persists.
+// Storage is the source of truth — overrides live on the per-site savedScheme,
+// so a reload restores them via `loadDecision`. Esc / Done close the panel.
 
-/** The single live pick session (only one tab/element pick at a time). */
-let pickSession: PickSession | null = null;
+/** The single live floating-control session for this tab. */
+interface PickerSession {
+  panel: PanelHandle;
+  pick: PickSession;
+  palette: Palette;
+  /** The live theme intensity (panel re-applies + persists at this value). */
+  intensity: number;
+  /** The live override map the panel renders + applies + persists. */
+  overrides: RoleOverrides;
+}
+let picker: PickerSession | null = null;
 
-/**
- * Reports a pick result back to the popup. The popup is very likely CLOSED by
- * the time the user clicks the page (clicking focuses the page → the popup
- * closes), so the PRIMARY channel is `chrome.storage.local` (`pendingPick`),
- * which the popup reads on its next open. We ALSO broadcast `ELEMENT_PICKED` via
- * `chrome.runtime.sendMessage` for the rare case the popup is still open (e.g. a
- * detached/devtools popup), where it can apply live without a reopen.
- */
-const reportPick = (role: string | null, cancelled: boolean): void => {
-  if (role) {
+/** Promise-wraps writing this origin's per-site state. */
+const writeSiteState = (origin: string, state: SiteState): Promise<void> =>
+  new Promise((resolve) => {
     try {
-      chrome.storage.local.set({
-        [KEYS.pendingPick]: { origin: location.origin, role, at: Date.now() },
+      chrome.storage.local.set({ [KEYS.sitePrefix + origin]: state }, () => {
+        void chrome.runtime.lastError;
+        resolve();
       });
     } catch {
-      // storage blocked — the broadcast below is the fallback.
+      resolve();
     }
-  }
-  const message: ElementPickedMessage = { type: "ELEMENT_PICKED", role };
-  if (cancelled) {
-    message.cancelled = true;
-  }
-  try {
-    chrome.runtime.sendMessage(message, () => {
-      // No receiver (popup closed) is the expected case — swallow lastError.
-      void chrome.runtime.lastError;
-    });
-  } catch {
-    // ignore
-  }
-};
-
-/** Enters pick mode, replacing any existing session. */
-export const beginPick = (): void => {
-  pickSession?.stop();
-  pickSession = startPick({
-    onPicked: (role) => {
-      pickSession = null;
-      reportPick(role, false);
-    },
-    onCancelled: () => {
-      pickSession = null;
-      reportPick(null, true);
-    },
   });
+
+/** The current options (intensity + overrides) for a re-apply. */
+const optionsFor = (s: PickerSession): ApplyOptions =>
+  Object.keys(s.overrides).length > 0
+    ? { intensity: s.intensity, overrides: s.overrides }
+    : { intensity: s.intensity };
+
+/**
+ * Applies the session's overrides LIVE (in-page engine, no executeScript) AND
+ * persists them into this origin's saved scheme, ENABLING auto-reapply so a
+ * reload restores them. Storage is the single source of truth the popup reads.
+ */
+const applyAndPersist = async (s: PickerSession): Promise<void> => {
+  applyWhenReady(s.palette, optionsFor(s));
+  const origin = location.origin;
+  const site = (await readSiteState(origin)) ?? { enabled: false };
+  const prevDetails = site.savedScheme?.schemeDetails;
+  const hasOverrides = Object.keys(s.overrides).length > 0;
+  // Build/refresh the saved scheme: carry the live palette + intensity +
+  // overrides so `loadDecision` reapplies the exact custom theme next load.
+  const savedScheme: Scheme = {
+    ...(site.savedScheme ?? { schemeDetails: {} as Scheme["schemeDetails"] }),
+    schemeDetails: {
+      ...(prevDetails ?? {
+        rootColor: s.palette.seed,
+        colorMode: s.palette.mode,
+      }),
+      palette: s.palette,
+      intensity: s.intensity,
+      ...(hasOverrides ? { overrides: s.overrides } : { overrides: undefined }),
+    },
+  };
+  await writeSiteState(origin, { ...site, enabled: true, savedScheme });
 };
 
-/** Cancels pick mode if active. */
-export const endPick = (): void => {
-  const s = pickSession;
-  pickSession = null;
-  s?.stop();
+/** Re-renders the panel rows from the current overrides (if the panel is open). */
+const renderPicker = (): void => {
+  picker?.panel.render(picker.overrides);
+};
+
+/** Esc closes the floating control (delegates to the panel's Done). */
+const onPickerKey = (e: KeyboardEvent): void => {
+  if (e.key === "Escape" && picker) {
+    e.preventDefault();
+    e.stopPropagation();
+    hidePicker();
+  }
+};
+
+/**
+ * Shows the in-page floating control, mounting the Shadow DOM panel + a
+ * re-arming pick session. Replaces any existing session. Seeds from the popup's
+ * current theme (palette + intensity + overrides) so edits start from the live
+ * look and persist back onto the per-site saved scheme.
+ */
+export const showPicker = (palette: Palette, options: ApplyOptions): void => {
+  hidePicker();
+
+  const session: PickerSession = {
+    palette,
+    intensity: options.intensity,
+    overrides: { ...(options.overrides ?? {}) },
+    panel: undefined as unknown as PanelHandle,
+    pick: undefined as unknown as PickSession,
+  };
+
+  session.panel = mountPickerPanel({
+    onColorChange: (role, color) => {
+      // Do NOT re-render here: rebuilding the rows would replace the
+      // <input type="color"> the user is actively dragging, which closes the
+      // native color dialog. The input already shows its own value — just
+      // update the override and apply live.
+      session.overrides = withRoleColor(session.overrides, role, color);
+      void applyAndPersist(session);
+    },
+    onClearRole: (role) => {
+      session.overrides = withoutRole(session.overrides, role);
+      renderPicker();
+      void applyAndPersist(session);
+    },
+    onClearAll: () => {
+      session.overrides = {};
+      renderPicker();
+      void applyAndPersist(session);
+    },
+    onDone: () => hidePicker(),
+  });
+
+  session.pick = startPick({
+    onPicked: (key, currentColor) => {
+      session.overrides = withPickedRole(session.overrides, key, currentColor);
+      renderPicker();
+      void applyAndPersist(session);
+    },
+    // The panel host (and everything inside its shadow root) is excluded so the
+    // control never highlights or recolors itself.
+    isExcluded: (el) => el.closest(`#${PANEL_HOST_ID}`) !== null,
+  });
+
+  picker = session;
+  session.panel.render(session.overrides);
+  document.addEventListener("keydown", onPickerKey, true);
+};
+
+/** Hides the floating control + ends pick mode (idempotent). */
+export const hidePicker = (): void => {
+  if (!picker) {
+    return;
+  }
+  document.removeEventListener("keydown", onPickerKey, true);
+  picker.pick.stop();
+  picker.panel.destroy();
+  picker = null;
+};
+
+/**
+ * Re-applies the theme in place (popup → content, e.g. after "Clear all" in the
+ * popup) and, if the floating control is open, keeps its rows in sync.
+ */
+const applyLive = (palette: Palette, options: ApplyOptions): void => {
+  applyWhenReady(palette, options);
+  if (picker) {
+    picker.palette = palette;
+    picker.intensity = options.intensity;
+    picker.overrides = { ...(options.overrides ?? {}) };
+    renderPicker();
+  }
 };
 
 /** Handles a popup → content-script {@link ContentMessage}. Exported for tests. */
 export const handleContentMessage = (message: ContentMessage): void => {
-  if (message.type === "START_PICK") {
-    beginPick();
-  } else if (message.type === "STOP_PICK") {
-    endPick();
+  if (message.type === "SHOW_PICKER") {
+    showPicker(message.palette, message.options);
+  } else if (message.type === "HIDE_PICKER") {
+    hidePicker();
   } else if (message.type === "APPLY_LIVE") {
-    // Re-apply the scheme (palette + overrides) directly in this page — the
-    // detached picker window drives live previews this way (it can't use the
-    // background's active-tab injector). Runs the SAME shared engine in place.
-    applyWhenReady(message.palette, message.options);
+    applyLive(message.palette, message.options);
   }
 };
 

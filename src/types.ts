@@ -89,6 +89,8 @@ export interface SchemeDetails {
    * content-script auto-reapply restores it. Absent → no overrides.
    */
   overrides?: RoleOverrides;
+  /** Whether this scheme's palette was flipped light↔dark (the Invert toggle). */
+  invert?: boolean;
 }
 
 /**

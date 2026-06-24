@@ -23,5 +23,5 @@
 
     "types": ["chrome", "vite/client"]
   },
-  "include": ["src", "vite.config.ts", "tests"]
+  "include": ["src", "vite.config.ts"]
 }

@@ -19,40 +19,24 @@ import type { Favorite } from "../lib/storage";
 
 export interface PopupRefs {
   mode: HTMLSelectElement;
-  /** Native color picker for the chosen seed. */
-  seedColor: HTMLInputElement;
-  /** Editable hex field, kept in sync with the color picker. */
-  seedHex: HTMLInputElement;
-  /** Switch toggling random-vs-chosen seed. */
-  seedRandom: HTMLButtonElement;
   /** Live surface-coverage slider (0–100). */
   intensity: HTMLInputElement;
   /** Numeric read-out next to the slider. */
   intensityValue: HTMLElement;
+  /** Invert (light↔dark) switch. */
+  invertToggle: HTMLButtonElement;
   generate: HTMLButtonElement;
-  apply: HTMLButtonElement;
   reset: HTMLButtonElement;
   status: HTMLElement;
   detailsToggle: HTMLButtonElement;
   details: HTMLElement;
-  /** Customize (element-picker) disclosure header + collapsible panel. */
-  customizeToggle: HTMLButtonElement;
-  customizePanel: HTMLElement;
-  /** "Pick element" button — starts in-page pick mode. */
-  pick: HTMLButtonElement;
-  /** "Clear all" overrides button. */
-  overridesClear: HTMLButtonElement;
-  /** Hint/status line for the customize flow. */
-  customizeHint: HTMLElement;
-  /** List of current per-role overrides. */
-  overrides: HTMLElement;
+  /** "Customize" button — opens the in-page floating picker control. */
+  customize: HTMLButtonElement;
+  /** Save the current scheme as a favorite (one-click, in the action row). */
+  favoriteSave: HTMLButtonElement;
   /** Favorites disclosure header + collapsible panel. */
   favoritesToggle: HTMLButtonElement;
   favoritesPanel: HTMLElement;
-  /** Name input for saving the current scheme as a favorite. */
-  favoriteName: HTMLInputElement;
-  /** Save-favorite button. */
-  favoriteSave: HTMLButtonElement;
   /** Saved-favorites list. */
   favorites: HTMLElement;
   /** History disclosure header + collapsible panel. */
@@ -62,32 +46,22 @@ export interface PopupRefs {
 }
 
 export interface PopupHandlers {
+  /** Generate a fresh scheme — auto-applies + auto-persists for this origin. */
   onGenerate: () => void;
-  /** Persist the current theme to this site + enable auto-reapply. */
-  onApply: () => void;
   onReset: () => void;
   onSelectMode: (mode: ModeSelection) => void;
   /** Fired as the slider is dragged (debounced live re-apply). */
   onSelectIntensity: (intensity: Intensity) => void;
-  /** Fired when the user picks a seed color (from picker or hex field). */
-  onSelectSeed: (hex: string) => void;
-  /** Fired when the random-seed switch is toggled. */
-  onToggleRandomSeed: () => void;
+  /** Toggle invert (light↔dark) — flips the live theme. */
+  onToggleInvert: () => void;
   onToggleDetails: () => void;
-  onToggleCustomize: () => void;
-  /** Start in-page element pick mode. */
+  /** Open the in-page floating picker control (Customize). */
   onPickElement: () => void;
-  /** A role's override color changed (live). */
-  onSetOverride: (role: string, color: string) => void;
-  /** Clear a single role's override. */
-  onClearOverride: (role: string) => void;
-  /** Clear all overrides. */
-  onClearOverrides: () => void;
   onToggleFavorites: () => void;
   onToggleHistory: () => void;
   onSelectHistory: (index: number) => void;
-  /** Save the current scheme as a named favorite. */
-  onSaveFavorite: (name: string) => void;
+  /** Save the current scheme as a favorite (one click, auto-named). */
+  onSaveFavorite: () => void;
   /** Apply a saved favorite as the current scheme. */
   onSelectFavorite: (id: string) => void;
   /** Delete a saved favorite. */
@@ -107,26 +81,17 @@ export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
   };
   return {
     mode: byId<HTMLSelectElement>("mode"),
-    seedColor: byId<HTMLInputElement>("seed-color"),
-    seedHex: byId<HTMLInputElement>("seed-hex"),
-    seedRandom: byId<HTMLButtonElement>("seed-random"),
     intensity: byId<HTMLInputElement>("intensity"),
+    invertToggle: byId<HTMLButtonElement>("invert-toggle"),
     intensityValue: byId<HTMLElement>("intensity-value"),
     generate: byId<HTMLButtonElement>("generate"),
-    apply: byId<HTMLButtonElement>("apply"),
     reset: byId<HTMLButtonElement>("reset"),
     status: byId<HTMLElement>("status"),
     detailsToggle: byId<HTMLButtonElement>("details-toggle"),
     details: byId<HTMLElement>("details"),
-    customizeToggle: byId<HTMLButtonElement>("customize-toggle"),
-    customizePanel: byId<HTMLElement>("customize-panel"),
-    pick: byId<HTMLButtonElement>("pick"),
-    overridesClear: byId<HTMLButtonElement>("overrides-clear"),
-    customizeHint: byId<HTMLElement>("customize-hint"),
-    overrides: byId<HTMLElement>("overrides"),
+    customize: byId<HTMLButtonElement>("customize"),
     favoritesToggle: byId<HTMLButtonElement>("favorites-toggle"),
     favoritesPanel: byId<HTMLElement>("favorites-panel"),
-    favoriteName: byId<HTMLInputElement>("favorite-name"),
     favoriteSave: byId<HTMLButtonElement>("favorite-save"),
     favorites: byId<HTMLElement>("favorites"),
     historyToggle: byId<HTMLButtonElement>("history-toggle"),
@@ -156,33 +121,9 @@ export const populateModes = (
 /** Wires DOM events to handler callbacks. Call once after `queryRefs`. */
 export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.generate.addEventListener("click", handlers.onGenerate);
-  refs.apply.addEventListener("click", handlers.onApply);
   refs.reset.addEventListener("click", handlers.onReset);
   refs.detailsToggle.addEventListener("click", handlers.onToggleDetails);
-  refs.customizeToggle.addEventListener("click", handlers.onToggleCustomize);
-  refs.pick.addEventListener("click", handlers.onPickElement);
-  refs.overridesClear.addEventListener("click", handlers.onClearOverrides);
-  // Delegated: a click on a row's clear (×) control clears that override; a
-  // change on a row's color input live-updates that override.
-  refs.overrides.addEventListener("click", (e) => {
-    const clear = (e.target as HTMLElement).closest<HTMLElement>(
-      "[data-override-clear]",
-    );
-    if (clear) {
-      handlers.onClearOverride(clear.dataset.overrideClear as string);
-    }
-  });
-  refs.overrides.addEventListener("input", (e) => {
-    const input = (e.target as HTMLElement).closest<HTMLInputElement>(
-      "[data-override-color]",
-    );
-    if (input) {
-      handlers.onSetOverride(
-        input.dataset.overrideColor as string,
-        input.value,
-      );
-    }
-  });
+  refs.customize.addEventListener("click", handlers.onPickElement);
   refs.favoritesToggle.addEventListener("click", handlers.onToggleFavorites);
   refs.historyToggle.addEventListener("click", handlers.onToggleHistory);
   refs.mode.addEventListener("change", () =>
@@ -193,21 +134,9 @@ export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   refs.intensity.addEventListener("input", () =>
     handlers.onSelectIntensity(Number(refs.intensity.value)),
   );
+  refs.invertToggle.addEventListener("click", handlers.onToggleInvert);
 
-  // Seed picker: the native color input streams `input` as the user drags;
-  // the hex field commits on `change` (Enter / blur) so partial typing isn't
-  // rejected mid-edit. Both route the chosen hex to the same handler.
-  refs.seedColor.addEventListener("input", () =>
-    handlers.onSelectSeed(refs.seedColor.value),
-  );
-  refs.seedHex.addEventListener("change", () =>
-    handlers.onSelectSeed(refs.seedHex.value),
-  );
-  refs.seedRandom.addEventListener("click", handlers.onToggleRandomSeed);
-
-  refs.favoriteSave.addEventListener("click", () =>
-    handlers.onSaveFavorite(refs.favoriteName.value),
-  );
+  refs.favoriteSave.addEventListener("click", () => handlers.onSaveFavorite());
   // One delegated listener: a click on the delete control deletes; anywhere
   // else on the row applies the favorite.
   refs.favorites.addEventListener("click", (e) => {
@@ -263,6 +192,35 @@ const renderDetails = (state: PopupState, container: HTMLElement): void => {
 
     row.append(swatch, tagsEl, hex);
     container.appendChild(row);
+  }
+
+  // Custom overrides (the picker's per-tag picks), if any.
+  const overrides = overrideRows(state);
+  if (overrides.length > 0) {
+    const heading = document.createElement("p");
+    heading.className = "details__seed";
+    heading.textContent = "Custom overrides";
+    container.appendChild(heading);
+
+    for (const { color, label } of overrides) {
+      const row = document.createElement("div");
+      row.className = "details__row";
+
+      const swatch = document.createElement("span");
+      swatch.className = "details__swatch";
+      swatch.style.backgroundColor = color;
+
+      const labelEl = document.createElement("span");
+      labelEl.className = "details__tags";
+      labelEl.textContent = label;
+
+      const hex = document.createElement("span");
+      hex.className = "details__hex";
+      hex.textContent = color;
+
+      row.append(swatch, labelEl, hex);
+      container.appendChild(row);
+    }
   }
 };
 
@@ -370,66 +328,17 @@ const renderFavorites = (favorites: Favorite[], list: HTMLElement): void => {
   }
 };
 
-/** Renders the list of current per-role overrides (label + color input + clear). */
-const renderOverrides = (state: PopupState, list: HTMLElement): void => {
-  list.innerHTML = "";
-  const rows = overrideRows(state);
-  if (rows.length === 0) {
-    const empty = document.createElement("li");
-    empty.className = "overrides__empty";
-    empty.textContent = "No custom colors yet. Pick an element to recolor it.";
-    list.appendChild(empty);
-    return;
-  }
-  for (const { role, color, label } of rows) {
-    const li = document.createElement("li");
-    li.className = "overrides__item";
-
-    const name = document.createElement("span");
-    name.className = "overrides__label";
-    name.textContent = label;
-
-    const input = document.createElement("input");
-    input.type = "color";
-    input.className = "overrides__color";
-    input.value = /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#808080";
-    input.dataset.overrideColor = role;
-    input.setAttribute("aria-label", `${label} color`);
-
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "overrides__clear";
-    clear.dataset.overrideClear = role;
-    clear.setAttribute("aria-label", `Clear ${label} override`);
-    clear.title = "Clear";
-    clear.textContent = "×";
-
-    li.append(name, input, clear);
-    list.appendChild(li);
-  }
-};
-
 /** Renders the full popup from `state`. Idempotent. */
 export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.mode.value = state.mode;
   refs.intensity.value = String(state.intensity);
   refs.intensity.setAttribute("aria-valuenow", String(state.intensity));
   refs.intensityValue.textContent = String(state.intensity);
-
-  // Seed picker reflects the chosen color; native <input type="color"> only
-  // accepts a 6-digit hex, so guard against a half-typed value in the hex field.
-  refs.seedHex.value = state.seed;
-  if (/^#[0-9a-fA-F]{6}$/.test(state.seed)) {
-    refs.seedColor.value = state.seed;
-  }
-  refs.seedRandom.setAttribute("aria-checked", String(state.useRandomSeed));
-  // When "random" is on, the picker is informational only (Generate ignores it).
-  refs.seedColor.disabled = state.useRandomSeed;
-  refs.seedHex.disabled = state.useRandomSeed;
+  refs.invertToggle.setAttribute("aria-checked", String(state.invert));
 
   refs.generate.disabled = state.loading;
   refs.generate.textContent = state.loading ? "Generating…" : "Generate";
-  refs.apply.disabled = !state.current;
+  refs.favoriteSave.disabled = !state.current;
   refs.reset.disabled = !state.applied && !state.current;
 
   refs.status.classList.toggle("popup__status--error", Boolean(state.error));
@@ -446,25 +355,9 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.details.hidden = !state.showDetails;
   renderDetails(state, refs.details);
 
-  // Customize: available whenever there is a theme to layer overrides on — a
-  // CURRENT scheme OR a persisted/applied theme on this tab (so it isn't wrongly
-  // disabled when reopening on a persisted site, or right after a pick).
-  const canCustomize = Boolean(state.current) || state.applied;
-  refs.customizeToggle.disabled = !canCustomize;
-  refs.customizeToggle.setAttribute(
-    "aria-expanded",
-    String(state.showCustomize),
-  );
-  refs.customizePanel.hidden = !state.showCustomize;
-  refs.pick.disabled = !canCustomize || state.picking;
-  refs.pick.textContent = state.picking ? "Click an element…" : "Pick element";
-  refs.pick.setAttribute("aria-pressed", String(state.picking));
-  refs.overridesClear.disabled =
-    Object.keys(state.overrides).length === 0 || !canCustomize;
-  refs.customizeHint.textContent = state.picking
-    ? "Switch to the page and click any element to recolor its role."
-    : "";
-  renderOverrides(state, refs.overrides);
+  // Customize is a button that opens the IN-PAGE floating control; available
+  // whenever there's a theme to layer overrides on (current OR applied).
+  refs.customize.disabled = !(Boolean(state.current) || state.applied);
 
   refs.favoritesToggle.setAttribute(
     "aria-expanded",

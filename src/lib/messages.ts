@@ -39,31 +39,41 @@ export interface ResetSchemeMessage {
 /**
  * Element-picker messages, sent DIRECTLY from the popup to the active tab's
  * CONTENT SCRIPT (`chrome.tabs.sendMessage`), NOT through the background hub:
- * pick mode is an in-page interaction owned by the always-on content script.
+ * pick mode is an IN-PAGE interaction owned by the always-on content script,
+ * driven through an in-page floating control (Shadow DOM panel).
  *
- * Flow: popup → `START_PICK` → content script enters pick mode (hover highlight +
- * capture-phase click). On a click the content script classifies the element's
- * semantic role via `roleOfElement`, replies `ELEMENT_PICKED { role }`, and
- * exits. `STOP_PICK` cancels pick mode (also fired on Esc, popup close, etc.).
+ * Flow: the user clicks "Pick element" in the popup → the popup sends
+ * `SHOW_PICKER` (carrying the live theme so the panel can live-apply + persist
+ * its picks) and then closes. The in-page panel handles all picking + recoloring
+ * itself; storage is the source of truth. There is NO reply channel and NO
+ * detached window — the panel lives on the page.
  */
-export interface StartPickMessage {
-  type: "START_PICK";
+
+/**
+ * Show the in-page floating picker control on the active tab. Carries the live
+ * theme (palette + intensity + the popup's current overrides) so the content
+ * script can apply each pick LIVE in place and persist it into the per-site
+ * saved scheme. The panel is the source of all picking/recoloring once shown.
+ */
+export interface ShowPickerMessage {
+  type: "SHOW_PICKER";
+  /** The palette the page is (or will be) themed with. */
+  palette: Palette;
+  /** Apply options (intensity + the current overrides) the panel starts from. */
+  options: ApplyOptions;
 }
 
-/** Cancel pick mode on the active tab's content script. */
-export interface StopPickMessage {
-  type: "STOP_PICK";
+/** Hide the in-page picker control (e.g. the popup cleared all overrides). */
+export interface HidePickerMessage {
+  type: "HIDE_PICKER";
 }
 
 /**
- * Apply a palette + options DIRECTLY in a specific tab's content script.
- *
- * Used by the DETACHED picker window (a standalone `chrome.windows` popup that
- * stays open while the user clicks the page). That window can't use the
- * background's `chrome.scripting` injector — that path targets the ACTIVE tab in
- * the CURRENT window, which is now the picker window itself, not the page. So
- * the picker window sends the palette here, to the page's own content script,
- * which runs the SAME `applyAdaptiveScheme` engine in place.
+ * Re-apply the theme in place with the given options (intensity + overrides).
+ * Sent from the popup when it changes overrides while the page is themed (e.g.
+ * "Clear all"), so the in-page result reflects the popup edit without a reload.
+ * The content script runs the SAME `applyAdaptiveScheme` engine in place and
+ * keeps its panel rows in sync.
  */
 export interface ApplyLiveMessage {
   type: "APPLY_LIVE";
@@ -71,24 +81,10 @@ export interface ApplyLiveMessage {
   options: ApplyOptions;
 }
 
-/**
- * The content script's reply to a click in pick mode: the override-key for the
- * clicked element's semantic role (a {@link import("./palette").PaletteRoles}
- * key, e.g. `heading` / `link` / `primary`). `cancelled` is `true` when pick
- * mode ended without a pick (Esc / STOP_PICK), so the popup can clear its UI.
- */
-export interface ElementPickedMessage {
-  type: "ELEMENT_PICKED";
-  /** The palette-role key the user chose to recolor, or null when cancelled. */
-  role: string | null;
-  /** True when pick mode ended without a selection. */
-  cancelled?: boolean;
-}
-
 /** Messages the CONTENT SCRIPT handles (popup → content script, direct). */
 export type ContentMessage =
-  | StartPickMessage
-  | StopPickMessage
+  | ShowPickerMessage
+  | HidePickerMessage
   | ApplyLiveMessage;
 
 /** Query whether the active tab currently has a Thememaker style applied. */

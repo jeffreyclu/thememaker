@@ -11,30 +11,27 @@ import { initialPopupState, type PopupState } from "../src/popup/state";
 import { modes } from "../src/config";
 import { mockScheme, mockScheme2 } from "./mocks";
 
+/**
+ * The popup DOM fixture — a faithful copy of the element ids in
+ * `src/popup/index.html` (the source of truth for `queryRefs`). If an id moves
+ * in the HTML, this must move with it (and `queryRefs` will throw otherwise,
+ * which is the canary).
+ */
 const POPUP_HTML = `
   <select id="mode"></select>
-  <input id="seed-color" type="color" value="#4f46e5" />
-  <input id="seed-hex" type="text" value="#4f46e5" />
-  <button id="seed-random" aria-checked="true"></button>
-  <input id="intensity" type="range" min="10" max="100" step="1" value="80" />
+  <input id="intensity" type="range" min="10" max="100" step="1" value="80"
+         aria-valuenow="80" />
   <output id="intensity-value">80</output>
+  <button id="invert-toggle" role="switch" aria-checked="false"></button>
   <button id="generate"></button>
-  <button id="apply"></button>
+  <button id="favorite-save"></button>
   <button id="reset"></button>
+  <button id="customize"></button>
   <p id="status"></p>
   <button id="details-toggle" aria-expanded="false"></button>
   <div id="details" hidden></div>
-  <button id="customize-toggle" aria-expanded="false"></button>
-  <div id="customize-panel" hidden>
-    <button id="pick"></button>
-    <button id="overrides-clear"></button>
-    <p id="customize-hint"></p>
-    <ul id="overrides"></ul>
-  </div>
   <button id="favorites-toggle" aria-expanded="false"></button>
   <div id="favorites-panel" hidden>
-    <input id="favorite-name" type="text" />
-    <button id="favorite-save"></button>
     <ul id="favorites"></ul>
   </div>
   <button id="history-toggle" aria-expanded="false"></button>
@@ -50,18 +47,12 @@ const mount = () => {
 
 const noopHandlers = (): PopupHandlers => ({
   onGenerate: vi.fn(),
-  onApply: vi.fn(),
   onReset: vi.fn(),
   onSelectMode: vi.fn(),
   onSelectIntensity: vi.fn(),
-  onSelectSeed: vi.fn(),
-  onToggleRandomSeed: vi.fn(),
+  onToggleInvert: vi.fn(),
   onToggleDetails: vi.fn(),
-  onToggleCustomize: vi.fn(),
   onPickElement: vi.fn(),
-  onSetOverride: vi.fn(),
-  onClearOverride: vi.fn(),
-  onClearOverrides: vi.fn(),
   onToggleFavorites: vi.fn(),
   onToggleHistory: vi.fn(),
   onSelectHistory: vi.fn(),
@@ -86,7 +77,10 @@ describe("popup view", () => {
     const refs = mount();
     populateModes(refs.mode);
     render(initialPopupState, refs);
-    expect(refs.apply.disabled).toBe(true);
+    // No current/applied → favorite-save, reset, details, customize disabled.
+    expect(refs.favoriteSave.disabled).toBe(true);
+    expect(refs.reset.disabled).toBe(true);
+    expect(refs.customize.disabled).toBe(true);
     expect(refs.detailsToggle.disabled).toBe(true);
     // Details collapsed by default — the view must set the `hidden` attribute
     // (the CSS `.details[hidden]` rule makes it actually disappear).
@@ -102,7 +96,7 @@ describe("popup view", () => {
     expect(refs.generate.textContent).toContain("Generating");
   });
 
-  it("render enables apply/details and lists history when a scheme is current", () => {
+  it("render enables save/reset/details/customize and lists history when a scheme is current", () => {
     const refs = mount();
     populateModes(refs.mode);
     const state: PopupState = {
@@ -112,13 +106,23 @@ describe("popup view", () => {
       applied: true,
     };
     render(state, refs);
-    expect(refs.apply.disabled).toBe(false);
+    expect(refs.favoriteSave.disabled).toBe(false);
+    expect(refs.reset.disabled).toBe(false);
+    expect(refs.customize.disabled).toBe(false);
     expect(refs.detailsToggle.disabled).toBe(false);
     expect(refs.status.textContent).toContain("Applied");
     // two history entries, most-recent first
     const items = refs.history.querySelectorAll("[data-history-index]");
     expect(items).toHaveLength(2);
     expect((items[0] as HTMLElement).dataset.historyIndex).toBe("1");
+  });
+
+  it("customize is enabled by `applied` even without a `current` scheme", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render({ ...initialPopupState, applied: true }, refs);
+    // Available whenever there's a theme to layer overrides on (current OR applied).
+    expect(refs.customize.disabled).toBe(false);
   });
 
   it("render shows details rows + seed when expanded", () => {
@@ -133,6 +137,30 @@ describe("popup view", () => {
     expect(
       refs.details.querySelectorAll(".details__row").length,
     ).toBeGreaterThan(0);
+  });
+
+  it("render lists a 'Custom overrides' group in details when overrides exist", () => {
+    const refs = mount();
+    populateModes(refs.mode);
+    render(
+      {
+        ...initialPopupState,
+        current: mockScheme,
+        showDetails: true,
+        overrides: {
+          "div|background": "#112233",
+          "page|background": "#abcdef",
+        },
+      },
+      refs,
+    );
+    expect(refs.details.textContent).toContain("Custom overrides");
+    // Per-tag label + the page sentinel label both render.
+    expect(refs.details.textContent).toContain("div · background");
+    expect(refs.details.textContent).toContain("Page background");
+    // And the override hexes are shown.
+    expect(refs.details.textContent).toContain("#112233");
+    expect(refs.details.textContent).toContain("#abcdef");
   });
 
   it("render surfaces errors", () => {
@@ -151,28 +179,13 @@ describe("popup view", () => {
     expect(refs.intensityValue.textContent).toBe("80");
   });
 
-  it("seed picker reflects the chosen seed + random flag", () => {
+  it("invert switch reflects the invert flag via aria-checked", () => {
     const refs = mount();
     populateModes(refs.mode);
-    render(
-      { ...initialPopupState, seed: "#abcdef", useRandomSeed: false },
-      refs,
-    );
-    expect(refs.seedHex.value).toBe("#abcdef");
-    expect(refs.seedColor.value).toBe("#abcdef");
-    expect(refs.seedRandom.getAttribute("aria-checked")).toBe("false");
-    // chosen seed → picker enabled
-    expect(refs.seedColor.disabled).toBe(false);
-    expect(refs.seedHex.disabled).toBe(false);
-  });
-
-  it("seed picker is disabled (informational) while random is on", () => {
-    const refs = mount();
-    populateModes(refs.mode);
-    render({ ...initialPopupState, useRandomSeed: true }, refs);
-    expect(refs.seedRandom.getAttribute("aria-checked")).toBe("true");
-    expect(refs.seedColor.disabled).toBe(true);
-    expect(refs.seedHex.disabled).toBe(true);
+    render({ ...initialPopupState, invert: false }, refs);
+    expect(refs.invertToggle.getAttribute("aria-checked")).toBe("false");
+    render({ ...initialPopupState, invert: true }, refs);
+    expect(refs.invertToggle.getAttribute("aria-checked")).toBe("true");
   });
 
   it("favorites render with name + swatches; save disabled without a scheme", () => {
@@ -210,33 +223,28 @@ describe("popup view", () => {
     expect(refs.favoriteSave.disabled).toBe(false);
   });
 
-  it("bindEvents wires seed picker + random toggle", () => {
+  it("bindEvents wires the invert switch + customize button", () => {
     const refs = mount();
     populateModes(refs.mode);
     const handlers = noopHandlers();
     bindEvents(refs, handlers);
 
-    refs.seedColor.value = "#112233";
-    refs.seedColor.dispatchEvent(new Event("input"));
-    expect(handlers.onSelectSeed).toHaveBeenCalledWith("#112233");
+    refs.invertToggle.click();
+    expect(handlers.onToggleInvert).toHaveBeenCalledTimes(1);
 
-    refs.seedHex.value = "#445566";
-    refs.seedHex.dispatchEvent(new Event("change"));
-    expect(handlers.onSelectSeed).toHaveBeenCalledWith("#445566");
-
-    refs.seedRandom.click();
-    expect(handlers.onToggleRandomSeed).toHaveBeenCalled();
+    refs.customize.click();
+    expect(handlers.onPickElement).toHaveBeenCalledTimes(1);
   });
 
-  it("bindEvents wires favorite save / apply / delete", () => {
+  it("bindEvents wires favorite save (no arg) / apply / delete", () => {
     const refs = mount();
     populateModes(refs.mode);
     const handlers = noopHandlers();
     bindEvents(refs, handlers);
 
-    refs.favoriteName.value = "Sunset";
+    // Save is one-click (auto-named) — fired with no argument.
     refs.favoriteSave.click();
-    expect(handlers.onSaveFavorite).toHaveBeenCalledWith("Sunset");
+    expect(handlers.onSaveFavorite).toHaveBeenCalledTimes(1);
 
     render(
       {
@@ -293,7 +301,7 @@ describe("popup view", () => {
     expect(handlers.onToggleHistory).toHaveBeenCalled();
   });
 
-  it("bindEvents wires clicks to handlers (generate, mode, history)", () => {
+  it("bindEvents wires clicks to handlers (generate, reset, mode, intensity, history)", () => {
     const refs = mount();
     populateModes(refs.mode);
     const handlers = noopHandlers();
@@ -301,6 +309,12 @@ describe("popup view", () => {
 
     refs.generate.click();
     expect(handlers.onGenerate).toHaveBeenCalled();
+
+    refs.reset.click();
+    expect(handlers.onReset).toHaveBeenCalled();
+
+    refs.detailsToggle.click();
+    expect(handlers.onToggleDetails).toHaveBeenCalled();
 
     refs.mode.value = "triad";
     refs.mode.dispatchEvent(new Event("change"));

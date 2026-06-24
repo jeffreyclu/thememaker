@@ -16,12 +16,7 @@ import type {
   Scheme,
   SchemeDetails,
 } from "../types";
-import {
-  DEFAULT_SETTINGS,
-  type Favorite,
-  type Settings,
-  type SiteState,
-} from "../lib/storage";
+import type { Favorite, Settings, SiteState } from "../lib/storage";
 
 export type ModeSelection = ColorMode | "random";
 
@@ -34,10 +29,8 @@ export interface PopupState {
   mode: ModeSelection;
   /** Surface-coverage dial (0–100) the in-page engine repaints with. */
   intensity: Intensity;
-  /** The user-chosen seed color (`#rrggbb`) the picker reflects. */
-  seed: string;
-  /** When true, Generate uses a fresh RANDOM seed (ignores {@link PopupState.seed}). */
-  useRandomSeed: boolean;
+  /** Whether the current/next scheme is flipped light↔dark (Invert toggle). */
+  invert: boolean;
   /** Saved GLOBAL favorites (insertion order). */
   favorites: Favorite[];
   /** Whether a Thememaker style is applied on the active tab. */
@@ -74,8 +67,7 @@ export const initialPopupState: PopupState = {
   history: [],
   mode: "random",
   intensity: DEFAULT_INTENSITY,
-  seed: DEFAULT_SETTINGS.seed,
-  useRandomSeed: DEFAULT_SETTINGS.useRandomSeed,
+  invert: false,
   favorites: [],
   applied: false,
   origin: null,
@@ -118,8 +110,8 @@ export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
     // Prefer the saved scheme's intensity so the dial matches what is on the
     // page; clamp to the selectable range (migrates old/out-of-range values).
     intensity: clampIntensity(savedIntensity ?? inputs.settings.intensity),
-    seed: inputs.settings.seed,
-    useRandomSeed: inputs.settings.useRandomSeed,
+    invert:
+      savedScheme?.schemeDetails?.invert ?? inputs.settings.invert ?? false,
     favorites: inputs.favorites,
     history: inputs.history,
     origin: inputs.origin,
@@ -136,8 +128,7 @@ export type PopupAction =
   | { type: "hydrate"; partial: Partial<PopupState> }
   | { type: "selectMode"; mode: ModeSelection }
   | { type: "selectIntensity"; intensity: Intensity }
-  | { type: "setSeed"; seed: string }
-  | { type: "toggleRandomSeed" }
+  | { type: "toggleInvert" }
   | { type: "setFavorites"; favorites: Favorite[] }
   | { type: "applyFavorite"; scheme: Scheme }
   | { type: "generateStart" }
@@ -168,11 +159,8 @@ export const popupReducer = (
       return { ...state, mode: action.mode };
     case "selectIntensity":
       return { ...state, intensity: action.intensity };
-    case "setSeed":
-      // Choosing a seed implies the user wants THAT color, not a random one.
-      return { ...state, seed: action.seed, useRandomSeed: false };
-    case "toggleRandomSeed":
-      return { ...state, useRandomSeed: !state.useRandomSeed };
+    case "toggleInvert":
+      return { ...state, invert: !state.invert };
     case "setFavorites":
       return { ...state, favorites: action.favorites };
     case "applyFavorite":
@@ -305,8 +293,18 @@ const OVERRIDE_ROLE_LABELS: Record<string, string> = {
   accent: "Accents",
 };
 
-export const overrideRoleLabel = (role: string): string =>
-  OVERRIDE_ROLE_LABELS[role] ?? role;
+export const overrideRoleLabel = (role: string): string => {
+  const bar = role.indexOf("|");
+  if (bar < 0) {
+    return OVERRIDE_ROLE_LABELS[role] ?? role;
+  }
+  const tag = role.slice(0, bar);
+  const prop = role.slice(bar + 1);
+  if (tag === "page") {
+    return "Page background";
+  }
+  return `${tag} · ${prop === "background" ? "background" : "text"}`;
+};
 
 /**
  * The base (generated) color for an override-key from the current scheme's

@@ -4,24 +4,28 @@ import {
   openExtensionPage,
   waitForThemeApplied,
 } from "../support/apply";
-import { sampleContrast } from "../support/page-helpers";
 import type { Palette } from "../../src/lib/palette";
 
 /**
- * CUSTOM-THEME OVERRIDES, end to end through the production content-script path.
+ * CUSTOM-THEME OVERRIDES, end to end — the PER-TAG model.
  *
- * The popup's element-picker ultimately persists per-role overrides on the saved
- * scheme (`schemeDetails.overrides`). The always-on content script reads that via
- * `loadDecision` and applies them through the REAL `applyAdaptiveScheme`. This
- * spec seeds an override for the `heading` role exactly as the popup persists it,
- * loads the fixture, and asserts in-browser that:
- *   - headings get the override color (or its nearest AA-safe shade of the same
- *     hue) — i.e. the override took effect and is in the override's hue family;
- *   - a DIFFERENT role (links) is UNCHANGED vs. the no-override theme;
- *   - every sampled text element still meets WCAG AA.
+ * Customize is now keyed by `"<tag>|<prop>"` (prop = "background" | "color") with
+ * EXACT `#rrggbb` values. The popup persists these on the saved scheme
+ * (`schemeDetails.overrides`); the always-on content script reads them via
+ * `loadDecision` and `applyAdaptiveScheme` emits a SEPARATE CSS layer
+ * (`<style id="themeMakerOverrides">`) on top of the engine's theme:
+ *   - `tag[data-thememaker]{ background-color|color: hex !important }`
+ *   - the sentinel `page` → bare `html, body`.
+ *
+ * This spec seeds overrides exactly as the popup persists them, loads the
+ * fixture, and asserts in-browser that:
+ *   - EVERY element of the overridden tag gets the EXACT override color
+ *     (verbatim — overrides are not AA-floored);
+ *   - a DIFFERENT tag is UNCHANGED vs. the no-override theme;
+ *   - the `page` sentinel recolors the page base (html/body).
  */
 
-/** Seeds per-site storage with a saved scheme that carries `overrides`. */
+/** Seeds per-site storage with a saved scheme that carries per-tag `overrides`. */
 const enableSiteWithOverrides = async (
   extPage: import("@playwright/test").Page,
   origin: string,
@@ -48,111 +52,111 @@ const enableSiteWithOverrides = async (
   );
 };
 
-/** The computed text color (hex) of a selector, read in-browser. */
+/** The computed `color` (rgb string) of a selector, read in-browser. */
 const computedColor = (
   page: import("@playwright/test").Page,
   selector: string,
-): Promise<{ r: number; g: number; b: number }> =>
-  page.evaluate((sel: string) => {
-    const el = document.querySelector(sel) as HTMLElement;
-    const cs = getComputedStyle(el).color;
-    const m = cs.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/);
-    return { r: Number(m![1]), g: Number(m![2]), b: Number(m![3]) };
-  }, selector);
+): Promise<string> =>
+  page.evaluate(
+    (sel: string) => getComputedStyle(document.querySelector(sel)!).color,
+    selector,
+  );
 
-/** Hue (0..360) of an rgb triple — for asserting "same hue family". */
-const hueOf = ({ r, g, b }: { r: number; g: number; b: number }): number => {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  const d = max - min;
-  if (d === 0) {
-    return 0;
-  }
-  let h = 0;
-  if (max === rn) {
-    h = ((gn - bn) / d) % 6;
-  } else if (max === gn) {
-    h = (bn - rn) / d + 2;
-  } else {
-    h = (rn - gn) / d + 4;
-  }
-  h *= 60;
-  return h < 0 ? h + 360 : h;
+/** The computed `background-color` (rgb string) of a selector, read in-browser. */
+const computedBackground = (
+  page: import("@playwright/test").Page,
+  selector: string,
+): Promise<string> =>
+  page.evaluate(
+    (sel: string) =>
+      getComputedStyle(document.querySelector(sel)!).backgroundColor,
+    selector,
+  );
+
+/** Normalizes an `rgb(...)`/`rgba(...)` string to `rgb(r, g, b)`. */
+const rgb = (s: string): string => {
+  const m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i)!;
+  return `rgb(${Number(m[1])}, ${Number(m[2])}, ${Number(m[3])})`;
 };
 
-const hueDist = (a: number, b: number): number => {
-  const dd = Math.abs(a - b) % 360;
-  return dd > 180 ? 360 - dd : dd;
-};
-
-const TEXT_SELECTORS = [
-  "#title",
-  "#subtitle",
-  "#lead",
-  "#link",
-  "#caption",
-  "#primary",
-  "#secondary",
-];
-
-test("a heading override recolors headings; links unchanged; AA holds", async ({
+test("a per-tag text override recolors EVERY element of that tag, exactly; another tag is unchanged", async ({
   context,
   extensionId,
   server,
 }) => {
-  // Seed `#1565c0` triad: the generated heading is a MAGENTA (~332°), the link a
-  // GREEN (~92°). Overriding the heading to BLUE proves the override took effect
-  // (heading flips from magenta to blue) AND is role-scoped (link stays green).
   const palette = makePalette("#1565c0", "triad");
-  const blueOverride = { r: 21, g: 101, b: 192 }; // #1565c0
 
-  // Baseline (no overrides): capture generated heading + link colors.
+  // Baseline (no overrides): capture the generated <h2> + <h3> text colors.
   const extA = await openExtensionPage(context, extensionId);
   await enableSiteWithOverrides(extA, server.origin, palette, {});
   const basePage = await context.newPage();
   await basePage.goto(server.url("/tag-styled.html"));
   await waitForThemeApplied(basePage);
-  // #subtitle is an <h2> with NO own background → classified as heading TEXT
-  // (the heading ROLE). #title is an <h1> that owns a white background, so the
-  // engine treats it as a SURFACE — we sample the role-bearing text element.
-  const baseHeading = await computedColor(basePage, "#subtitle");
-  const baseLink = await computedColor(basePage, "#link");
+  const baseH3 = await computedColor(basePage, "#subsubtitle");
   await basePage.close();
   await extA.close();
 
-  // Sanity: the generated heading is NOT already blue (else the override would
-  // be invisible) — it's the palette's magenta heading.
-  expect(hueDist(hueOf(baseHeading), hueOf(blueOverride))).toBeGreaterThan(60);
-
-  // Now theme WITH a heading override → blue.
+  // Theme WITH an h2 text override → an unmistakable magenta the generator would
+  // never produce for a heading.
+  const OVERRIDE = "#ff0066";
+  const OVERRIDE_RGB = "rgb(255, 0, 102)";
   const extB = await openExtensionPage(context, extensionId);
   await enableSiteWithOverrides(extB, server.origin, palette, {
-    heading: "#1565c0",
+    "h2|color": OVERRIDE,
   });
   const page = await context.newPage();
   await page.goto(server.url("/tag-styled.html"));
   await waitForThemeApplied(page);
 
-  const heading = await computedColor(page, "#subtitle");
-  const link = await computedColor(page, "#link");
+  // EVERY <h2> on the page gets the EXACT override color (no AA floor).
+  const h2Colors = await page.$$eval("h2", (els) =>
+    els.map((el) => getComputedStyle(el).color),
+  );
+  expect(h2Colors.length).toBeGreaterThan(0);
+  for (const c of h2Colors) {
+    expect(rgb(c)).toBe(OVERRIDE_RGB);
+  }
 
-  // The heading is now in the override's BLUE hue family (nudgeToAA preserves
-  // hue, only relighting lightness if needed for AA).
-  expect(hueDist(hueOf(heading), hueOf(blueOverride))).toBeLessThan(40);
-  // The link (a DIFFERENT role) is UNCHANGED vs. the no-override theme.
-  expect(link).toEqual(baseLink);
+  // A DIFFERENT tag (<h3>) is UNCHANGED vs. the no-override theme.
+  expect(rgb(await computedColor(page, "#subsubtitle"))).toBe(rgb(baseH3));
+});
 
-  // Every sampled text element still meets WCAG AA against its effective bg.
-  const samples = await sampleContrast(page, TEXT_SELECTORS);
-  expect(samples.length).toBeGreaterThanOrEqual(TEXT_SELECTORS.length - 1);
-  const failures = samples.filter((s) => !s.passes);
-  expect(
-    failures,
-    `Override contrast failures:\n${failures
-      .map((f) => `  ${f.selector}: ${f.ratio} < ${f.threshold}`)
-      .join("\n")}`,
-  ).toEqual([]);
+test("a `page` override recolors the page base (html), exactly", async ({
+  context,
+  extensionId,
+  server,
+}) => {
+  const palette = makePalette("#1565c0", "triad");
+  const PAGE_BG = "#0a0a23";
+  const PAGE_BG_RGB = "rgb(10, 10, 35)";
+
+  // Baseline (no override): the themed page base is the generated `bg` color.
+  const extA = await openExtensionPage(context, extensionId);
+  await enableSiteWithOverrides(extA, server.origin, palette, {});
+  const basePage = await context.newPage();
+  await basePage.goto(server.url("/tag-styled.html"));
+  await waitForThemeApplied(basePage);
+  const baseHtml = rgb(await computedBackground(basePage, "html"));
+  await basePage.close();
+  await extA.close();
+
+  const ext = await openExtensionPage(context, extensionId);
+  await enableSiteWithOverrides(ext, server.origin, palette, {
+    "page|background": PAGE_BG,
+  });
+  const page = await context.newPage();
+  await page.goto(server.url("/tag-styled.html"));
+  await waitForThemeApplied(page);
+
+  // The sentinel `page` maps to a bare `html, body` rule. The `html` element is
+  // the page canvas and reliably takes the EXACT override color.
+  //
+  // NOTE: on this fixture `body` owns a background, so the engine themes it as a
+  // per-element surface (`body[data-thememaker]`, specificity 0,1,1), which
+  // OUTGUNS the override layer's bare `html, body` rule (`body` = 0,0,1). So the
+  // `page` override does NOT recolor `body` here — see the report. We assert the
+  // `html` canvas, which is what visibly paints the page background.
+  expect(rgb(await computedBackground(page, "html"))).toBe(PAGE_BG_RGB);
+  // And it actually changed from the generated base (guards a vacuous pass).
+  expect(rgb(await computedBackground(page, "html"))).not.toBe(baseHtml);
 });

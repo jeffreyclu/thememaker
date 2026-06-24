@@ -95,10 +95,10 @@ describe("ThememakerStorage", () => {
   });
 
   it("persists settings (merged over defaults)", async () => {
-    await storage.setSettings({ intensity: 80, seed: "#123456" });
+    await storage.setSettings({ intensity: 80, invert: true });
     const settings = await storage.getSettings();
     expect(settings.intensity).toBe(80);
-    expect(settings.seed).toBe("#123456");
+    expect(settings.invert).toBe(true);
     // unchanged keys keep their defaults
     expect(settings.mode).toBe(DEFAULT_SETTINGS.mode);
   });

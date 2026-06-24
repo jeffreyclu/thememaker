@@ -182,22 +182,31 @@ const deriveRoles = (
   // ---- backgrounds: tinted paper with a VISIBLE step + rising saturation ----
   // A light UI sits high (l≈95), a dark UI low (l≈12). Each surface steps ~7% L
   // and gains a little saturation so the tint is perceptible.
-  const bgL = dark ? 12 : 95;
+  // Backgrounds are "colored but muted": clearly tinted with the theme hue and
+  // mid-light (not near-white), but softer than the full-strength accents so
+  // text stays readable. Saturation is FLOORED (the hue is always visible) and
+  // capped (never garish); lightness sits a notch off paper.
+  const bgL = dark ? 16 : 86;
   const clampL = (l: number): number => Math.min(97, Math.max(6, l));
-  const bg = hslToHex({ h: base.h, s: Math.min(sat, 14), l: clampL(bgL) });
-  // `surface` (cards/sections) carries the SEED (primary) hue as a soft tint, so
-  // cards read as a panel tinted by the user's ROOT color — not another white.
+  const clampSat = (lo: number, hi: number): number =>
+    Math.min(Math.max(sat, lo), hi);
+  // The palette trends INTENSE — the INTENSITY SLIDER is what mutes it. The page
+  // is the base surface; cards POP off it with clearly HIGHER saturation + a
+  // deeper lightness step; code/nested surfaces pop further still.
+  const bg = hslToHex({ h: base.h, s: clampSat(34, 56), l: clampL(bgL) });
+  // `surface` (cards/sections) on the SEED hue, deeper + more saturated so cards
+  // stand out as a panel tinted by the root color.
   const surface = hslToHex({
     h: isMono ? base.h : primaryHue,
-    s: Math.min(isMono ? sat : 24, 24),
-    l: clampL(bgL + step * 8),
+    s: clampSat(48, 68),
+    l: clampL(bgL + step * 9),
   });
-  // surfaceAlt (code/pre, nested cards) pulls a DIFFERENT hue + deeper step, so
-  // code blocks read as a distinctly different surface again.
+  // surfaceAlt (code/pre, nested cards) — a DIFFERENT hue, deeper + more
+  // saturated again, so code blocks read as a distinct, popping surface.
   const surfaceAlt = hslToHex({
     h: isMono ? base.h : altHue,
-    s: Math.min(isMono ? sat : 32, 32),
-    l: clampL(bgL + step * 15),
+    s: clampSat(56, 76),
+    l: clampL(bgL + step * 16),
   });
 
   // ---- body / secondary ink: colored, not flat ----------------------------
@@ -381,5 +390,34 @@ export const generatePalette = (seed: string, mode: ColorMode): Palette => {
     accents,
     roles,
     themeColors,
+  };
+};
+
+/** Flips a single hex's LIGHTNESS (l → 100 − l), keeping its hue + saturation. */
+const invertLightness = (hex: string): string => {
+  const c = hexToHsl(normalizeHex(hex));
+  return hslToHex({ h: c.h, s: c.s, l: 100 - c.l });
+};
+
+/**
+ * Returns a NEW palette with every derived color's lightness flipped — turning a
+ * light theme into a dark one (and vice versa) while keeping hues. `seed`/`mode`
+ * are untouched (the root-color identity stays). Self-inverse (mod rounding).
+ */
+export const invertPalette = (palette: Palette): Palette => {
+  const roles = { ...palette.roles } as unknown as Record<string, string>;
+  for (const k of Object.keys(roles)) {
+    roles[k] = invertLightness(roles[k]);
+  }
+  return {
+    ...palette,
+    surfaces: palette.surfaces.map(invertLightness),
+    accents: palette.accents.map(invertLightness),
+    swatches: palette.swatches.map(invertLightness),
+    roles: roles as unknown as PaletteRoles,
+    themeColors: palette.themeColors.map((tc) => ({
+      ...tc,
+      color: invertLightness(tc.color),
+    })),
   };
 };

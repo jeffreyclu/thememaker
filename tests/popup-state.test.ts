@@ -152,22 +152,11 @@ describe("popupReducer", () => {
     expect(next.intensity).toBe(80);
   });
 
-  it("setSeed records the seed AND turns off random (choosing implies intent)", () => {
-    const next = popupReducer(initialPopupState, {
-      type: "setSeed",
-      seed: "#abcdef",
-    });
-    expect(next.seed).toBe("#abcdef");
-    expect(next.useRandomSeed).toBe(false);
-  });
-
-  it("toggleRandomSeed flips the random-seed flag", () => {
-    // initial is useRandomSeed: true
-    const off = popupReducer(initialPopupState, { type: "toggleRandomSeed" });
-    expect(off.useRandomSeed).toBe(false);
-    expect(popupReducer(off, { type: "toggleRandomSeed" }).useRandomSeed).toBe(
-      true,
-    );
+  it("toggleInvert flips the invert flag (and back)", () => {
+    // initial is invert: false
+    const on = popupReducer(initialPopupState, { type: "toggleInvert" });
+    expect(on.invert).toBe(true);
+    expect(popupReducer(on, { type: "toggleInvert" }).invert).toBe(false);
   });
 
   it("setFavorites replaces the favorites list", () => {

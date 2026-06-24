@@ -155,6 +155,8 @@ export function removeSchemeStyle(): boolean {
   } catch {
     // localStorage unavailable — nothing to clear.
   }
+  // Drop the per-tag override layer too.
+  document.getElementById("themeMakerOverrides")?.remove();
   const old = document.getElementById(STYLE_ID);
   if (old) {
     old.remove();
@@ -1021,6 +1023,55 @@ export function applyAdaptiveScheme(
     w.__themeMakerWriting = false;
   }
   style.textContent = css;
+
+  // ---- per-tag custom overrides: a SEPARATE CSS layer ON TOP ---------------
+  // Customize is per-TAG: `options.overrides` maps `<tag>|<prop>` → exact hex.
+  // Emit a sibling <style id="themeMakerOverrides"> AFTER the main one so it
+  // wins. Real tags target `<tag>[data-thememaker]` (specificity 0,1,1, beating
+  // the engine's per-element `[data-thememaker="N"]` at 0,1,0); the page base
+  // uses a bare `html`/`body` rule (equal specificity, later source order wins).
+  const OVR_ID = "themeMakerOverrides";
+  const ovr = options.overrides || {};
+  const ovrKeys = Object.keys(ovr);
+  let ovrStyle = document.getElementById(OVR_ID) as HTMLStyleElement | null;
+  w.__themeMakerWriting = true;
+  if (ovrKeys.length === 0) {
+    if (ovrStyle) {
+      ovrStyle.remove();
+    }
+  } else {
+    const rules: string[] = [];
+    for (const key of ovrKeys) {
+      const val = ovr[key];
+      if (!val || !/^#[0-9a-fA-F]{6}$/.test(val)) {
+        continue;
+      }
+      const bar = key.indexOf("|");
+      const tag = (bar >= 0 ? key.slice(0, bar) : key).toLowerCase();
+      const prop = bar >= 0 ? key.slice(bar + 1) : "background";
+      if (!/^[a-z][a-z0-9-]*$/.test(tag)) {
+        continue; // only safe element names
+      }
+      const cssProp = prop === "background" ? "background-color" : "color";
+      // `page` → both html + body; html/body → bare tag; everything else →
+      // `tag[data-thememaker]` (beats the engine's per-element rules).
+      const sel =
+        tag === "page"
+          ? "html, body"
+          : tag === "html" || tag === "body"
+            ? tag
+            : `${tag}[data-thememaker]`;
+      rules.push(`${sel}{${cssProp}:${val} !important}`);
+    }
+    if (!ovrStyle) {
+      ovrStyle = document.createElement("style");
+      ovrStyle.id = OVR_ID;
+    }
+    // (Re-)append so it stays AFTER #themeMaker in source order.
+    head.appendChild(ovrStyle);
+    ovrStyle.textContent = rules.join("\n");
+  }
+  w.__themeMakerWriting = false;
 
   // ---- MutationObserver: INCREMENTAL + debounced re-theme -----------------
   if (w.__themeMakerObserver) {

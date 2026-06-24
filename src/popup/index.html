@@ -18,38 +18,6 @@
       </div>
 
       <div class="popup__row">
-        <label class="popup__label" for="seed-color">Seed</label>
-        <input
-          id="seed-color"
-          class="seed__color"
-          type="color"
-          value="#4f46e5"
-          aria-label="Seed color"
-        />
-        <input
-          id="seed-hex"
-          class="seed__hex"
-          type="text"
-          value="#4f46e5"
-          maxlength="7"
-          spellcheck="false"
-          autocomplete="off"
-          aria-label="Seed color hex"
-        />
-        <button
-          id="seed-random"
-          class="toggle"
-          type="button"
-          role="switch"
-          aria-checked="true"
-          aria-label="Use a random seed"
-          title="Use a random seed each time"
-        >
-          <span class="toggle__track"><span class="toggle__thumb"></span></span>
-        </button>
-      </div>
-
-      <div class="popup__row">
         <label class="popup__label" for="intensity">Intensity</label>
         <input
           id="intensity"
@@ -68,12 +36,34 @@
         >
       </div>
 
+      <div class="popup__row popup__row--between">
+        <span class="popup__label" id="invert-label">Invert (dark)</span>
+        <button
+          id="invert-toggle"
+          class="toggle"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-labelledby="invert-label"
+        >
+          <span class="toggle__track"><span class="toggle__thumb"></span></span>
+        </button>
+      </div>
+
       <div class="popup__actions">
         <button id="generate" class="btn btn--primary" type="button">
           Generate
         </button>
-        <button id="apply" class="btn" type="button" disabled>Apply</button>
+        <button id="favorite-save" class="btn" type="button" disabled>
+          Save
+        </button>
         <button id="reset" class="btn" type="button" disabled>Reset</button>
+      </div>
+
+      <div class="popup__actions">
+        <button id="customize" class="btn" type="button" disabled>
+          Customize…
+        </button>
       </div>
 
       <p id="status" class="popup__status" role="status" aria-live="polite"></p>
@@ -94,35 +84,6 @@
 
       <section class="popup__section">
         <button
-          id="customize-toggle"
-          class="disclosure"
-          type="button"
-          aria-expanded="false"
-          aria-controls="customize-panel"
-          disabled
-        >
-          Customize
-        </button>
-        <div id="customize-panel" class="disclosure-panel" hidden>
-          <div class="customize__actions">
-            <button id="pick" class="btn btn--small" type="button">
-              Pick element
-            </button>
-            <button id="overrides-clear" class="btn btn--small" type="button">
-              Clear all
-            </button>
-          </div>
-          <p id="customize-hint" class="customize__hint"></p>
-          <ul
-            id="overrides"
-            class="overrides"
-            aria-label="Custom color overrides"
-          ></ul>
-        </div>
-      </section>
-
-      <section class="popup__section">
-        <button
           id="favorites-toggle"
           class="disclosure"
           type="button"
@@ -132,26 +93,6 @@
           Favorites
         </button>
         <div id="favorites-panel" class="disclosure-panel" hidden>
-          <div class="favorites__save">
-            <input
-              id="favorite-name"
-              class="favorites__name"
-              type="text"
-              placeholder="Name this scheme"
-              maxlength="60"
-              spellcheck="false"
-              autocomplete="off"
-              aria-label="Favorite name"
-            />
-            <button
-              id="favorite-save"
-              class="btn btn--small"
-              type="button"
-              disabled
-            >
-              Save
-            </button>
-          </div>
           <ul
             id="favorites"
             class="favorites"

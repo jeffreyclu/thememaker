@@ -1,241 +1,230 @@
 /**
- * Custom-theme OVERRIDES + single-element role classifier.
+ * Custom-theme OVERRIDES — now PER-TAG, applied as a SEPARATE CSS layer.
  *
- * Covers:
- *  - `roleOfElement` / `overrideKeyForElement`: one synthetic element → its
- *    semantic role / override-key, using the SAME classification as the engine
- *    walk (classifyText / classifySurface / classifyButton).
- *  - `applyOverridesToRoles`: override key → hex replaces only that role,
- *    ignores junk, never mutates the input.
- *  - `buildMapping` with `options.overrides`: the override color is used for that
- *    role, the AA floor still holds, other roles are unchanged, and an overridden
- *    SURFACE re-floors its text.
+ * Customize records overrides keyed by `"<tag>|<prop>"` (prop = "background" |
+ * "color") with EXACT `#rrggbb` values (no AA floor — a deliberate manual
+ * choice). The engine emits a sibling `<style id="themeMakerOverrides">` AFTER
+ * the main `<style id="themeMaker">` so it wins:
+ *   - a real tag → `tag[data-thememaker]{ background-color|color: hex !important }`
+ *     (specificity 0,1,1 — beats the engine's per-element `[data-thememaker="N"]`);
+ *   - `html`/`body` → a BARE selector (later source order wins at equal spec);
+ *   - the sentinel tag `page` → `html, body`.
+ * The layer is cleared on reset (`removeSchemeStyle` drops it).
+ *
+ * This file also covers the picker's PURE per-tag model
+ * (`picker-panel-model.ts`): row derivation, label formatting (incl. the `page`
+ * sentinel), and the immutable add/edit/remove transitions.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  applyOverridesToRoles,
-  buildMapping,
-  overrideKeyForElement,
-  roleOfElement,
-  OVERRIDE_KEY_BY_ROLE,
-  type DetectedNode,
-  type RoleClassifierInput,
-} from "../src/lib/mapping";
+  STYLE_ELEMENT_ID,
+  applyAdaptiveScheme,
+  removeSchemeStyle,
+} from "../src/lib/inject";
 import { generatePalette } from "../src/lib/palette";
-import { contrastRatio, AA_NORMAL, AA_LARGE } from "../src/lib/color";
+import {
+  FALLBACK_COLOR,
+  overrideRows,
+  roleLabel,
+  withPickedRole,
+  withRoleColor,
+  withoutRole,
+} from "../src/content/picker-panel-model";
 
+const OVERRIDES_ID = "themeMakerOverrides";
 const palette = generatePalette("#3a7bd5", "triad");
 
-const el = (extra: Partial<RoleClassifierInput>): RoleClassifierInput => ({
-  tagName: "div",
-  ...extra,
-});
+/** The CSS text of the override layer (empty string when absent). */
+const overrideCss = (): string =>
+  document.getElementById(OVERRIDES_ID)?.textContent ?? "";
 
-describe("roleOfElement (single-element classifier)", () => {
-  it("classifies TEXT elements the same way the walk does", () => {
-    expect(roleOfElement(el({ tagName: "h1" }))).toBe("heading");
-    expect(roleOfElement(el({ tagName: "h2" }))).toBe("heading");
-    expect(roleOfElement(el({ tagName: "h3" }))).toBe("subheading");
-    expect(roleOfElement(el({ tagName: "a" }))).toBe("link");
-    expect(roleOfElement(el({ tagName: "small" }))).toBe("muted");
-    expect(roleOfElement(el({ tagName: "p" }))).toBe("body");
-    expect(roleOfElement(el({ tagName: "strong" }))).toBe("emphasis");
-    expect(
-      roleOfElement(el({ tagName: "blockquote", hasOwnBackground: false })),
-    ).toBe("quote");
-    expect(
-      roleOfElement(el({ tagName: "span", className: "text-muted" })),
-    ).toBe("muted");
+describe("per-tag override CSS layer (live path in inject.ts)", () => {
+  afterEach(() => {
+    removeSchemeStyle();
+    document.head.innerHTML = "";
+    document.body.innerHTML = "";
   });
 
-  it("classifies SURFACE elements (own background) into surface roles", () => {
-    expect(
-      roleOfElement(el({ tagName: "section", hasOwnBackground: true })),
-    ).toBe("card");
-    expect(roleOfElement(el({ tagName: "pre", hasOwnBackground: true }))).toBe(
-      "code",
-    );
-    expect(
-      roleOfElement(el({ tagName: "header", hasOwnBackground: true })),
-    ).toBe("banner");
-    expect(
-      roleOfElement(el({ tagName: "aside", hasOwnBackground: true })),
-    ).toBe("complementary");
-    expect(roleOfElement(el({ tagName: "div", hasOwnBackground: true }))).toBe(
-      "surface",
-    );
-  });
-
-  it("classifies BUTTONS into primary/secondary (class > text > order)", () => {
-    expect(roleOfElement(el({ tagName: "button", buttonLike: true }))).toBe(
-      "primaryButton",
-    );
-    expect(
-      roleOfElement(
-        el({ tagName: "button", buttonLike: true, className: "btn-secondary" }),
-      ),
-    ).toBe("secondaryButton");
-    expect(
-      roleOfElement(
-        el({ tagName: "button", buttonLike: true, text: "cancel" }),
-      ),
-    ).toBe("secondaryButton");
-    // second button in document order → secondary
-    expect(
-      roleOfElement(
-        el({ tagName: "button", buttonLike: true, buttonOrder: 1 }),
-      ),
-    ).toBe("secondaryButton");
-  });
-
-  it("overrideKeyForElement maps roles to palette-role keys", () => {
-    expect(overrideKeyForElement(el({ tagName: "h1" }))).toBe("heading");
-    expect(overrideKeyForElement(el({ tagName: "a" }))).toBe("link");
-    expect(overrideKeyForElement(el({ tagName: "p" }))).toBe("textPrimary");
-    expect(
-      overrideKeyForElement(el({ tagName: "button", buttonLike: true })),
-    ).toBe("primary");
-    expect(
-      overrideKeyForElement(el({ tagName: "section", hasOwnBackground: true })),
-    ).toBe("surface");
-  });
-
-  it("every semantic role maps to a real PaletteRoles key", () => {
-    for (const key of Object.values(OVERRIDE_KEY_BY_ROLE)) {
-      expect(palette.roles).toHaveProperty(key);
-    }
-  });
-});
-
-describe("applyOverridesToRoles", () => {
-  it("replaces only the overridden role; leaves others untouched", () => {
-    const next = applyOverridesToRoles(palette.roles, { heading: "#ff0000" });
-    expect(next.heading).toBe("#ff0000");
-    expect(next.link).toBe(palette.roles.link);
-    expect(next.primary).toBe(palette.roles.primary);
-  });
-
-  it("normalizes hex and ignores unknown keys / non-hex values", () => {
-    const next = applyOverridesToRoles(palette.roles, {
-      heading: "#ABC", // short hex → normalized
-      bogusKey: "#123456", // unknown role → ignored
-      link: "not-a-color", // invalid → ignored
+  it("emits `tag[data-thememaker]{ prop: hex !important }` for a real tag", () => {
+    document.body.innerHTML = "<div>x</div><h3>y</h3>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "div|background": "#112233", "h3|color": "#445566" },
     });
-    expect(next.heading).toBe("#aabbcc");
-    expect(next).not.toHaveProperty("bogusKey");
-    expect(next.link).toBe(palette.roles.link); // unchanged
+    const css = overrideCss();
+    expect(css).toContain(
+      "div[data-thememaker]{background-color:#112233 !important}",
+    );
+    expect(css).toContain("h3[data-thememaker]{color:#445566 !important}");
   });
 
-  it("returns the same roles object reference when no overrides", () => {
-    expect(applyOverridesToRoles(palette.roles, undefined)).toBe(palette.roles);
-  });
-
-  it("does not mutate the input roles", () => {
-    const before = { ...palette.roles };
-    applyOverridesToRoles(palette.roles, { heading: "#ff0000" });
-    expect(palette.roles).toStrictEqual(before);
-  });
-});
-
-describe("buildMapping with overrides", () => {
-  const page = (): DetectedNode[] => [
-    {
-      selector: "body",
-      role: "surface",
-      tagName: "body",
-      bgColor: "#ffffff",
-      luminance: 1,
-    },
-    {
-      selector: "[h1]",
-      role: "text",
-      tagName: "h1",
-      textColor: "#000000",
-      luminance: 0,
-      parent: 0,
-    },
-    {
-      selector: "[a]",
-      role: "text",
-      tagName: "a",
-      textColor: "#000000",
-      luminance: 0,
-      parent: 0,
-    },
-  ];
-
-  const colorOf = (
-    decisions: ReturnType<typeof buildMapping>["decisions"],
-    sel: string,
-  ) => (decisions.find((d) => d.selector === sel)?.color ?? "").toLowerCase();
-
-  it("uses the override color for the overridden role (readable on bg → exact)", () => {
-    // #1565c0 is readable on a white bg, so at full intensity it is painted exactly.
-    const { decisions } = buildMapping(page(), [], palette, {
+  it("uses the EXACT hex (no AA floor — overrides are a manual choice)", () => {
+    document.body.innerHTML = "<p>x</p>";
+    // A pale-yellow text override on a light page would be relit by the engine's
+    // AA floor — but per-tag overrides are exact, so it's emitted verbatim.
+    applyAdaptiveScheme(palette, {
       intensity: 100,
-      overrides: { heading: "#1565c0" },
+      overrides: { "p|color": "#fffbe0" },
     });
-    expect(colorOf(decisions, "[h1]")).toBe("#1565c0");
-  });
-
-  it("AA floor STILL holds for an unreadable override (relit, not collapsed)", () => {
-    // Override heading to pale yellow — unreadable on white. The engine must
-    // relight it to a readable shade of the SAME hue (not leave it invisible).
-    const { decisions, baseBackground } = buildMapping(page(), [], palette, {
-      intensity: 100,
-      overrides: { heading: "#fffbe0" },
-    });
-    const h1 = colorOf(decisions, "[h1]");
-    // It changed (was floored)...
-    expect(h1).not.toBe("#fffbe0");
-    // ...and now meets AA-large against the base background.
-    expect(contrastRatio(h1, baseBackground)).toBeGreaterThanOrEqual(AA_LARGE);
-  });
-
-  it("leaves OTHER roles exactly as the generated theme", () => {
-    const withOverride = buildMapping(page(), [], palette, {
-      intensity: 100,
-      overrides: { heading: "#ff0000" },
-    });
-    const without = buildMapping(page(), [], palette, { intensity: 100 });
-    // The link (untouched role) is identical with and without the override.
-    expect(colorOf(withOverride.decisions, "[a]")).toBe(
-      colorOf(without.decisions, "[a]"),
+    expect(overrideCss()).toContain(
+      "p[data-thememaker]{color:#fffbe0 !important}",
     );
   });
 
-  it("an overridden SURFACE re-floors its text against the new fill", () => {
-    // A primary button overridden to a very dark fill → its label must re-floor
-    // to stay AA against that dark background.
-    const surfacePage: DetectedNode[] = [
-      {
-        selector: "[btn]",
-        role: "surface",
-        tagName: "button",
-        buttonLike: true,
-        bgColor: "#dddddd",
-        textColor: "#000000",
-        luminance: 0.8,
+  it("maps the `page` sentinel to a bare `html, body` rule", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "page|background": "#abcdef" },
+    });
+    expect(overrideCss()).toContain(
+      "html, body{background-color:#abcdef !important}",
+    );
+    // NOT scoped by [data-thememaker] — it recolors the page base directly.
+    expect(overrideCss()).not.toContain("page[data-thememaker]");
+  });
+
+  it("uses bare `html`/`body` selectors for the html/body tags", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "html|background": "#0a0b0c", "body|background": "#0d0e0f" },
+    });
+    const css = overrideCss();
+    expect(css).toContain("html{background-color:#0a0b0c !important}");
+    expect(css).toContain("body{background-color:#0d0e0f !important}");
+  });
+
+  it("places the override layer AFTER the main #themeMaker style (so it wins)", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "div|background": "#112233" },
+    });
+    const main = document.getElementById(STYLE_ELEMENT_ID)!;
+    const ovr = document.getElementById(OVERRIDES_ID)!;
+    expect(main).toBeTruthy();
+    expect(ovr).toBeTruthy();
+    // ovr follows main in document order.
+    expect(
+      main.compareDocumentPosition(ovr) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it("emits NO override style when there are no overrides", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, { intensity: 80, overrides: {} });
+    expect(document.getElementById(OVERRIDES_ID)).toBeNull();
+  });
+
+  it("skips invalid hex values and unsafe tag names", () => {
+    document.body.innerHTML = "<div>x</div><span>y</span>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: {
+        "div|background": "not-a-color", // invalid hex → skipped
+        "sc ript|background": "#123456", // unsafe tag name → skipped
+        "span|color": "#abcdef", // valid → kept
       },
-    ];
-    const { decisions } = buildMapping(surfacePage, [], palette, {
-      intensity: 100,
-      overrides: { primary: "#0a0a0a" },
     });
-    const d = decisions.find((x) => x.selector === "[btn]");
-    expect(d?.background?.toLowerCase()).toBe("#0a0a0a"); // surfaces are not floored
-    // Its label is AA against the new dark fill.
-    expect(
-      contrastRatio(d?.color as string, d?.background as string),
-    ).toBeGreaterThanOrEqual(AA_NORMAL);
+    const css = overrideCss();
+    expect(css).not.toContain("not-a-color");
+    expect(css).not.toContain("#123456");
+    expect(css).toContain("span[data-thememaker]{color:#abcdef !important}");
   });
 
-  it("the page base (bg override) recolors html/body", () => {
-    const { baseBackground } = buildMapping(page(), [], palette, {
-      intensity: 100,
-      overrides: { bg: "#101820" },
+  it("is cleared on reset (removeSchemeStyle drops the override layer)", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "div|background": "#112233" },
     });
-    expect(baseBackground.toLowerCase()).toBe("#101820");
+    expect(document.getElementById(OVERRIDES_ID)).toBeTruthy();
+    removeSchemeStyle();
+    expect(document.getElementById(OVERRIDES_ID)).toBeNull();
+    expect(document.getElementById(STYLE_ELEMENT_ID)).toBeNull();
+  });
+
+  it("removes a stale override layer when re-applied with no overrides", () => {
+    document.body.innerHTML = "<div>x</div>";
+    applyAdaptiveScheme(palette, {
+      intensity: 80,
+      overrides: { "div|background": "#112233" },
+    });
+    expect(document.getElementById(OVERRIDES_ID)).toBeTruthy();
+    // Re-apply the same theme with the overrides cleared → layer goes away.
+    applyAdaptiveScheme(palette, { intensity: 80, overrides: {} });
+    expect(document.getElementById(OVERRIDES_ID)).toBeNull();
+  });
+});
+
+describe("picker-panel-model — per-tag rows", () => {
+  it("roleLabel formats `<tag>|<prop>` (text vs background) and the page sentinel", () => {
+    expect(roleLabel("div|background")).toBe("div · background");
+    expect(roleLabel("h3|color")).toBe("h3 · text");
+    expect(roleLabel("a|color")).toBe("a · text");
+    // The page sentinel is special-cased.
+    expect(roleLabel("page|background")).toBe("Page · background");
+    // A bare key with no separator is returned as-is.
+    expect(roleLabel("weird")).toBe("weird");
+  });
+
+  it("overrideRows renders one row per override, normalizing the hex", () => {
+    const rows = overrideRows({
+      "div|background": "#ABCDEF",
+      "h3|color": "#123456",
+    });
+    expect(rows).toStrictEqual([
+      { role: "div|background", label: "div · background", color: "#abcdef" },
+      { role: "h3|color", label: "h3 · text", color: "#123456" },
+    ]);
+  });
+
+  it("overrideRows falls back to a neutral color for an invalid stored value", () => {
+    const rows = overrideRows({ "div|background": "garbage" });
+    expect(rows[0].color).toBe(FALLBACK_COLOR);
+  });
+});
+
+describe("picker-panel-model — immutable transitions", () => {
+  it("withPickedRole seeds a NEW key with the element's current color", () => {
+    const base = {};
+    const next = withPickedRole(base, "div|background", "#ABCDEF");
+    expect(next).toStrictEqual({ "div|background": "#abcdef" });
+    // pure — the input is untouched.
+    expect(base).toStrictEqual({});
+    expect(next).not.toBe(base);
+  });
+
+  it("withPickedRole keeps an existing key's value (re-pick is a no-op)", () => {
+    const base = { "div|background": "#111111" };
+    const next = withPickedRole(base, "div|background", "#999999");
+    // Same reference (nothing changed) and the original value is preserved.
+    expect(next).toBe(base);
+    expect(next["div|background"]).toBe("#111111");
+  });
+
+  it("withPickedRole seeds the FALLBACK color when the current color is invalid", () => {
+    const next = withPickedRole({}, "div|background", "nope");
+    expect(next["div|background"]).toBe(FALLBACK_COLOR);
+  });
+
+  it("withRoleColor sets an explicit (normalized) color; ignores invalid hex", () => {
+    const base = { "div|background": "#111111" };
+    expect(withRoleColor(base, "div|background", "#ABC")).toStrictEqual({
+      "div|background": "#aabbcc",
+    });
+    // Invalid hex → unchanged reference.
+    expect(withRoleColor(base, "div|background", "not-a-color")).toBe(base);
+  });
+
+  it("withoutRole removes a key immutably; missing key is a no-op", () => {
+    const base = { "div|background": "#111111", "h3|color": "#222222" };
+    const next = withoutRole(base, "div|background");
+    expect(next).toStrictEqual({ "h3|color": "#222222" });
+    expect(base).toHaveProperty("div|background"); // input untouched
+    // Removing an absent key returns the same reference.
+    expect(withoutRole(base, "nope|background")).toBe(base);
   });
 });

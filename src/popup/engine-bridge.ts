@@ -15,8 +15,10 @@ import { describeColor } from "../lib/color-names";
 import { isHexColor, normalizeHex } from "../lib/color";
 import { localPalette, apiPalette } from "../lib/color-source";
 import type { PaletteSourceDeps } from "../lib/color-source";
+import { invertPalette } from "../lib/palette";
 import type { Palette } from "../lib/palette";
 import type { ModeSelection } from "./state";
+import { DEFAULT_INTENSITY } from "../types";
 import type {
   ApplyOptions,
   ColorMode,
@@ -92,6 +94,8 @@ export interface GeneratePaletteOptions {
   seed?: string;
   /** Injected source deps (fetch + cache) for the API path. */
   deps?: PaletteSourceDeps;
+  /** Flip the generated palette light↔dark. */
+  invert?: boolean;
 }
 
 export interface GenerateResult {
@@ -113,9 +117,11 @@ export const generateForSelection = async (
   // color exactly as before.
   const seedHex = resolveSeed(opts.seed);
 
-  const palette: Palette = opts.online
+  const raw: Palette = opts.online
     ? await apiPalette(seedHex, mode, opts.deps)
     : localPalette(seedHex, mode);
+  // Invert (light↔dark) when requested; the slider still mutes from there.
+  const palette = opts.invert ? invertPalette(raw) : raw;
 
   // Name the seed locally so history/details show a real name (e.g. "Vivid
   // Blue") instead of the "scheme" placeholder.
@@ -124,7 +130,31 @@ export const generateForSelection = async (
     opts.intensity,
     describeColor(palette.seed),
   );
+  if (opts.invert) {
+    scheme.schemeDetails.invert = true;
+  }
   return { palette, scheme, options: { intensity: opts.intensity } };
+};
+
+/**
+ * Inverts an existing scheme's palette (light↔dark) for the live Invert toggle,
+ * preserving its intensity + overrides and flipping the stored `invert` flag.
+ * Returns the scheme unchanged when it carries no palette.
+ */
+export const invertScheme = (scheme: Scheme): Scheme => {
+  const details = scheme.schemeDetails;
+  if (!details.palette) {
+    return scheme;
+  }
+  const palette = invertPalette(details.palette);
+  const next = schemeFromPalette(
+    palette,
+    details.intensity ?? DEFAULT_INTENSITY,
+    describeColor(palette.seed),
+  );
+  next.schemeDetails.overrides = details.overrides;
+  next.schemeDetails.invert = !details.invert;
+  return next;
 };
 
 /**

@@ -7,8 +7,7 @@ import type { Scheme } from "../src/types";
 const settings: Settings = {
   mode: "random",
   intensity: 80,
-  seed: "#4f46e5",
-  useRandomSeed: true,
+  invert: false,
 };
 
 describe("hydratePartial — restoring a persisted theme into a fresh popup", () => {
@@ -56,5 +55,28 @@ describe("hydratePartial — restoring a persisted theme into a fresh popup", ()
     expect(partial.intensity).toBe(80);
     expect(partial.applied).toBe(false);
     expect(partial.siteEnabled).toBe(false);
+    // No saved scheme + settings.invert false → invert off.
+    expect(partial.invert).toBe(false);
+  });
+
+  it("restores the saved scheme's `invert` flag over the global setting", () => {
+    const saved: Scheme = {
+      schemeDetails: {
+        rootColor: "#3a7bd5",
+        colorMode: "triad",
+        intensity: 60,
+        invert: true,
+      },
+    };
+    const partial = hydratePartial({
+      settings, // settings.invert is false
+      history: [],
+      favorites: [],
+      origin: "https://github.com",
+      site: { enabled: true, savedScheme: saved },
+      applied: true,
+    });
+    // The per-scheme invert flag wins over the global default.
+    expect(partial.invert).toBe(true);
   });
 });
