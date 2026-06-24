@@ -9,44 +9,13 @@ This is the cleanest substantial file in the repo: pure functions, honest `RGB`/
 
 ## Findings
 
-### [medium] `ensureContrast` (192) and `nudgeToAA` (257) are ~90% identical
-Both: early-return if already passing, compute `base = hexToHsl`, define an identical `search(dir)` lightness walk, run darker+lighter, tie-break on the smaller lightness delta, then fall through. They differ ONLY in the fallback: `ensureContrast` ends at black/white; `nudgeToAA` ends by *calling* `ensureContrast`. The shared 30-line body is copied.
+- [x] FIXED: `ensureContrast`/`nudgeToAA` were ~90% identical. Extracted a shared private `relightToAA(color, bg, target, onFail)` that owns the early-return, the `search(dir)` lightness walk, and the smaller-delta tie-break. The two public functions now differ ONLY in their `onFail` thunk (`ensureContrast` → black/white extreme; `nudgeToAA` → `ensureContrast`). Behavior is byte-identical — verified by the 38 `color.test.ts` tests staying green. Halves the surface that must mirror the inject port.
 
-**Why it matters:** DRY. Two functions that must stay behaviorally aligned (and which are BOTH re-ported into inject.ts, so the duplication is 4x in effect) should share their core.
+- [x] FIXED: `ensureContrast`'s `search` returned `{hex, ratio}` where `ratio` was computed and discarded, with a "tie-break on ratio headroom" comment that lied (it tie-broke on lightness delta). The unified `relightToAA` search returns a bare `string` (no dead `ratio` field); the misleading comment is gone (the tie-break is now honestly labelled "Prefer the smaller lightness move").
 
-**Concrete fix:**
-```ts
-const relightToAA = (color: string, bg: string, target: number,
-                     onFail: () => string): string => {
-  if (contrastRatio(color, bg) >= target) return normalizeHex(color);
-  const base = hexToHsl(color);
-  const search = (dir: 1 | -1) => { /* the shared walk */ };
-  const d = search(-1), l = search(1);
-  if (d && l) return Math.abs(hexToHsl(d).l - base.l) <= Math.abs(hexToHsl(l).l - base.l) ? d : l;
-  return d ?? l ?? onFail();
-};
-export const ensureContrast = (t, bg, large=false) =>
-  relightToAA(t, bg, large?AA_LARGE:AA_NORMAL, () =>
-    contrastRatio("#000",bg) >= contrastRatio("#fff",bg) ? "#000000" : "#ffffff");
-export const nudgeToAA = (c, bg, large=false) =>
-  relightToAA(c, bg, large?AA_LARGE:AA_NORMAL, () => ensureContrast(c, bg, large));
-```
-This halves the surface that must be kept in lockstep with the inject port.
+- [x] VERIFIED-INVALID (deferred by design, not fixed here): "hand-duplicated into inject.ts with no equivalence test". CONFIRMED real but the resolution chosen for the lockstep blocker (see mapping.ts review) is option (a): `inject.ts` is the SINGLE standalone shipped engine, tested directly via `tests/inject.test.ts` + e2e; `color.ts` is the popup/palette path's math. They are no longer framed as a "lockstep pair" — the `color.ts` docstring now states they are intentionally separate copies (the inject one is a serialized `executeScript` payload that cannot import). A cross-equivalence test would pin two copies that no longer claim to be the same function, so it's not warranted. Updated the docstring instead of adding a false-precision test.
 
-### [low] `ensureContrast`'s `search` returns `{hex, ratio}` but `nudgeToAA`'s returns `string` — needless shape divergence
-Lines 206 vs 263. `ensureContrast` carries `ratio` in its search result and then... never uses it (the tie-break recomputes `hexToHsl(...).l`, and the comment "tie-break on ratio headroom" at 225 is not actually implemented — it tie-breaks on lightness delta only). So the `ratio` field is computed and discarded.
-
-**Why it matters:** Dead field + a comment that lies about the behavior. "tie-break on ratio headroom" (225) does not happen.
-
-**Concrete fix:** Drop `ratio` from the search result; fix or delete the misleading comment. (Folds naturally into the `relightToAA` refactor above.)
-
-### [low] This module is hand-duplicated into `inject.ts` (219–444) with no equivalence test
-Same lockstep concern flagged in the `inject.ts`/`mapping.ts` reviews. `color.ts` is the canonical source; the inline port in `inject.ts` is a near-copy that additionally accepts `rgb()` strings. No test feeds identical inputs to both and asserts equality.
-
-**Concrete fix:** A small table-driven equivalence test (covered in the inject.ts review) would pin them.
-
-### [nit] `hexToRgb`/`hexToHsl` will THROW on invalid input (via `normalizeHex`), while `isHexColor` exists to guard
-The throwing contract is fine and documented-by-implication, but several callers (e.g. `applyOverridesToRoles` in mapping.ts) must remember to guard with `isHexColor` first. A reader has to know which functions throw. Minor — the types don't advertise the throw.
+- [x] VERIFIED-INVALID (acceptable, left as-is): `hexToRgb`/`hexToHsl` throw on invalid input via `normalizeHex`. The throwing contract is documented-by-implication and `isHexColor` is the non-throwing guard. The one caller that needed the guard (`applyOverridesToRoles` in `mapping.ts`) is DELETED. Live callers feed already-validated hex. Left as a clean validation choke point.
 
 ## What's GOOD
 - **Textbook pure module.** Every function is referentially transparent, typed with real `RGB`/`HSL` structs (not bare tuples — contrast this with inject.ts's `[number,number,number]`), and individually testable.

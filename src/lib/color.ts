@@ -2,11 +2,15 @@
  * Pure color math — conversions, WCAG luminance/contrast, contrast enforcement,
  * and luminance bucketing.
  *
- * NOTHING here touches the DOM or `chrome.*`; it is fully unit-testable. The
- * in-page adaptive engine (`inject.ts`) carries a self-contained PORT of the
- * contrast/bucket logic (it cannot import across the `executeScript` boundary),
- * so this module is the canonical, tested reference for that math. Keep the two
- * in lockstep.
+ * NOTHING here touches the DOM or `chrome.*`; it is fully unit-testable. This is
+ * the color math for the popup/palette path (`palette.ts`, `color-source.ts`).
+ *
+ * The in-page engine (`inject.ts`) carries its OWN self-contained copy of the
+ * contrast/bucket math: it runs as a serialized `executeScript` payload and
+ * cannot import across that boundary, so it is the single source of truth for
+ * the page-side path and is tested directly (`tests/inject.test.ts`,
+ * `tests/overrides.test.ts`). The two copies are not mechanically coupled; a
+ * change to the contrast strategy must be made in both deliberately.
  */
 
 export interface RGB {
@@ -182,80 +186,21 @@ export const meetsContrast = (
 ): boolean => contrastRatio(text, bg) >= (large ? AA_LARGE : AA_NORMAL);
 
 /**
- * Adjusts `text`'s LIGHTNESS (preserving hue/saturation where possible) until it
- * meets WCAG AA against `bg`. Tries darkening AND lightening and keeps whichever
- * direction reaches the target with the most headroom; if neither hue-preserving
- * direction can reach it, falls back to pure black or white (whichever wins).
+ * Shared core for {@link ensureContrast} and {@link nudgeToAA}: relight `color`
+ * (preserving hue + saturation) to the NEAREST lightness that meets `target`
+ * against `bg`, walking both directions in fine steps so the move is minimal
+ * (least destructive). On a tie, prefers the smaller lightness delta. If neither
+ * hue-preserving direction can reach the target, defers to `onFail()`.
  *
- * GUARANTEE: the returned color always satisfies `meetsContrast(result, bg)`.
+ * The two public functions differ ONLY in that fallback thunk, so the search /
+ * tie-break body lives here once.
  */
-export const ensureContrast = (
-  text: string,
+const relightToAA = (
+  color: string,
   bg: string,
-  large = false,
+  target: number,
+  onFail: () => string,
 ): string => {
-  const target = large ? AA_LARGE : AA_NORMAL;
-  if (contrastRatio(text, bg) >= target) {
-    return normalizeHex(text);
-  }
-
-  const base = hexToHsl(text);
-
-  // Search both directions for the lightness that first meets the target,
-  // walking in fine steps so we move the MINIMUM needed (least destructive).
-  const search = (dir: 1 | -1): { hex: string; ratio: number } | null => {
-    for (let step = 1; step <= 100; step += 1) {
-      const l = base.l + dir * step;
-      if (l < 0 || l > 100) {
-        break;
-      }
-      const candidate = hslToHex({ ...base, l });
-      const ratio = contrastRatio(candidate, bg);
-      if (ratio >= target) {
-        return { hex: candidate, ratio };
-      }
-    }
-    return null;
-  };
-
-  const darker = search(-1);
-  const lighter = search(1);
-
-  if (darker && lighter) {
-    // Prefer the smaller lightness move; tie-break on ratio headroom.
-    const dDelta = Math.abs(hexToHsl(darker.hex).l - base.l);
-    const lDelta = Math.abs(hexToHsl(lighter.hex).l - base.l);
-    return dDelta <= lDelta ? darker.hex : lighter.hex;
-  }
-  if (darker) {
-    return darker.hex;
-  }
-  if (lighter) {
-    return lighter.hex;
-  }
-
-  // Hue-preserving adjustment can't reach AA (e.g. mid bg) — pick the extreme
-  // with the most contrast. This always meets AA for any realistic threshold.
-  const blackRatio = contrastRatio("#000000", bg);
-  const whiteRatio = contrastRatio("#ffffff", bg);
-  return blackRatio >= whiteRatio ? "#000000" : "#ffffff";
-};
-
-/**
- * Nudges `color` to the NEAREST shade of ITS OWN hue that meets WCAG AA against
- * `bg`, by walking lightness in fine steps (preserving hue + saturation).
- *
- * This is the anti-monochrome contrast strategy: when a saturated accent role
- * (a colorful link/heading/button) fails AA against the background it lands on,
- * we keep it COLORFUL — we shift only its lightness to the closest AA-passing
- * version of the SAME hue, rather than collapsing it to black/white (which is
- * what made multi-hue palettes read as grayscale). Only if no shade of the hue
- * can reach AA in either direction do we fall back to `ensureContrast` (which
- * ends at the better black/white extreme). Saturation is preserved so the role
- * keeps its identity; the result is GUARANTEED to meet AA.
- */
-export const nudgeToAA = (color: string, bg: string, large = false): string => {
-  const target = large ? AA_LARGE : AA_NORMAL;
   if (contrastRatio(color, bg) >= target) {
     return normalizeHex(color);
   }
@@ -277,19 +222,55 @@ export const nudgeToAA = (color: string, bg: string, large = false): string => {
   const darker = search(-1);
   const lighter = search(1);
   if (darker && lighter) {
+    // Prefer the smaller lightness move.
     const dDelta = Math.abs(hexToHsl(darker).l - base.l);
     const lDelta = Math.abs(hexToHsl(lighter).l - base.l);
     return dDelta <= lDelta ? darker : lighter;
   }
-  if (darker) {
-    return darker;
-  }
-  if (lighter) {
-    return lighter;
-  }
-  // No saturated shade of this hue reaches AA — fall back to the safe extreme.
-  return ensureContrast(color, bg, large);
+  return darker ?? lighter ?? onFail();
 };
+
+/**
+ * Adjusts `text`'s LIGHTNESS (preserving hue/saturation where possible) until it
+ * meets WCAG AA against `bg`. Tries darkening AND lightening and keeps whichever
+ * direction moves the least; if neither hue-preserving direction can reach it,
+ * falls back to pure black or white (whichever wins).
+ *
+ * GUARANTEE: the returned color always satisfies `meetsContrast(result, bg)`.
+ */
+export const ensureContrast = (
+  text: string,
+  bg: string,
+  large = false,
+): string =>
+  relightToAA(text, bg, large ? AA_LARGE : AA_NORMAL, () => {
+    // Hue-preserving adjustment can't reach AA (e.g. mid bg) — pick the extreme
+    // with the most contrast. This always meets AA for any realistic threshold.
+    const blackRatio = contrastRatio("#000000", bg);
+    const whiteRatio = contrastRatio("#ffffff", bg);
+    return blackRatio >= whiteRatio ? "#000000" : "#ffffff";
+  });
+
+/**
+ * Nudges `color` to the NEAREST shade of ITS OWN hue that meets WCAG AA against
+ * `bg`, by walking lightness in fine steps (preserving hue + saturation).
+ *
+ * This is the anti-monochrome contrast strategy: when a saturated accent role
+ * (a colorful link/heading/button) fails AA against the background it lands on,
+ * we keep it COLORFUL — we shift only its lightness to the closest AA-passing
+ * version of the SAME hue, rather than collapsing it to black/white (which is
+ * what made multi-hue palettes read as grayscale). Only if no shade of the hue
+ * can reach AA in either direction do we fall back to `ensureContrast` (which
+ * ends at the better black/white extreme). Saturation is preserved so the role
+ * keeps its identity; the result is GUARANTEED to meet AA.
+ *
+ * (Behaviorally identical to `ensureContrast` except for the last-resort
+ * fallback — both share {@link relightToAA}.)
+ */
+export const nudgeToAA = (color: string, bg: string, large = false): string =>
+  relightToAA(color, bg, large ? AA_LARGE : AA_NORMAL, () =>
+    ensureContrast(color, bg, large),
+  );
 
 /**
  * Linearly blends `from` toward `to` in sRGB space by factor `t` in [0, 1].

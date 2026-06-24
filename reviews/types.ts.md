@@ -9,32 +9,15 @@ Well-documented and the intensity helpers are clean. But this file is the SOURCE
 
 ## Findings
 
-### [high] `Scheme`'s index signature `[tag: string]: string | SchemeDetails | undefined` is the root of the codebase's `as string` casts
-Lines 101–104. `Scheme = { schemeDetails: SchemeDetails; [tagName: string]: string | SchemeDetails | undefined }`. This mixes the metadata key (`schemeDetails`) and arbitrary tag-color keys into one index type, so any iteration over a scheme yields `string | SchemeDetails | undefined` and every consumer must cast: `schemeDetailRows` (state.ts) `value as string`, `schemeSwatches` (view.ts) `value as string`, `buildSchemeStyle` (theme-engine.ts) `value as string` + `scheme["p"] as string`, `schemeFromPalette` (engine-bridge.ts) `{ } as Scheme`. The unsoundness is DEFINED here and PAID FOR in four files.
+- [x] FIXED: `Scheme`'s index signature `[tag: string]: string | SchemeDetails | undefined` is the root of the `as string` casts. Split into `interface Scheme { schemeDetails: SchemeDetails; colors: Record<string,string> }`. Iterating `scheme.colors` is now type-safe with NO casts. Removed the `value as string` casts in `state.ts` (`schemeDetailRows`) and `view.ts` (`schemeSwatches`), and the index write in `engine-bridge.ts` (`schemeFromPalette` builds a `colors` map). `theme-engine.ts`'s casts died with the dead engine. The single highest-leverage type fix in the repo.
 
-**Why it matters:** Honest types, codebase-wide. The comment calls this "loosely typed on purpose" (104) — but "on purpose" doesn't make the four downstream blind casts safe; it just relocates the blame here.
+- [x] FIXED (re-scoped after verification): `RoleOverrides` "serves two incompatible key grammars". VERIFIED the real picture: the live `inject.ts` engine DEFENSIVELY accepts BOTH grammars from the same `options.overrides` map — role keys (`k in roles`) are applied to `roles` (lines 492-500), and `<tag>|<prop>` keys are emitted as the override CSS layer (lines 1377-1431). But the ONLY production PRODUCER is the picker (`pickKeyFor`), which emits `<tag>|<prop>` keys; the role-keyed branch is a forward-looking capability nothing currently feeds (the dead role-keyed `applyOverridesToRoles` lived in the now-deleted `mapping.ts`). So splitting into two STRICT types would over-constrain a deliberately-permissive seam whose map can legitimately hold mixed keys that each consumer filters. Resolution: kept `RoleOverrides = Record<string,string>` (honest for a mixed-grammar map) but documented it precisely — added a `TagPropKey` template-literal type for the dominant grammar and re-wrote the doc to describe the `<tag>|<prop>` keys the picker emits and the engine parses defensively. Kept the exported NAME `RoleOverrides` so no rename ripples into other agents' popup files.
 
-**Concrete fix:** Split the two concerns: `interface Scheme { schemeDetails: SchemeDetails; colors: Record<string, string> }`. Iterating `scheme.colors` is then type-safe with no casts, and `schemeDetails` is a normal field. This one change removes blind casts from state.ts, view.ts, engine-bridge.ts (and obviates them in the doomed theme-engine.ts). It's the single highest-leverage type fix in the repo.
+- [x] FIXED: `ColorMode = string` discards a known finite taxonomy. Now a union of the seven modes — one source of truth for `config.modes`, the palette switch, and the popup `<select>`. Typos now fail to compile.
 
-### [medium] `RoleOverrides = Record<string,string>` is too loose and serves two incompatible key grammars
-Line 54. Documented as "semantic ROLE key → hex" (e.g. `heading`, `link`). But in practice the SAME type also carries the picker's `<tag>|<prop>` keys (e.g. `div|background`) — see picker-panel-model.ts, pick.ts, the inject.ts override block. So one type means two disjoint things depending on producer, and nothing distinguishes them.
+- [x] FIXED: `HtmlElements` type existed only for the dead v1 engine. Deleted it along with `config.htmlElements` and `theme-engine.ts`.
 
-**Why it matters:** Honest types / interface segregation. A `RoleOverrides` value could be `{heading:'#...'}` OR `{div|background:'#...'}` and the type can't tell you which — the two consumers (role-application vs tag-CSS) silently no-op on the wrong grammar.
-
-**Concrete fix:** Two types: `type RoleOverrides = Partial<Record<keyof PaletteRoles, string>>` and `type TagOverrides = Record<TagPropKey, string>` (template-literal keyed). `ApplyOptions.overrides` then declares which it carries. This also lets `applyOverridesToRoles` (mapping.ts) drop its `as unknown as` casts.
-
-### [medium] `ColorMode = string` discards a known finite taxonomy
-Line 9. The modes are exactly the seven in `config.modes` / `harmonyHues`. Typing it `string` means typos compile, the popup `<select>` value isn't checked, and `harmonyHues`'s `default` silently swallows unknowns.
-
-**Why it matters:** Honest types. A closed enum typed as open `string`.
-
-**Concrete fix:** `export type ColorMode = 'monochrome' | 'monochrome-dark' | 'monochrome-light' | 'complement' | 'analogic-complement' | 'triad' | 'quad';` — one source of truth for `config.modes`, the palette switch, and the select.
-
-### [low] `HtmlElements` type exists only for the dead v1 engine
-Line 71. `HtmlElements = Record<string,string[]>` is imported only by `theme-engine.ts` (dead) and `config.htmlElements` (dead). Delete with the v1 engine.
-
-### [low] `Intensity = number` and `ColorMode = string` are bare aliases that add doc but no constraint
-`Intensity = number` (24) carries great doc comments but no nominal typing — any number is an `Intensity`. `clampIntensity` is the real guard. Acceptable (TS has no cheap nominal types), but the alias is documentation, not enforcement.
+- [x] VERIFIED-INVALID (acceptable, left as-is): `Intensity = number` is a bare alias with no nominal constraint. TS has no cheap nominal types; `clampIntensity` is the real total-function guard. The review itself called this "acceptable". Left as documentation-with-a-guard.
 
 ## What's GOOD
 - **The intensity helpers are clean and correct**: `clampIntensity` handles non-finite input (`Number.isFinite(n) ? n : DEFAULT`), rounds, and clamps to `[MIN, 100]` — a proper total function with `MIN_INTENSITY`/`DEFAULT_INTENSITY` as named constants. The "0 is not selectable, here's why" reasoning is excellent.

@@ -7,7 +7,7 @@
  * here when the network fails.
  *
  * No DOM, no `chrome.*`. The output is a structured `Palette` consumed by the
- * mapping core (`mapping.ts`) and surfaced in the popup as swatches.
+ * in-page adaptive engine (`inject.ts`) and surfaced in the popup as swatches.
  *
  * ## Semantic roles (the anti-monochrome fix)
  *
@@ -20,17 +20,17 @@
  * link=hue B, primary=hue C); monochrome modes differentiate roles by lightness
  * / saturation steps so hierarchy stays clear. Backgrounds remain tinted, mostly
  * neutral "paper"; links / buttons / headings carry the saturated accent hues.
- * The mapping core (`mapping.ts`) then enforces AA on every pair.
+ * The in-page engine (`inject.ts`) then enforces AA on every pair.
  */
 import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "./color";
 import type { HSL } from "./color";
 import type { ColorMode } from "../types";
 
 /**
- * The concrete, named color slots the mapping core paints onto semantic element
- * roles. Derived from the seed + harmony hues so multi-hue modes VISIBLY use
- * multiple hues across roles. Every text-ish role (`textPrimary`, `heading`,
- * `link`, …) is a SEED color; the mapping core still AA-nudges it against the
+ * The concrete, named color slots the in-page engine paints onto semantic
+ * element roles. Derived from the seed + harmony hues so multi-hue modes VISIBLY
+ * use multiple hues across roles. Every text-ish role (`textPrimary`, `heading`,
+ * `link`, …) is a SEED color; the engine still AA-nudges it against the
  * actual painted background, so these need only be "the right hue, roughly the
  * right lightness", not pre-verified against any specific surface.
  */
@@ -149,8 +149,8 @@ const harmonyHues = (mode: ColorMode): number[] => {
  *    separated by lightness steps instead (heading darkest → link → accent).
  *  - `onPrimary`/`onSecondary` are the best-contrasting extreme for the fill.
  *
- * Every value stays inside readable bounds; the mapping core's AA pass is the
- * final guarantee, but these are chosen to rarely NEED a destructive nudge.
+ * Every value stays inside readable bounds; the engine's AA pass is the final
+ * guarantee, but these are chosen to rarely NEED a destructive nudge.
  */
 const deriveRoles = (
   base: HSL,
@@ -239,7 +239,7 @@ const deriveRoles = (
   // Primary = the user's ROOT color, verbatim (the SOT: the seed they picked is
   // the dominant accent painted on the page). We keep its exact hex so the swatch
   // the user sees IS what drives buttons/emphasis/card tint. The label color is
-  // whichever extreme best contrasts it (re-verified by the mapping AA pass).
+  // whichever extreme best contrasts it (re-verified by the engine's AA pass).
   const primary = hslToHex({ h: base.h, s: base.s, l: base.l });
   const onPrimary = luminanceOf(primary) < 0.4 ? "#ffffff" : "#111111";
 
@@ -366,7 +366,7 @@ export const generatePalette = (seed: string, mode: ColorMode): Palette => {
   );
 
   // Accents: harmony hues at a mid lightness, used as text/link/border seeds.
-  // (Contrast enforcement in the mapping core fixes these against each surface.)
+  // (Contrast enforcement in the in-page engine fixes these against each surface.)
   const accents = isMono
     ? [22, 38, 54, 70, 86].map((l) =>
         atLightness(base, Math.min(96, Math.max(8, l + monoBias))),
@@ -400,24 +400,35 @@ const invertLightness = (hex: string): string => {
 };
 
 /**
+ * Maps `fn` over every color in a {@link PaletteRoles}, preserving its fixed key
+ * set. Type-safe with NO `as unknown as` round-trip: the accumulator is typed as
+ * a partial `PaletteRoles` and the keys are narrowed to `keyof PaletteRoles`, so
+ * the result is a full `PaletteRoles` once every role is visited.
+ */
+const mapRoles = (
+  roles: PaletteRoles,
+  fn: (color: string) => string,
+): PaletteRoles => {
+  const out = {} as Record<keyof PaletteRoles, string>;
+  for (const key of Object.keys(roles) as (keyof PaletteRoles)[]) {
+    out[key] = fn(roles[key]);
+  }
+  return out;
+};
+
+/**
  * Returns a NEW palette with every derived color's lightness flipped — turning a
  * light theme into a dark one (and vice versa) while keeping hues. `seed`/`mode`
  * are untouched (the root-color identity stays). Self-inverse (mod rounding).
  */
-export const invertPalette = (palette: Palette): Palette => {
-  const roles = { ...palette.roles } as unknown as Record<string, string>;
-  for (const k of Object.keys(roles)) {
-    roles[k] = invertLightness(roles[k]);
-  }
-  return {
-    ...palette,
-    surfaces: palette.surfaces.map(invertLightness),
-    accents: palette.accents.map(invertLightness),
-    swatches: palette.swatches.map(invertLightness),
-    roles: roles as unknown as PaletteRoles,
-    themeColors: palette.themeColors.map((tc) => ({
-      ...tc,
-      color: invertLightness(tc.color),
-    })),
-  };
-};
+export const invertPalette = (palette: Palette): Palette => ({
+  ...palette,
+  surfaces: palette.surfaces.map(invertLightness),
+  accents: palette.accents.map(invertLightness),
+  swatches: palette.swatches.map(invertLightness),
+  roles: mapRoles(palette.roles, invertLightness),
+  themeColors: palette.themeColors.map((tc) => ({
+    ...tc,
+    color: invertLightness(tc.color),
+  })),
+});

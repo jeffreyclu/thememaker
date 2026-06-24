@@ -7,3 +7,6 @@ stats.html
 test-results/
 playwright-report/
 .playwright/
+
+# Private interview-prep notes (not for the public repo)
+ELI5.md

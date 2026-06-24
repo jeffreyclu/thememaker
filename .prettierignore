@@ -4,3 +4,5 @@ package-lock.json
 *.png
 test-results/
 playwright-report/
+reviews/
+ELI5.md

@@ -204,7 +204,10 @@ const applyAndPersist = async (s: PickerSession): Promise<void> => {
   // Build/refresh the saved scheme: carry the live palette + intensity +
   // overrides so `loadDecision` reapplies the exact custom theme next load.
   const savedScheme: Scheme = {
-    ...(site.savedScheme ?? { schemeDetails: {} as Scheme["schemeDetails"] }),
+    ...(site.savedScheme ?? {
+      colors: {},
+      schemeDetails: {} as Scheme["schemeDetails"],
+    }),
     schemeDetails: {
       ...(prevDetails ?? {
         rootColor: s.palette.seed,

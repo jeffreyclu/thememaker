@@ -198,16 +198,12 @@ describe("popup selectors / helpers", () => {
     );
   });
 
-  it("schemeDetailRows groups tags by color", () => {
+  it("schemeDetailRows groups labels by color", () => {
     const rows = schemeDetailRows(mockScheme);
-    // body+main+div share the first color
-    const bodyRow = rows.find((r) => r.color === "#6F928B");
-    expect(bodyRow?.tags.split(",").sort()).toStrictEqual([
-      "body",
-      "div",
-      "main",
-    ]);
-    // schemeDetails is never a row
+    // the `primary` label carries the seed-derived color
+    const primaryRow = rows.find((r) => r.color === "#6F928B");
+    expect(primaryRow?.tags.split(",").sort()).toStrictEqual(["primary"]);
+    // one row per distinct color in `colors`, never the metadata
     expect(rows.some((r) => r.tags.includes("schemeDetails"))).toBe(false);
   });
 
@@ -246,11 +242,11 @@ describe("engine-bridge palette glue", () => {
     expect(scheme.schemeDetails.rootColor).toBe(mockPalette.seed);
     expect(scheme.schemeDetails.colorMode).toBe(mockPalette.mode);
     expect(scheme.schemeDetails.rootColorName).toBe("Sea Green");
-    // SOURCE-OF-TRUTH theme colors surfaced as ROLE-labeled pseudo-keys for the
-    // display renderers (so a swatch == a painted color, labeled by role).
-    expect(scheme.primary).toBe(mockPalette.roles.primary);
-    expect(scheme.primary).toBe(mockPalette.seed); // primary = the root color
-    expect(scheme.heading).toBe(mockPalette.roles.heading);
+    // SOURCE-OF-TRUTH theme colors surfaced in the role-labeled `colors` map for
+    // the display renderers (so a swatch == a painted color, labeled by role).
+    expect(scheme.colors.primary).toBe(mockPalette.roles.primary);
+    expect(scheme.colors.primary).toBe(mockPalette.seed); // primary = the root color
+    expect(scheme.colors.heading).toBe(mockPalette.roles.heading);
   });
 
   it("applyPayloadForScheme uses the stored palette when present", () => {

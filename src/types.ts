@@ -5,8 +5,21 @@
  * adaptive engine in later phases will tighten them.
  */
 
-/** A color mode accepted by thecolorapi.com (e.g. "monochrome", "triad"). */
-export type ColorMode = string;
+/**
+ * A color mode. This is the closed, finite taxonomy the palette generator and
+ * thecolorapi.com both understand — the single source of truth for
+ * {@link import("./config").modes}, the palette `harmonyHues` switch, and the
+ * popup mode `<select>`. Typing it as a union (not bare `string`) means typos
+ * fail to compile and the `<select>` value is checked.
+ */
+export type ColorMode =
+  | "monochrome"
+  | "monochrome-dark"
+  | "monochrome-light"
+  | "complement"
+  | "analogic-complement"
+  | "triad"
+  | "quad";
 
 /**
  * How aggressively the adaptive engine repaints a page, as a dial that drives a
@@ -44,12 +57,26 @@ export const clampIntensity = (n: number): Intensity =>
   );
 
 /**
- * A custom-theme override map: semantic ROLE key → hex color. Keys are
- * {@link import("./lib/palette").PaletteRoles} property names (e.g. `heading`,
- * `link`, `textPrimary`, `primary`, `surface`). An override REPLACES the
- * generated color for that role; the engine still runs it through the existing
- * AA readability floor (`nudgeToAA`) so it never paints unreadable text. Roles
- * absent from the map keep their generated, contrast-safe colors.
+ * A `<tag>|<prop>` override key produced by the element picker, e.g.
+ * `div|background`, `p|color`, or the special `page|background`. The part before
+ * `|` is a lowercase HTML tag name (or `page`/`html`/`body`); the part after is
+ * the CSS aspect being overridden. This is the SINGLE override grammar the live
+ * engine speaks — `inject.ts`'s override layer parses exactly these keys into a
+ * CSS rule.
+ */
+export type TagPropKey = `${string}|background` | `${string}|color`;
+
+/**
+ * A custom-theme override map: `<tag>|<prop>` key → exact hex color. Keys are
+ * {@link TagPropKey}s emitted by the in-page element picker (e.g.
+ * `div|background`, `p|color`, `page|background`). An override paints that exact
+ * color as a CSS layer ON TOP of the generated theme (see the override block in
+ * `inject.ts`); tags/props absent from the map keep their generated colors.
+ *
+ * The key type is widened to `string` (not the strict `TagPropKey` template
+ * literal) because the keys are produced at runtime from arbitrary clicked DOM
+ * elements and flow through `Object.entries`/storage as plain string keys; the
+ * `inject.ts` parser validates the tag name and prop defensively.
  */
 export type RoleOverrides = Record<string, string>;
 
@@ -63,12 +90,6 @@ export interface ApplyOptions {
    */
   overrides?: RoleOverrides;
 }
-
-/**
- * Buckets of HTML tag names grouped by the role they play when themed.
- * Each value is an array of tag names.
- */
-export type HtmlElements = Record<string, string[]>;
 
 /** Metadata describing how a scheme was seeded/generated. */
 export interface SchemeDetails {
@@ -94,11 +115,17 @@ export interface SchemeDetails {
 }
 
 /**
- * A generated color scheme: a map of tag name -> hex color, plus the
- * `schemeDetails` metadata key. The dynamic tag keys make this loosely typed
- * on purpose.
+ * A generated color scheme. `schemeDetails` carries the seed/palette metadata
+ * the engine actually reapplies from; `colors` is a DISPLAY-ONLY map of
+ * role-label → hex used by the popup's swatch/detail renderers (the in-page
+ * engine paints from the palette, not from these per-label colors).
+ *
+ * The two concerns are split into distinct fields (rather than a single open
+ * index signature) so iterating `colors` is type-safe — every value is a
+ * `string` with no cast — and `schemeDetails` stays a normal typed field.
  */
 export interface Scheme {
   schemeDetails: SchemeDetails;
-  [tagName: string]: string | SchemeDetails | undefined;
+  /** Display-only role-label → hex color map (popup swatches/details). */
+  colors: Record<string, string>;
 }

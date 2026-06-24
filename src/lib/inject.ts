@@ -35,9 +35,14 @@
  * `<style id="themeMaker">` IN PLACE (no themeless gap → no flash), and installs
  * an INCREMENTAL, debounced, TIME-SLICED `MutationObserver` for SPA/lazy content.
  *
- * The algorithm is a SELF-CONTAINED port of the canonical, unit-tested core in
- * `src/lib/mapping.ts` + `src/lib/color.ts` (kept in lockstep on the COLORS the
- * two produce).
+ * This is the SINGLE source of truth for the adaptive mapping/role algorithm —
+ * it must be self-contained (serialized payload, no imports), so the algorithm
+ * lives here and nowhere else. It is tested DIRECTLY via `tests/inject.test.ts`
+ * (DOM apply under jsdom), `tests/overrides.test.ts`, and the Playwright e2e
+ * specs. The pure COLOR math (hex/hsl/contrast/AA) is necessarily hand-ported
+ * from the canonical `src/lib/color.ts` (the popup/palette path's tested copy),
+ * because this payload cannot import it; a contrast change must be made in both
+ * deliberately.
  */
 import { isHexColor, normalizeHex } from "./color";
 import type { Palette } from "./palette";
@@ -202,8 +207,9 @@ export function isSchemeApplied(): boolean {
  * The v2 adaptive engine, IN-PAGE entry point.
  *
  * Self-contained by necessity (serialized to the page): all color math, role
- * detection, mapping, and contrast enforcement are inlined here. This mirrors
- * the canonical pure modules (`color.ts` / `mapping.ts`) which carry the tests.
+ * detection, mapping, and contrast enforcement are inlined here. This IS the
+ * canonical mapping/role algorithm (tested via `tests/inject.test.ts` + e2e);
+ * only the pure color math mirrors `color.ts` (which carries its own tests).
  *
  * @param palette the generated palette (surfaces ascending by luminance).
  * @param options apply options (numeric 0–100 intensity = theme-vs-original blend).
@@ -345,54 +351,17 @@ export function applyAdaptiveScheme(
     return (hi + 0.05) / (lo + 0.05);
   };
 
-  const ensureContrast = (text: string, bg: string, large: boolean): string => {
-    const target = large ? 3 : 4.5;
-    if (contrast(text, bg) >= target) {
-      return text;
-    }
-    const rgb = parseColor(text) || [51, 51, 51];
-    const base = rgbToHsl(rgb);
-    const search = (dir: number): string | null => {
-      for (let step = 1; step <= 100; step += 1) {
-        const l = base[2] + dir * step;
-        if (l < 0 || l > 100) {
-          break;
-        }
-        const cand = hslToHex([base[0], base[1], l]);
-        if (contrast(cand, bg) >= target) {
-          return cand;
-        }
-      }
-      return null;
-    };
-    const darker = search(-1);
-    const lighter = search(1);
-    if (darker && lighter) {
-      const dDelta = Math.abs(
-        rgbToHsl(parseColor(darker) as [number, number, number])[2] - base[2],
-      );
-      const lDelta = Math.abs(
-        rgbToHsl(parseColor(lighter) as [number, number, number])[2] - base[2],
-      );
-      return dDelta <= lDelta ? darker : lighter;
-    }
-    if (darker) {
-      return darker;
-    }
-    if (lighter) {
-      return lighter;
-    }
-    return contrast("#000000", bg) >= contrast("#ffffff", bg)
-      ? "#000000"
-      : "#ffffff";
-  };
-
-  // Nudge a color to the NEAREST shade of ITS OWN hue that meets AA against bg
-  // (preserving hue + saturation), only falling back to black/white when no
-  // shade of the hue can reach AA. This is the anti-monochrome contrast path:
-  // a colorful accent (link/heading/button) stays its color, just relit. Port
-  // of `nudgeToAA` in src/lib/color.ts.
-  const nudgeToAA = (color: string, bg: string, large: boolean): string => {
+  // Shared core for `ensureContrast`/`nudgeToAA` below: relight `color`
+  // (preserving hue + saturation) to the nearest lightness that meets AA against
+  // `bg`, walking both directions and preferring the smaller move. Defers to
+  // `onFail()` only when no shade of the hue reaches AA. (Mirrors `relightToAA`
+  // in src/lib/color.ts; inlined because this payload can't import.)
+  const relightToAA = (
+    color: string,
+    bg: string,
+    large: boolean,
+    onFail: () => string,
+  ): string => {
     const target = large ? 3 : 4.5;
     if (contrast(color, bg) >= target) {
       return color;
@@ -429,8 +398,23 @@ export function applyAdaptiveScheme(
     if (lighter) {
       return lighter;
     }
-    return ensureContrast(color, bg, large);
+    return onFail();
   };
+
+  const ensureContrast = (text: string, bg: string, large: boolean): string =>
+    relightToAA(text, bg, large, () =>
+      contrast("#000000", bg) >= contrast("#ffffff", bg)
+        ? "#000000"
+        : "#ffffff",
+    );
+
+  // Nudge a color to the NEAREST shade of ITS OWN hue that meets AA against bg
+  // (preserving hue + saturation), only falling back to black/white when no
+  // shade of the hue can reach AA. This is the anti-monochrome contrast path:
+  // a colorful accent (link/heading/button) stays its color, just relit. Port
+  // of `nudgeToAA` in src/lib/color.ts.
+  const nudgeToAA = (color: string, bg: string, large: boolean): string =>
+    relightToAA(color, bg, large, () => ensureContrast(color, bg, large));
 
   const bucketOf = (hex: string): "dark" | "medium" | "light" => {
     const l = lumOfHex(hex);
@@ -443,7 +427,7 @@ export function applyAdaptiveScheme(
     return "light";
   };
 
-  // ---- palette accessors (port of src/lib/mapping.ts) ---------------------
+  // ---- palette accessors ---------------------------------------------------
   const surfaces = (palette.surfaces || []).slice();
   const accents = (palette.accents || []).slice();
   const swatches = (palette.swatches || []).slice();
@@ -488,7 +472,8 @@ export function applyAdaptiveScheme(
   // or non-hex values are ignored. Each overridden color is still passed through
   // the SAME AA floor downstream (`blendedText` / `nudgeToAA` for text, and
   // surfaces re-floor their label), so an override is exact unless unreadable.
-  // Inlined (self-contained) — mirrors `applyOverridesToRoles` in mapping.ts.
+  // Role-keyed overrides (keys matching a PaletteRoles property) land here; the
+  // `<tag>|<prop>` keys are handled by the override CSS layer further below.
   const overrides = options.overrides || {};
   const roles: typeof baseRoles = { ...baseRoles };
   for (const k of Object.keys(overrides)) {
@@ -544,8 +529,7 @@ export function applyAdaptiveScheme(
   // what made text FLICKER / drift on churny SPAs. The intensity slider crossfades
   // BACKGROUNDS only; text stays at this stable, readable role color across ALL
   // intensities. `nudgeToAA` returns the seed UNCHANGED when already readable, else
-  // nudges to the nearest readable shade of the SAME hue. Mirrors `roleText` in
-  // src/lib/mapping.ts (keep in lockstep).
+  // nudges to the nearest readable shade of the SAME hue.
   const roleText = (seed: string, refBg: string, large: boolean): string =>
     nudgeToAA(seed, refBg, large);
 
@@ -692,7 +676,6 @@ export function applyAdaptiveScheme(
     __themeMakerObserver?: MutationObserver;
     __themeMakerArgs?: [Palette, ApplyOptions];
     __themeMakerNextId?: number;
-    __themeMakerWriting?: boolean;
     /** TRACK 1: each surface's FROZEN original bg/fg, captured once. */
     __themeMakerOriginals?: WeakMap<Element, OriginalStyle>;
     /** Surfaces already TAGGED + frozen — never re-walk/re-theme them. */
@@ -788,7 +771,7 @@ export function applyAdaptiveScheme(
   // intensity / re-apply / reload (stability-first).
   const baseText = roleText(roleTextPrimary, themedBase, false);
 
-  // ---- semantic SURFACE classification (port of src/lib/mapping.ts) -------
+  // ---- semantic SURFACE classification ------------------------------------
   // Surfaces are classified by tag/class into roles (code/card/banner/comp/
   // button) that pull dedicated palette slots. TEXT role classification now lives
   // in the ROOT-SCOPED tag rules emitted in the base CSS (not here), so the walk
@@ -840,7 +823,7 @@ export function applyAdaptiveScheme(
     return /(^|[-_ ])(btn|button)([-_ ]|$)/.test(cls);
   };
 
-  /** primaryButton | secondaryButton — see `classifyButton` in mapping.ts. */
+  /** primaryButton | secondaryButton — see `classifyButton` below. */
   const classifyButton = (el: HTMLElement): "primary" | "secondary" => {
     const cls = (el.getAttribute("class") || "").toLowerCase();
     const txt = (el.textContent || "").toLowerCase().trim();
@@ -1011,9 +994,7 @@ export function applyAdaptiveScheme(
     if (id === null) {
       id = String(w.__themeMakerNextId as number);
       w.__themeMakerNextId = (w.__themeMakerNextId as number) + 1;
-      w.__themeMakerWriting = true;
       el.setAttribute(ATTR, id);
-      w.__themeMakerWriting = false;
     }
     const frozenOriginal = toHex(bgRgb);
     // FIXED THEME by role (never `bucketOf(frozenOriginal)`); crossfade from the
@@ -1024,9 +1005,7 @@ export function applyAdaptiveScheme(
     // so the scoped role-text rules floor text inside them against THIS surface —
     // keeping that text AA + colorful with no per-element text rule. Deterministic.
     if (fill.surf && el.getAttribute("data-tm-surf") !== fill.surf) {
-      w.__themeMakerWriting = true;
       el.setAttribute("data-tm-surf", fill.surf);
-      w.__themeMakerWriting = false;
     }
     // The surface sets the inherited body-text color for its subtree, floored
     // against its DETERMINISTIC fixed-theme bg (`fill.bg`) — stable + readable on
@@ -1114,14 +1093,11 @@ export function applyAdaptiveScheme(
   if (!style) {
     style = document.createElement("style");
     style.id = STYLE_ID;
-    w.__themeMakerWriting = true;
     head.appendChild(style);
-    w.__themeMakerWriting = false;
   }
   const styleEl = style;
   // Each explicit apply REBUILDS the sheet: start from empty, write base rules,
   // then stream the surface walk in.
-  w.__themeMakerWriting = true;
   styleEl.textContent = "";
   // ROOT MARKER: a stable presence attribute on <html> that every role-text rule
   // is scoped under, so the engine's text colors clear site single-class
@@ -1130,18 +1106,15 @@ export function applyAdaptiveScheme(
   if (!document.documentElement.hasAttribute(ATTR)) {
     document.documentElement.setAttribute(ATTR, "");
   }
-  w.__themeMakerWriting = false;
 
   const appendRules = (rules: string[]): void => {
     if (rules.length === 0) {
       return;
     }
-    w.__themeMakerWriting = true;
     const existing = styleEl.textContent ?? "";
     styleEl.textContent = existing
       ? `${existing}\n${rules.join("\n")}`
       : rules.join("\n");
-    w.__themeMakerWriting = false;
   };
 
   // ---- TIME-SLICED walk drainer -------------------------------------------
@@ -1389,7 +1362,6 @@ export function applyAdaptiveScheme(
   const ovr = options.overrides || {};
   const ovrKeys = Object.keys(ovr);
   let ovrStyle = document.getElementById(OVR_ID) as HTMLStyleElement | null;
-  w.__themeMakerWriting = true;
   if (ovrKeys.length === 0) {
     if (ovrStyle) {
       ovrStyle.remove();
@@ -1430,7 +1402,6 @@ export function applyAdaptiveScheme(
     head.appendChild(ovrStyle);
     ovrStyle.textContent = rules.join("\n");
   }
-  w.__themeMakerWriting = false;
 
   // ---- MutationObserver: PRE-PAINT in-viewport + DEFERRED off-screen --------
   // The observer callback is a MICROTASK (runs after DOM insertion, BEFORE paint),

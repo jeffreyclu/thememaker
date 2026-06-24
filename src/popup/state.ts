@@ -6,7 +6,7 @@
  * High-frequency vs low-frequency concerns aren't an issue at this scale (one
  * small document), so a single reducer keeps it simple.
  */
-import { dequeueScheme } from "../lib/theme-engine";
+import { dequeueScheme } from "../lib/history";
 import { describeColor } from "../lib/color-names";
 import { clampIntensity, DEFAULT_INTENSITY } from "../types";
 import type {
@@ -261,12 +261,8 @@ export const schemeDetailRows = (
   scheme: Scheme,
 ): Array<{ tags: string; color: string }> => {
   const byColor: Record<string, string[]> = {};
-  for (const [key, value] of Object.entries(scheme)) {
-    if (key === "schemeDetails") {
-      continue;
-    }
-    const color = value as string;
-    (byColor[color] ??= []).push(key);
+  for (const [label, color] of Object.entries(scheme.colors)) {
+    (byColor[color] ??= []).push(label);
   }
   return Object.entries(byColor).map(([color, tags]) => ({
     tags: tags.join(","),

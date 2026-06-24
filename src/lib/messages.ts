@@ -98,23 +98,58 @@ export type ThememakerMessage =
   | ResetSchemeMessage
   | QueryStateMessage;
 
-/** Response envelope. `ok: false` carries a human-readable `error`. */
-export interface MessageResponse {
+/**
+ * Fields every response carries. `ok: false` carries a human-readable `error`
+ * (errors can come back for ANY request type — the background catch/exhaustive
+ * guard produces this shape — so it lives on the base every response extends).
+ */
+export interface BaseResponse {
   ok: boolean;
   /** Origin of the active tab the action targeted, when resolvable. */
   origin?: string | null;
-  /** Whether a Thememaker style is applied on the active tab. */
-  applied?: boolean;
-  /** The scheme involved in the action, echoed for caller convenience. */
-  scheme?: Scheme;
+  /** Set when `ok` is false. */
   error?: string;
 }
 
-/** Maps each request type to the response it yields (request → response). */
+/** Response to {@link ApplySchemeMessage}: did the apply land, on what scheme. */
+export interface ApplySchemeResponse extends BaseResponse {
+  /** Whether the style was applied to the active tab. */
+  applied?: boolean;
+  /** The applied scheme, echoed back for state/history. */
+  scheme?: Scheme;
+}
+
+/** Response to {@link ResetSchemeMessage}: a reset leaves nothing applied. */
+export interface ResetSchemeResponse extends BaseResponse {
+  /** Always `false` on success — a reset removes the theme. */
+  applied?: false;
+}
+
+/** Response to {@link QueryStateMessage}: is a theme currently applied. */
+export interface QueryStateResponse extends BaseResponse {
+  /** Whether a Thememaker style is applied on the active tab. */
+  applied?: boolean;
+}
+
+/**
+ * The union of all response shapes — the type the background router returns
+ * before `sendMessage` narrows it to the caller's request type via
+ * {@link ResponseFor}.
+ */
+export type MessageResponse =
+  | ApplySchemeResponse
+  | ResetSchemeResponse
+  | QueryStateResponse;
+
+/**
+ * Maps each request type to the SPECIFIC response it yields (request →
+ * response), so a `QUERY_STATE` caller never sees a `scheme?` it can't get and a
+ * `RESET_SCHEME` caller sees `applied` typed as the literal `false`.
+ */
 export interface ResponseFor {
-  APPLY_SCHEME: MessageResponse;
-  RESET_SCHEME: MessageResponse;
-  QUERY_STATE: MessageResponse;
+  APPLY_SCHEME: ApplySchemeResponse;
+  RESET_SCHEME: ResetSchemeResponse;
+  QUERY_STATE: QueryStateResponse;
 }
 
 /**

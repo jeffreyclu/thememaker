@@ -229,11 +229,7 @@ const schemeSwatches = (scheme: PopupState["current"]): string[] => {
     return [];
   }
   const seen: string[] = [];
-  for (const [key, value] of Object.entries(scheme)) {
-    if (key === "schemeDetails") {
-      continue;
-    }
-    const color = value as string;
+  for (const color of Object.values(scheme.colors)) {
     if (!seen.includes(color)) {
       seen.push(color);
     }

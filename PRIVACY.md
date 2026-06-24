@@ -28,7 +28,7 @@ browser's "clear data" controls.
 
 To generate a color palette, Thememaker may send **only a single color value (a
 hex code) and a harmony mode** (e.g. "triad") to a third-party color service,
-**thecolorapi.com**, which returns a matching palette. 
+**thecolorapi.com**, which returns a matching palette.
 
 - We do **not** send the pages you visit, their URLs, their content, your
   identity, or any personal information.
@@ -54,7 +54,7 @@ We are not affiliated with thecolorapi.com; see their site for their own terms.
 - **`activeTab`** — to act on the tab you are currently using.
 
 Theming applies only on sites you enable; broad host access exists so the
-extension *can* work on any site you choose, not so it can monitor them.
+extension _can_ work on any site you choose, not so it can monitor them.
 
 ## Contact
 

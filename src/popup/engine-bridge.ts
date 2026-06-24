@@ -10,7 +10,7 @@
  * `Scheme` for history/swatches.
  */
 import { modes } from "../config";
-import { randomHexColor, randomMode } from "../lib/theme-engine";
+import { randomHexColor, randomMode } from "../lib/random";
 import { describeColor } from "../lib/color-names";
 import { isHexColor, normalizeHex } from "../lib/color";
 import { localPalette, apiPalette } from "../lib/color-source";
@@ -46,7 +46,7 @@ export const resolveMode = (selection: ModeSelection): ColorMode =>
  * RANDOM color. Pure + total: always returns a normalized `#rrggbb`.
  */
 export const resolveSeed = (seed?: string): string =>
-  seed && isHexColor(seed) ? normalizeHex(seed) : `#${randomHexColor()}`;
+  seed && isHexColor(seed) ? normalizeHex(seed) : randomHexColor();
 
 /**
  * Builds a display-only `Scheme` from a palette so history/details panels keep
@@ -66,15 +66,15 @@ export const schemeFromPalette = (
     palette,
     intensity,
   };
-  const scheme = { schemeDetails: details } as Scheme;
-  // Surface the SOURCE-OF-TRUTH theme colors as role-labeled pseudo-keys, so the
-  // swatch/detail renderers show EXACTLY the colors the engine paints (a swatch
-  // == a painted color), labeled by role, with no duplicates and a count that
-  // matches the theme's real number of distinct colors.
+  // Surface the SOURCE-OF-TRUTH theme colors as a role-labeled `colors` map, so
+  // the swatch/detail renderers show EXACTLY the colors the engine paints (a
+  // swatch == a painted color), labeled by role, with no duplicates and a count
+  // that matches the theme's real number of distinct colors.
+  const colors: Record<string, string> = {};
   palette.themeColors.forEach((tc) => {
-    scheme[tc.role] = tc.color;
+    colors[tc.role] = tc.color;
   });
-  return scheme;
+  return { schemeDetails: details, colors };
 };
 
 export interface GeneratePaletteOptions {

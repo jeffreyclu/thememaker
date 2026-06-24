@@ -9,18 +9,21 @@
  *    `data-thememaker` attr and is removed before any apply), so it never picks
  *    up palette colors;
  *  - a CLICK (capture phase, `preventDefault` + `stopPropagation`) resolves the
- *    clicked element's semantic role via the shared `roleOfElement` core and
- *    reports the override-key back through `onPicked`. The session RE-ARMS so the
- *    user can pick several elements in a row (the panel stays open);
+ *    clicked element to a `<tag>|<prop>` OVERRIDE KEY (e.g. `div|background`,
+ *    `p|color`, `page|background`) via the local {@link pickKeyFor} and reports
+ *    it through `onPicked`. The session RE-ARMS so the user can pick several
+ *    elements in a row (the panel stays open);
  *  - an explicit `stop()` (Esc / Done) tears the session down.
  *
  * Elements inside the floating control's own host are EXCLUDED from hovering and
  * picking via the `isExcluded` predicate, so the panel never highlights or
  * recolors itself.
  *
- * The classifier here is the pure-core `roleOfElement` (from `mapping.ts`) fed a
- * `RoleClassifierInput` built from the LIVE element — so the picker and the
- * engine walk agree on every element's role.
+ * This module is SELF-CONTAINED: it speaks the `<tag>|<prop>` override grammar
+ * the engine's override layer consumes (`inject.ts`, the `themeMakerOverrides`
+ * <style>). It deliberately re-implements its small classifiers (`isButtonLike`,
+ * `hasOwnBackground`, rgb→hex) inline rather than importing engine code — the
+ * picker only needs a per-tag/prop decision, not the engine's full role taxonomy.
  */
 /** The overlay element id (kept distinct from the engine's `<style>`/attrs). */
 const OVERLAY_ID = "themeMakerPickOverlay";

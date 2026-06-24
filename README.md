@@ -130,16 +130,24 @@ src/
     index.ts              # popup controller / composition root (only chrome.* here)
     view.ts               # pure popup renderer (DOM, no business logic)
     state.ts              # pure popup state model + reducer
-    engine-bridge.ts      # glue from popup to the pure theming engine
+    engine-bridge.ts      # glue from popup to the palette engine (seed/mode → palette)
     popup.css             # self-contained popup styling (design tokens)
+  content/
+    index.ts              # content script: per-site auto-reapply + picker host
+    pick.ts               # in-page element picker (per-tag override picks)
+    picker-panel.ts       # in-page floating picker control (Shadow DOM)
   lib/
-    theme-engine.ts       # PURE theming logic (seed, url, fetch, scheme, css, history)
-    inject.ts             # self-contained functions injected into the page
+    palette.ts            # PURE HSL-harmony palette generation (the v2 engine core)
+    color.ts              # PURE color math (hex/hsl, WCAG contrast, AA enforcement)
+    color-source.ts       # palette source: local generator or thecolorapi.com (cached)
+    inject.ts             # self-contained in-page adaptive theming engine (injected)
+    random.ts             # tiny RNG helpers (random seed color + mode)
+    history.ts            # pure bounded scheme-history queue helpers
     storage.ts            # typed chrome.storage adapter (behind an interface)
     site-state.ts         # pure per-site state reducer
     messages.ts           # typed popup ⇄ background message contract
     router.ts             # background message router + chrome.scripting injector
-  config.ts               # modes, html element roles, history bound
+  config.ts               # modes + history bound
   types.ts                # shared domain types
 public/                   # static icons copied into dist/
 tests/                    # Vitest specs (+ chrome-mock.ts, setup.ts)
@@ -147,7 +155,8 @@ tests/                    # Vitest specs (+ chrome-mock.ts, setup.ts)
 
 Message contract (popup → background → active tab):
 
-- `APPLY_SCHEME { css, scheme }` → injects a `<style id="themeMaker">`.
+- `APPLY_SCHEME { palette, options, scheme }` → the in-page adaptive engine maps
+  the palette onto the page and injects a `<style id="themeMaker">`.
 - `RESET_SCHEME` → removes that `<style>`.
 - `QUERY_STATE` → reports whether a theme is applied.
 

@@ -9,22 +9,11 @@ A clean, well-typed contract layer. Discriminated unions, a request→response t
 
 ## Findings
 
-### [low] `MessageResponse` is one loose envelope with many optional fields, not per-response-type shapes
-Lines 102–118: every response (apply/reset/query) shares `{ ok; origin?; applied?; scheme?; error? }`, and `ResponseFor` maps ALL three request types to the SAME `MessageResponse`. So `RESET_SCHEME` can carry a `scheme?` it never sets, and `QUERY_STATE` an `error?`/`applied?` mix. The map exists but doesn't actually differentiate responses.
+- [x] FIXED: `MessageResponse` was one loose envelope; `ResponseFor` mapped all three request types to it (the appearance of per-type typing without the substance). Replaced with a `BaseResponse` (`ok`/`origin?`/`error?` — errors can come back for any type) plus three per-type shapes: `ApplySchemeResponse` (`applied?` + `scheme?`), `ResetSchemeResponse` (`applied?: false` — the literal, documenting that a reset leaves nothing applied), `QueryStateResponse` (`applied?`). `ResponseFor` now maps each request to its specific shape, so a `QUERY_STATE` caller no longer sees a `scheme?` it can never get. `MessageResponse` is the union the router returns. VERIFIED router.ts + popup callers still type-check and `messages.test.ts`/`router.test.ts` pass — no router behavior change required.
 
-**Why it matters:** Honest types / interface segregation. The `ResponseFor` indirection promises per-type responses but delivers one bag — a caller of `QUERY_STATE` gets `scheme?` in its type even though it's never populated.
+- [x] VERIFIED-INVALID for THIS file (left for router.ts's owner): `RESET_SCHEME` returns `applied: !removed && false`. CONFIRMED real but the FIX is in `router.ts` (another track's file) and is NOT forced by my contract change (it still compiles). I made `ResetSchemeResponse.applied` the literal `false`, which now documents the intent at the type level; the cosmetic `!removed && false → false` simplification is left for the router.ts/local-items agent.
 
-**Concrete fix:** Either make `ResponseFor` map to genuinely distinct response shapes (e.g. `QUERY_STATE: { ok: boolean; applied: boolean; error?: string }`), or drop the `ResponseFor` indirection if one envelope is the intentional design (then it's just `Promise<MessageResponse>` and the map is ceremony). Pick one; right now it's the appearance of per-type typing without the substance.
-
-### [low] `RESET_SCHEME` returns `applied: !removed && false` — a confusing constant expression
-This is in router.ts (line 53), surfaced through this contract: `!removed && false` always evaluates to `false` regardless of `removed`. It's a convoluted way to write `applied: false`. (Flagging here because it's the response this contract describes; the fix is in router.ts.)
-
-**Why it matters:** Readability — `!removed && false` looks like it means something (depends on `removed`?) but is unconditionally `false`. A reader wastes time decoding it.
-
-**Concrete fix:** In router.ts, write `applied: false` with a comment ("a reset leaves nothing applied"). Noted here because it's the `MessageResponse.applied` semantics.
-
-### [nit] Two send functions with different error policies (reject vs swallow) — documented but worth a glance
-`sendMessage` REJECTS on `lastError` (124–136); `sendToContent` SWALLOWS it (144–157). The asymmetry is intentional and documented (the popup must know if a background action failed, but pick-mode is fire-and-forget). Correct — just noting the two policies coexist.
+- [x] VERIFIED-INVALID (correct as-is): two send functions with different error policies (reject vs swallow). The asymmetry is intentional and documented (popup must know background failures; pick-mode is fire-and-forget). Left unchanged.
 
 ## What's GOOD
 - **`sendMessage<M>` ties request type to response type** via `ResponseFor[M["type"]]` — callers get the right response shape with no manual annotation. This is the right pattern for a typed message bus (even if `ResponseFor`'s payoff is currently thin, see above).

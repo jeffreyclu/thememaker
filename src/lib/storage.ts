@@ -12,7 +12,7 @@
  * Replaces ALL prior `localStorage` usage.
  */
 import { MAX_HISTORY } from "../config";
-import { enqueueScheme } from "./theme-engine";
+import { enqueueScheme } from "./history";
 import type { PaletteCacheStore } from "./color-source";
 import type { Palette } from "./palette";
 import { DEFAULT_INTENSITY } from "../types";

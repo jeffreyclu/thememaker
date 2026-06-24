@@ -133,3 +133,24 @@ variables instead of painting bare tags) and a **popup + Shadow DOM UI**.
 
 - Critical path: **0 → 1 → 2** (dependent, run in order). **3 and 4** parallelize once 2 lands.
 - Every phase merges only when unit tests + build are green.
+
+---
+
+## Audit cleanup (post-Phase 2) — reverses the "two implementations in lockstep" decision
+
+The Phase 2 "two implementations of the mapping/contrast algorithm, kept in lockstep"
+decision above was REVERSED during the code audit. The canonical `mapping.ts` module was
+imported by ZERO non-test files — it was production-dead, kept green only by its own 44
+tests, while the SHIPPED engine (`inject.ts`'s inlined port) could diverge from it freely.
+A unit-tested "reference" that nothing imports protects nothing.
+
+- **`src/lib/mapping.ts` deleted** (+ `tests/mapping.test.ts`). `inject.ts` is now the
+  SINGLE source of truth for the adaptive engine — it must be self-contained anyway, because
+  `chrome.scripting.executeScript` serializes the function and cannot reach imports.
+- The live engine stays covered by `tests/inject.test.ts` (DOM apply against jsdom) +
+  `tests/overrides.test.ts` (override CSS layer) + the dynamic-SPA Playwright e2e specs.
+- `src/lib/color.ts` remains the canonical pure color math for the popup/palette path; its
+  contrast logic is still hand-ported inside `inject.ts` (the unavoidable serialization
+  duplication), now documented honestly as a self-contained port rather than a "lockstep" pair.
+- The dead v1 tag-bucket engine (`theme-engine.ts` + `config.htmlElements`) was also deleted;
+  its survivors moved to `lib/random.ts` (seed/mode RNG) and `lib/history.ts` (bounded queue).
