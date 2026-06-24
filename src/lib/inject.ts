@@ -680,7 +680,14 @@ export function applyAdaptiveScheme(
   }
 
   // ---- per-apply + persistent engine state (shared with the observer) -----
-  type OriginalStyle = { bg: string | null; fg: string | null };
+  // `bgImage` is the element's FROZEN original computed `background-image` — used
+  // to PRESERVE real image backgrounds (carousel photos, hero/banner art, sprites)
+  // instead of painting a solid color over them.
+  type OriginalStyle = {
+    bg: string | null;
+    fg: string | null;
+    bgImage: string | null;
+  };
   const w = window as unknown as {
     __themeMakerObserver?: MutationObserver;
     __themeMakerArgs?: [Palette, ApplyOptions];
@@ -737,16 +744,33 @@ export function applyAdaptiveScheme(
     const captured: OriginalStyle = {
       bg: cs.backgroundColor || null,
       fg: cs.color || null,
+      bgImage: cs.backgroundImage || null,
     };
     originals.set(el, captured);
     return captured;
+  };
+
+  // A computed `background-image` is a REAL image asset to PRESERVE when it
+  // contains a `url(...)` (a raster/SVG/sprite/photo). Pure gradients (`linear-`/
+  // `radial-`/`conic-gradient`, with no `url(`) are decorative and safe to replace
+  // with the themed solid, so they are NOT treated as preserve-worthy. `none` and
+  // empty are not images.
+  const hasImageBackground = (bgImage: string | null): boolean => {
+    if (!bgImage) {
+      return false;
+    }
+    const s = bgImage.trim().toLowerCase();
+    if (s === "none" || s === "") {
+      return false;
+    }
+    return s.includes("url(");
   };
 
   // Base surface (html/body): ALWAYS painted, crossfaded from the page's FROZEN
   // ORIGINAL body background toward the themed base by the intensity factor.
   const bodyOriginal = document.body
     ? originalStyleOf(document.body)
-    : { bg: null, fg: null };
+    : { bg: null, fg: null, bgImage: null };
   const baseBackground = mix(bodyOriginal.bg || "#ffffff", themedBase, factor);
   // Cache the EXACT resolved base for this origin in the page's own
   // localStorage, so the content script can synchronously paint it at
@@ -962,10 +986,21 @@ export function applyAdaptiveScheme(
 
     // Detect against the FROZEN ORIGINAL bg, not our themed output, so re-apply is
     // idempotent. Only elements that own a (non-transparent) background are
-    // surfaces; everything else inherits / matches a role tag rule.
+    // surfaces; everything else inherits / matches a role tag rule. NON-surfaces
+    // are NOT added to `doneSet` — so a node later RECYCLED to own a background
+    // (virtualized lists swap a row's bg class) gets themed when re-checked, rather
+    // than being permanently stranded white. Only TAGGED SURFACES are frozen.
     const orig = originalStyleOf(el);
     const bgRgb = parseColor(orig.bg ?? "");
     if (!bgRgb) {
+      return null;
+    }
+
+    // PRESERVE real image backgrounds: if the element's FROZEN original
+    // `background-image` is a `url(...)` asset (carousel photo, hero/banner art,
+    // sprite), do NOT paint a solid color over it or strip the image. Freeze it
+    // (add to `doneSet`) so it is left alone — its text still inherits role colors.
+    if (hasImageBackground(orig.bgImage)) {
       doneSet.add(el);
       return null;
     }
@@ -1155,6 +1190,15 @@ export function applyAdaptiveScheme(
   let work: WorkItem[] = [];
   let draining = false;
 
+  // Observe childList (new nodes) AND class/style attributes (recycled nodes whose
+  // bg changes). Shared by the initial observe + every disconnect/reconnect.
+  const OBSERVE_OPTS: MutationObserverInit = {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style"],
+  };
+
   const now = (): number =>
     typeof performance !== "undefined" && performance.now
       ? performance.now()
@@ -1200,7 +1244,7 @@ export function applyAdaptiveScheme(
     }
     appendRules(rules);
     if (obs && document.body) {
-      obs.observe(document.body, { childList: true, subtree: true });
+      obs.observe(document.body, OBSERVE_OPTS);
     }
     draining = false;
     if (work.length > 0) {
@@ -1219,7 +1263,7 @@ export function applyAdaptiveScheme(
     window.innerHeight || document.documentElement.clientHeight || 0;
   const vw = (): number =>
     window.innerWidth || document.documentElement.clientWidth || 0;
-  const inViewport = (el: HTMLElement): boolean => {
+  const inViewport = (el: HTMLElement, margin = 0): boolean => {
     let r: DOMRect;
     try {
       r = el.getBoundingClientRect();
@@ -1231,7 +1275,11 @@ export function applyAdaptiveScheme(
     if (r.width === 0 && r.height === 0 && r.top === 0 && r.left === 0) {
       return true;
     }
-    return r.bottom >= 0 && r.right >= 0 && r.top <= h && r.left <= w2;
+    // `margin` expands the band so content just below the fold (about to scroll
+    // into view) is themed BEFORE it paints — fast scroll can't outrun it.
+    return (
+      r.bottom >= -margin && r.right >= 0 && r.top <= h + margin && r.left <= w2
+    );
   };
 
   const enqueue = (rootEl: HTMLElement, prioritizeViewport = false): void => {
@@ -1254,6 +1302,68 @@ export function applyAdaptiveScheme(
     if (rest.length > 0) {
       work.push({ els: rest, i: 0 });
     }
+  };
+
+  // ---- PRE-PAINT tagging (the anti-flash path for virtualized content) ----
+  // A MutationObserver callback is a MICROTASK that runs AFTER nodes are inserted
+  // but BEFORE the browser paints that frame. So we SYNCHRONOUSLY theme the
+  // newly-added (or recycled) IN-/NEAR-VIEWPORT surfaces RIGHT THERE — they are
+  // themed the instant they exist, even during fast scroll, with NO white flash.
+  // OFF-SCREEN new nodes (invisible → no flash) and any OVERFLOW past the
+  // per-callback cap go to the deferred/idle path, so a huge burst can't jank.
+  //
+  // VIEWPORT MARGIN: theme a band ~1 viewport beyond the fold, so content about to
+  // scroll in is already themed. CAP: bound the synchronous work per callback.
+  // Theme a band ~2 viewports beyond the fold so a virtualized grid's pre-rendered
+  // overscan rows (just below what's visible) are themed BEFORE they scroll in —
+  // 1vh wasn't enough and left ~2 rows of un-themed cards on fast scroll.
+  const SYNC_VIEWPORT_MARGIN = (): number => vh() * 2;
+  const SYNC_CAP = 600;
+
+  // Process `roots` (added/recycled subtrees) NOW for their in-/near-viewport
+  // surfaces, appending their rules synchronously (pre-paint). Returns the
+  // OFF-SCREEN / overflow roots that should be handled by the deferred path.
+  const processNowInViewport = (roots: HTMLElement[]): HTMLElement[] => {
+    const margin = SYNC_VIEWPORT_MARGIN();
+    const rules: string[] = [];
+    const deferred: HTMLElement[] = [];
+    let budget = SYNC_CAP;
+    for (const root of roots) {
+      // Never theme inside an editable region (typing churns it; its text
+      // inherits the right color anyway) — keeps the compose box flicker-free.
+      if (root.closest(EDITABLE_SEL)) {
+        continue;
+      }
+      if (budget <= 0) {
+        deferred.push(root);
+        continue;
+      }
+      const els = expand(root);
+      let anyDeferred = false;
+      for (const el of els) {
+        if (budget <= 0) {
+          anyDeferred = true;
+          break;
+        }
+        if (!inViewport(el, margin)) {
+          anyDeferred = true; // off-screen → leave for the deferred walk
+          continue;
+        }
+        const rule = processElement(el);
+        budget -= 1;
+        if (rule !== null) {
+          rules.push(rule);
+        }
+      }
+      // If any element in this subtree was off-screen or hit the cap, re-enqueue
+      // the WHOLE subtree to the deferred path; `doneSet` makes the already-themed
+      // ones cheap no-ops, so only the leftover (off-screen) surfaces do work.
+      if (anyDeferred) {
+        deferred.push(root);
+      }
+    }
+    appendRules(rules);
+    return deferred;
   };
 
   // Write the base rules now, then kick off the (time-sliced) surface walk. The
@@ -1322,10 +1432,16 @@ export function applyAdaptiveScheme(
   }
   w.__themeMakerWriting = false;
 
-  // ---- MutationObserver: INCREMENTAL + DEBOUNCED + TIME-SLICED re-theme -----
-  // Coalesce all added nodes into one trailing-edge flush ~250ms after the last
-  // mutation (anti-flicker), then feed those roots into the SAME time-sliced
-  // drainer. Only genuinely NEW surfaces do work (`doneSet` skips the rest).
+  // ---- MutationObserver: PRE-PAINT in-viewport + DEFERRED off-screen --------
+  // The observer callback is a MICROTASK (runs after DOM insertion, BEFORE paint),
+  // so it SYNCHRONOUSLY themes the newly-added / recycled IN-VIEWPORT surfaces
+  // right there → no white flash on virtualized grids/lists, even during fast
+  // scroll. OFF-SCREEN new nodes + any overflow past the per-callback cap are
+  // COALESCED into one trailing-edge flush ~250ms after the last mutation
+  // (anti-flicker) and streamed through the same time-sliced drainer. We also
+  // watch class/style ATTRIBUTE changes so a RECYCLED node (a virtualized list
+  // swapping a row's bg class) is re-evaluated — a node that was not a surface but
+  // now owns a background gets themed (it was never frozen, only surfaces are).
   const DEBOUNCE_MS = 250;
   if (w.__themeMakerObserver) {
     w.__themeMakerObserver.disconnect();
@@ -1344,7 +1460,7 @@ export function applyAdaptiveScheme(
   const flush = (): void => {
     timer = null;
     for (const el of pending) {
-      if (!el.isConnected || isOwnElement(el)) {
+      if (!el.isConnected || isOwnElement(el) || el.closest(EDITABLE_SEL)) {
         continue;
       }
       enqueue(el, true);
@@ -1363,28 +1479,65 @@ export function applyAdaptiveScheme(
   };
 
   const observer = new MutationObserver((mutations) => {
-    let queued = false;
+    // Collect the roots this batch touched: added subtrees, plus elements whose
+    // class/style changed (recycled rows whose bg may now differ). Dedupe.
+    const roots = new Set<HTMLElement>();
+    // Recycled (attribute-mutated, not-yet-themed) elements whose frozen original
+    // must be re-captured from the new live style.
+    const recaptured = new Set<HTMLElement>();
     for (const mm of mutations) {
-      if (mm.type !== "childList") {
-        continue;
+      if (mm.type === "childList") {
+        mm.addedNodes.forEach((n) => {
+          if (n instanceof HTMLElement && !isOwnElement(n)) {
+            roots.add(n);
+          }
+        });
+      } else if (mm.type === "attributes") {
+        const t = mm.target;
+        if (
+          t instanceof HTMLElement &&
+          !isOwnElement(t) &&
+          // A frozen, already-themed surface never changes color — skip it (this
+          // also ignores our OWN attribute writes, which only touch surfaces).
+          !doneSet.has(t)
+        ) {
+          roots.add(t);
+          // A class/style swap on a NON-themed element means it was RECYCLED — its
+          // original background may now differ (e.g. a transparent row reused as an
+          // opaque one). Drop its FROZEN original so it is RE-CAPTURED from the live
+          // (new) computed style; otherwise the stale transparent original would
+          // keep it classified as a non-surface and it would stay un-themed. Safe:
+          // it is not a themed surface, so no idempotent surface state is lost.
+          recaptured.add(t);
+        }
       }
-      mm.addedNodes.forEach((n) => {
-        if (!(n instanceof HTMLElement)) {
-          return;
-        }
-        if (isOwnElement(n)) {
-          return;
-        }
-        pending.add(n);
-        queued = true;
-      });
     }
-    if (queued) {
+    if (roots.size === 0) {
+      return;
+    }
+    for (const el of recaptured) {
+      originals.delete(el);
+    }
+    // Disconnect across our synchronous pre-paint writes so they don't re-enter
+    // the observer queue; reconnect right after.
+    observer.disconnect();
+    // PRE-PAINT: theme the in-/near-viewport surfaces NOW (before this frame
+    // paints). Defer the off-screen / overflow remainder.
+    const rootList = [...roots].filter((el) => el.isConnected);
+    const deferred = processNowInViewport(rootList);
+    if (document.body) {
+      observer.observe(document.body, OBSERVE_OPTS);
+    }
+    // Off-screen / overflow → the debounced, time-sliced deferred path.
+    if (deferred.length > 0) {
+      for (const el of deferred) {
+        pending.add(el);
+      }
       schedule();
     }
   });
   if (document.body) {
-    observer.observe(document.body, { childList: true, subtree: true });
+    observer.observe(document.body, OBSERVE_OPTS);
   }
   w.__themeMakerObserver = observer;
 

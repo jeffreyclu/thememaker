@@ -769,3 +769,150 @@ test("(e) AA holds: every row's text is AA against the FIXED themed surface, acr
       .join("\n")}`,
   ).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// PRE-PAINT TAGGING + IMAGE-BACKGROUND PRESERVATION (virtualized real sites).
+//
+// 1. A virtualized grid appends cards on "scroll". A newly-added IN-VIEWPORT card
+//    must be themed in the SAME tick it is inserted (the observer microtask runs
+//    before paint), so it never flashes white. Off-screen cards still theme later.
+// 2. Elements whose background IS a real image (`url(...)`) must be PRESERVED: the
+//    engine must NOT set `background-image: none` or paint a solid color over them.
+// ---------------------------------------------------------------------------
+
+test("(pre-paint) a newly-inserted IN-VIEWPORT card is themed in the SAME tick (no white flash), before any timer/idle runs", async ({
+  context,
+  extensionId,
+  server,
+}) => {
+  const ext = await openExtensionPage(context, extensionId);
+  await enableSite(ext, server.origin, makePalette(), 100);
+
+  const page = await context.newPage();
+  await page.goto(server.url("/dynamic-spa.html"));
+  await waitForThemeApplied(page);
+  await waitForThemeSettled(page);
+
+  // The deterministic themed generic-surface color (an existing card already on
+  // the page shares it — generic surfaces all map to one fixed color).
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __inbox: { addCards(n: number): string[] };
+    };
+    w.__inbox.addCards(1);
+  });
+  await waitForThemeSettled(page);
+  const themedSurface = await page.evaluate(
+    () =>
+      getComputedStyle(document.querySelector("#grid .card") as HTMLElement)
+        .backgroundColor,
+  );
+
+  // Now insert a card and read its computed bg after ONLY a microtask drain — the
+  // MutationObserver callback (a microtask, pre-paint) must have themed it. NO
+  // setTimeout / requestAnimationFrame / requestIdleCallback is allowed to run, so
+  // this proves the card is themed the instant it exists (no flash).
+  const result = await page.evaluate(async () => {
+    const w = window as unknown as {
+      __inbox: { addCards(n: number): string[] };
+    };
+    const [sel] = w.__inbox.addCards(1);
+    // Drain microtasks (the observer callback runs here) WITHOUT yielding to any
+    // timer/raf/idle.
+    await Promise.resolve();
+    await Promise.resolve();
+    const el = document.querySelector(sel) as HTMLElement;
+    return {
+      bg: getComputedStyle(el).backgroundColor,
+      tagged: el.hasAttribute("data-thememaker"),
+    };
+  });
+
+  expect(result.tagged, "new in-viewport card was not themed pre-paint").toBe(
+    true,
+  );
+  expect(result.bg).toBe(themedSurface);
+  // And it is NOT its original white (the flash color).
+  expect(result.bg).not.toBe("rgb(255, 255, 255)");
+});
+
+test("(pre-paint) off-screen new cards are still themed eventually (deferred path)", async ({
+  context,
+  extensionId,
+  server,
+}) => {
+  const ext = await openExtensionPage(context, extensionId);
+  await enableSite(ext, server.origin, makePalette(), 100);
+
+  const page = await context.newPage();
+  await page.setViewportSize({ width: 900, height: 500 });
+  await page.goto(server.url("/dynamic-spa.html"));
+  await waitForThemeApplied(page);
+  await waitForThemeSettled(page);
+
+  // Append a BIG batch of cards — most fall far below the fold. The pre-paint path
+  // themes the visible band synchronously; the rest stream in via the deferred
+  // path. Eventually ALL cards are themed (none left white).
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __inbox: { addCards(n: number): string[] };
+    };
+    w.__inbox.addCards(400);
+  });
+  await waitForThemeSettled(page);
+
+  const allThemed = await page.evaluate(() => {
+    const cards = Array.from(
+      document.querySelectorAll("#grid .card"),
+    ) as HTMLElement[];
+    return cards.every((c) => c.hasAttribute("data-thememaker"));
+  });
+  expect(allThemed, "some off-screen cards never got themed").toBe(true);
+});
+
+test("(image bg) elements with a real url() background are PRESERVED (image not stripped, no solid color painted over it)", async ({
+  context,
+  extensionId,
+  server,
+}) => {
+  const ext = await openExtensionPage(context, extensionId);
+  await enableSite(ext, server.origin, makePalette(), 100);
+
+  const page = await context.newPage();
+  await page.goto(server.url("/dynamic-spa.html"));
+  await waitForThemeApplied(page);
+  await waitForThemeSettled(page);
+
+  const imageEls = await page.evaluate(() => {
+    const read = (sel: string) => {
+      const el = document.querySelector(sel) as HTMLElement;
+      const cs = getComputedStyle(el);
+      return {
+        backgroundImage: cs.backgroundImage,
+        tagged: el.hasAttribute("data-thememaker"),
+      };
+    };
+    return { photo: read("#photo"), banner: read("#banner") };
+  });
+
+  // The url() image survives (not "none") and the element is NOT tagged as a
+  // painted surface (so no solid themed color is layered over the photo).
+  for (const el of [imageEls.photo, imageEls.banner]) {
+    expect(el.backgroundImage).toContain("url(");
+    expect(el.backgroundImage).not.toBe("none");
+    expect(el.tagged, "an image-bg element was painted over").toBe(false);
+  }
+
+  // A decorative GRADIENT (no url) is NOT preserved — it is a normal surface the
+  // engine themes (image replaced with the solid themed bg). This guards against
+  // over-preserving and regressing normal solid surfaces.
+  const grad = await page.evaluate(() => {
+    const el = document.querySelector("#grad") as HTMLElement;
+    return {
+      backgroundImage: getComputedStyle(el).backgroundImage,
+      tagged: el.hasAttribute("data-thememaker"),
+    };
+  });
+  expect(grad.tagged).toBe(true);
+  expect(grad.backgroundImage).toBe("none");
+});

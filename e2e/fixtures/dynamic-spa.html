@@ -112,6 +112,47 @@
       .rowlink {
         color: #1a73e8 !important;
       }
+      /*
+       * A VIRTUALIZED GRID (Amazon-style): square cards appended/removed on
+       * "scroll". Each card is an opaque white surface — the engine must theme it
+       * in the SAME tick it's inserted (pre-paint), so it never flashes white.
+       */
+      #grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        background-color: #ffffff;
+      }
+      .card {
+        background-color: #ffffff;
+        color: #202124;
+        width: 120px;
+        height: 90px;
+        padding: 8px;
+        box-sizing: border-box;
+        border: 1px solid #e0e0e0;
+      }
+      /*
+       * IMAGE-BACKGROUND elements (carousel photo, hero/banner art): their
+       * background IS a real `url(...)` asset. The engine must PRESERVE the image —
+       * not paint a solid themed color over it or strip `background-image`. The
+       * tiny data-URI is an opaque 1×1 PNG so the asset is unmistakable.
+       */
+      .photo {
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        background-size: cover;
+        background-repeat: no-repeat;
+        width: 200px;
+        height: 120px;
+        color: #ffffff;
+      }
+      /* A decorative GRADIENT (no url) — safe to replace with a themed solid. */
+      .grad {
+        background-image: linear-gradient(180deg, #ffffff, #eeeeee);
+        background-color: #ffffff;
+        width: 200px;
+        height: 60px;
+      }
     </style>
   </head>
   <body>
@@ -122,6 +163,18 @@
     </div>
 
     <div id="list"></div>
+
+    <!-- A VIRTUALIZED grid whose cards are appended on "scroll" (pre-paint test). -->
+    <div id="grid"></div>
+
+    <!--
+      IMAGE-BACKGROUND elements the engine must PRESERVE (real url asset), plus a
+      decorative GRADIENT it may replace. These are static so the spec can read
+      their computed background-image after theming.
+    -->
+    <div id="photo" class="photo">Carousel photo</div>
+    <div id="banner" class="photo">Hero banner</div>
+    <div id="grad" class="grad">Gradient header</div>
 
     <!-- The "opened email" detail view, torn down + rebuilt on navigate. -->
     <div id="detail" hidden></div>
@@ -155,7 +208,29 @@
 
       const list = document.getElementById("list");
       const detail = document.getElementById("detail");
+      const grid = document.getElementById("grid");
       let nextId = 0;
+      let cardId = 0;
+
+      /**
+       * Appends `count` virtualized GRID cards (opaque white squares) — the
+       * "scroll loads more cards" action. Each card is created and inserted in one
+       * synchronous batch, exactly the burst that flashed white before pre-paint
+       * tagging. Returns the selectors of the newly-added cards.
+       */
+      function addCards(count) {
+        const added = [];
+        for (let i = 0; i < count; i += 1) {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.dataset.card = String(cardId);
+          card.textContent = "Card " + cardId;
+          grid.appendChild(card);
+          added.push('[data-card="' + cardId + '"]');
+          cardId += 1;
+        }
+        return added;
+      }
 
       /** Builds one row element with subject + snippet text. */
       function makeRow(i) {
@@ -346,6 +421,7 @@
         bulkLoad,
         renderMixed,
         recycleScroll,
+        addCards,
         rowState(i, state) {
           const row = list.querySelector('[data-row="' + i + '"]');
           if (!row) {
