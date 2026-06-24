@@ -201,11 +201,12 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     // Returning to the same intensity reproduces the exact same CSS — detection
     // reads each element's ORIGINAL color, so re-mapping never drifts.
     expect(back).toBe(first);
-    // And no duplicate data-thememaker ids were stranded on the surface.
+    // The SURFACE (the div) is tagged with a per-element id. The span is TEXT —
+    // colored by inheritance / tag rules now, so it is intentionally NOT tagged.
     const div = document.querySelector("div") as HTMLElement;
     const span = document.querySelector("span") as HTMLElement;
     expect(div.getAttribute("data-thememaker")).not.toBeNull();
-    expect(span.getAttribute("data-thememaker")).not.toBeNull();
+    expect(span.getAttribute("data-thememaker")).toBeNull();
   });
 
   it("spends the WHOLE palette in-page: ≥4 distinct role colors (anti-monochrome)", () => {
@@ -314,14 +315,18 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
       return out;
     };
 
-    const h1 = document.querySelector("h1") as HTMLElement;
-    const a = document.querySelector("a") as HTMLElement;
-    const colorFor = (css: string, el: HTMLElement): string => {
-      const id = el.getAttribute("data-thememaker");
-      const m = new RegExp(
-        `\\[data-thememaker="${id}"\\] \\{[^}]*[^-]color:\\s*(#[0-9a-f]{6})`,
-        "i",
-      ).exec(css);
+    // Text is colored by ROOT-SCOPED tag rules now: heading → the
+    // `[data-thememaker] h1, [data-thememaker] h2 {}` rule, link → the
+    // `[data-thememaker] a {}` rule. Read the page-level rule color for a role.
+    const headingColor = (css: string): string => {
+      const m =
+        /\[data-thememaker\] h1, \[data-thememaker\] h2 \{ color:\s*(#[0-9a-f]{6})/i.exec(
+          css,
+        );
+      return (m?.[1] ?? "").toLowerCase();
+    };
+    const linkColor = (css: string): string => {
+      const m = /\[data-thememaker\] a \{ color:\s*(#[0-9a-f]{6})/i.exec(css);
       return (m?.[1] ?? "").toLowerCase();
     };
 
@@ -330,7 +335,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     // role (also blue, untouched) unchanged. Comparing hue families is robust to
     // the AA floor (which only shifts lightness, preserving hue).
     const themed = cssWith({ heading: "#1565c0" });
-    const headingHue = hexToHsl(colorFor(themed, h1)).h;
+    const headingHue = hexToHsl(headingColor(themed)).h;
     expect(headingHue).toBeGreaterThan(180);
     expect(headingHue).toBeLessThan(260); // blue family — override hue survived
     // Generated heading role hue is NOT in the blue family (it's the palette's
@@ -339,10 +344,10 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     expect(genHue < 180 || genHue > 260).toBe(true);
 
     // The link (untouched role) is identical with and without the override.
-    const linkWithOverride = colorFor(themed, a);
+    const linkWithOverride = linkColor(themed);
     removeSchemeStyle();
     const plain = cssWith(undefined);
-    expect(colorFor(plain, a)).toBe(linkWithOverride);
+    expect(linkColor(plain)).toBe(linkWithOverride);
   });
 
   it("in-page: an UNREADABLE override is relit (AA floor holds, not collapsed)", () => {
@@ -353,13 +358,13 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
       overrides: { heading: "#fffbe0" }, // pale → unreadable on white
     });
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
-    const h1 = document.querySelector("h1") as HTMLElement;
-    const id = h1.getAttribute("data-thememaker");
-    const m = new RegExp(
-      `\\[data-thememaker="${id}"\\] \\{[^}]*[^-]color:\\s*(#[0-9a-f]{6})`,
-      "i",
-    ).exec(css);
+    // Heading text → the root-scoped `[data-thememaker] h1, …h2 {}` tag rule.
+    const m =
+      /\[data-thememaker\] h1, \[data-thememaker\] h2 \{ color:\s*(#[0-9a-f]{6})/i.exec(
+        css,
+      );
     const color = (m?.[1] ?? "").toLowerCase();
+    expect(color).toBeTruthy();
     expect(color).not.toBe("#fffbe0"); // was relit
     // AA-large against a near-white base.
     expect(contrastRatio(color, "#ffffff")).toBeGreaterThanOrEqual(3);
@@ -386,5 +391,139 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     applyAdaptiveScheme(palette, { intensity: 100 });
     expect(ruleFor()).toBe(firstBg);
     expect(firstBg).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IN-PAGE DETERMINISTIC TEXT COLOR — lockstep with the pure core's SPA fix.
+//
+// Text is colored by INHERITANCE + global/per-surface TAG rules (NOT per
+// element), so a new/typed text node is correct the instant it exists (no
+// flicker). These assert that the deterministic text colors — the per-role TAG
+// rules and a surface's inherited subtree color — are a PURE FUNCTION of the
+// palette: independent of any element's own original color, of the intensity
+// dial, and of a row's swapped (hover/selected) background. This is what stops
+// the Gmail flicker.
+// ---------------------------------------------------------------------------
+describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () => {
+  const palette = generatePalette("#3a7bd5", "triad");
+
+  afterEach(() => {
+    removeSchemeStyle();
+    document.head.innerHTML = "";
+    document.body.innerHTML = "";
+    document.documentElement.removeAttribute("style");
+  });
+
+  const css = (): string =>
+    document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
+
+  /** The color the root-scoped link TAG rule emits at the page level. */
+  const linkTagColor = (): string => {
+    const m = /\[data-thememaker\] a \{ color:\s*(#[0-9a-f]{6})/i.exec(css());
+    return (m?.[1] ?? "").toLowerCase();
+  };
+
+  /** The inherited subtree text color a SURFACE element sets (its per-el rule). */
+  const surfaceColor = (el: HTMLElement): string => {
+    const id = el.getAttribute("data-thememaker");
+    const m = new RegExp(
+      `\\[data-thememaker="${id}"\\] \\{[^}]*[^-]color:\\s*(#[0-9a-f]{6})`,
+      "i",
+    ).exec(css());
+    return (m?.[1] ?? "").toLowerCase();
+  };
+
+  /** Builds an email-row-shaped page; returns the row surface's text color. */
+  const rowSurfaceColor = (rowBg: string, textColor: string): string => {
+    document.body.innerHTML =
+      `<article style="background-color: ${rowBg}">` +
+      `<span style="color: ${textColor}">row text</span></article>`;
+    document.body.style.backgroundColor = "#ffffff";
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const article = document.querySelector("article") as HTMLElement;
+    return surfaceColor(article);
+  };
+
+  it("the link tag color is INDEPENDENT of the elements' own original colors", () => {
+    document.body.innerHTML =
+      '<a href="#" style="color: rgb(0,0,0)">one</a>' +
+      '<a href="#" style="color: rgb(255,0,255)">two</a>';
+    document.body.style.backgroundColor = "#ffffff";
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const a = linkTagColor();
+    expect(a).toBeTruthy();
+    // No per-element link rules exist — there is ONE deterministic page-level
+    // `[data-thememaker] a {}` rule.
+    expect(
+      (css().match(/\[data-thememaker\] a \{ color:/gi) ?? []).length,
+    ).toBe(1);
+  });
+
+  it("row surface text color is INDEPENDENT of the row's swapped background", () => {
+    const normal = rowSurfaceColor("rgb(255,255,255)", "rgb(34,34,34)");
+    removeSchemeStyle();
+    document.head.innerHTML = "";
+    const hovered = rowSurfaceColor("rgb(238,243,255)", "rgb(34,34,34)");
+    removeSchemeStyle();
+    document.head.innerHTML = "";
+    const selected = rowSurfaceColor("rgb(210,227,255)", "rgb(34,34,34)");
+    // The row is a CARD surface → its mapped bg is the SAME role surface
+    // regardless of the original (swapped) bg, so the inherited text is stable.
+    expect(hovered).toBe(normal);
+    expect(selected).toBe(normal);
+    expect(normal).toBeTruthy();
+  });
+
+  it("the link tag color is INDEPENDENT of the intensity dial", () => {
+    const at = (intensity: number): string => {
+      document.body.innerHTML = '<a href="#" style="color: rgb(0,0,0)">x</a>';
+      document.body.style.backgroundColor = "#ffffff";
+      applyAdaptiveScheme(palette, { intensity });
+      const c = linkTagColor();
+      removeSchemeStyle();
+      document.head.innerHTML = "";
+      return c;
+    };
+    const low = at(10);
+    const mid = at(50);
+    const high = at(100);
+    expect(low).toBe(high);
+    expect(mid).toBe(high);
+    expect(low).toBeTruthy();
+  });
+
+  it("text is colored by TAG rules / inheritance, NOT per element (no flicker)", () => {
+    // A fresh <p>/<a> gets NO per-element color rule — its color comes from the
+    // body base + the root-scoped `[data-thememaker] a {}` rule — so a newly
+    // inserted node is instantly correct (the whole point of the anti-flicker
+    // change).
+    document.body.innerHTML =
+      '<p style="color: rgb(0,0,0)">para</p>' +
+      '<a href="#" style="color: rgb(0,0,0)">link</a>';
+    document.body.style.backgroundColor = "#ffffff";
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const p = document.querySelector("p") as HTMLElement;
+    const a = document.querySelector("a") as HTMLElement;
+    // Neither text element is tagged with a per-element id (only surfaces are).
+    expect(p.getAttribute("data-thememaker")).toBeNull();
+    expect(a.getAttribute("data-thememaker")).toBeNull();
+    // The base CSS carries deterministic, root-scoped tag rules for them.
+    expect(css()).toMatch(/\[data-thememaker\] a \{ color:/i);
+    expect(css()).toMatch(/(?:^|\n)body \{[^}]*color:/i);
+    // The ROOT MARKER is present on <html> so those rules actually apply.
+    expect(document.documentElement.hasAttribute("data-thememaker")).toBe(true);
+  });
+
+  it("re-applying twice on the SAME DOM yields byte-identical CSS (idempotent)", () => {
+    document.body.innerHTML =
+      '<article style="background-color: rgb(255,255,255)">' +
+      '<span style="color: rgb(0,0,0)">row text</span>' +
+      '<a href="#" style="color: rgb(0,0,0)">link</a></article>';
+    document.body.style.backgroundColor = "#ffffff";
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    const first = css();
+    applyAdaptiveScheme(palette, { intensity: 100 });
+    expect(css()).toBe(first);
   });
 });

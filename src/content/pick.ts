@@ -137,25 +137,53 @@ export const propForElement = (el: Element): "background" | "color" => {
 export const pickKeyFor = (el: Element): string =>
   `${el.tagName.toLowerCase()}|${propForElement(el)}`;
 
-/** Parses an rgb()/rgba() computed value to `#rrggbb`, or null if unparseable. */
+/**
+ * Parses an rgb()/rgba() computed value to `#rrggbb`, or null if unparseable OR
+ * fully transparent. A transparent value (`transparent`, or alpha 0) returns
+ * null — NEVER `#000000` — so a transparent element never seeds a BLACK pick
+ * (which would otherwise paint every element of that tag black).
+ */
 const rgbToHex = (value: string): string | null => {
-  const m = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  const s = value.trim().toLowerCase();
+  if (s === "transparent") {
+    return null;
+  }
+  const m = s.match(
+    /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)/,
+  );
   if (!m) {
     return null;
+  }
+  if (m[4] !== undefined && parseFloat(m[4]) === 0) {
+    return null; // fully transparent → not a real color
   }
   const h = (n: string): string => Number(n).toString(16).padStart(2, "0");
   return `#${h(m[1])}${h(m[2])}${h(m[3])}`;
 };
 
-/** The element's CURRENT color for `prop`, as `#rrggbb`, to pre-fill the input. */
+/**
+ * The element's CURRENT color for `prop`, as `#rrggbb`, to pre-fill the input.
+ * For a BACKGROUND on a transparent element we walk UP to the first ancestor
+ * with a real (opaque) background, so the picker seeds with what is actually
+ * VISIBLE behind the element — never black, and no jarring jump on apply.
+ */
 export const currentColorFor = (
   el: Element,
   prop: "background" | "color",
 ): string => {
   try {
-    const cs = getComputedStyle(el);
-    const raw = prop === "background" ? cs.backgroundColor : cs.color;
-    return rgbToHex(raw) ?? "#808080";
+    if (prop === "background") {
+      let node: Element | null = el;
+      while (node) {
+        const hex = rgbToHex(getComputedStyle(node).backgroundColor);
+        if (hex) {
+          return hex;
+        }
+        node = node.parentElement;
+      }
+      return "#ffffff"; // nothing opaque up the tree → assume a white page
+    }
+    return rgbToHex(getComputedStyle(el).color) ?? "#808080";
   } catch {
     return "#808080";
   }

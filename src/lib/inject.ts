@@ -9,20 +9,35 @@
  * service-worker chunk — the minifier inlines these because they reference
  * nothing external.)
  *
- * Phase 2: `applyAdaptiveScheme` is the v2 engine's in-page entry point. It
- * inspects the live page (`getComputedStyle`, `:root` custom properties), then
- * runs a TWO-PASS algorithm (surfaces, then text against the EFFECTIVE rendered
- * background), always theming `<html>` + `<body>` as a base surface, enforcing
- * WCAG AA on every text/background pair, writing the single
- * `<style id="themeMaker">` IN PLACE (no themeless gap → no flash), and
- * installing an INCREMENTAL, debounced `MutationObserver` for SPA/lazy content.
+ * `applyAdaptiveScheme` is the v2 engine's in-page entry point. It inspects the
+ * live page (`getComputedStyle`, `:root` custom properties) and themes it as a
+ * "DJ mixer": every themed color = `mix(frozenOriginal, fixedTheme, factor)`,
+ * `factor = intensity/100`.
  *
- * INTENSITY is a BLEND: "how much of the theme is applied vs. the original".
- * Every themed color is mixed from each element's ORIGINAL color (captured once,
- * so re-apply is idempotent) toward the mapped palette color by `intensity/100`,
- * uniformly across all surfaces/text — so the dial always has a visible effect.
+ *  - TRACK 2 (`fixedTheme`) is a PURE FUNCTION OF THE ELEMENT'S ROLE / STRUCTURE,
+ *    never of its original color. Generic surfaces → ONE fixed palette surface
+ *    (`roles.surface`); semantic surfaces (card/code/banner/button via a
+ *    `data-tm-surf` token) → their fixed distinct role colors; text → role colors
+ *    delivered by ROOT-SCOPED tag rules. THIS is the SPA fix: on pages that
+ *    recycle DOM nodes / swap row backgrounds, the theme color no longer changes
+ *    with the (volatile) original bg, so identical rows share one color and a
+ *    recycled node never drifts.
+ *  - TRACK 1 (`frozenOriginal`) is each surface's original bg captured ONCE in a
+ *    WeakMap and FROZEN; it feeds ONLY the crossfade blend, never the theme-color
+ *    choice. A tagged element is never re-themed.
+ *  - SURFACES are repainted PER ELEMENT (each frozen-original blend differs below
+ *    100%), computed once and frozen. TEXT is NOT per-element: role colors are
+ *    emitted ONCE as ROOT-SCOPED tag rules (+ per-surface scoped variants), so a
+ *    newly created/typed node is the correct color the instant it exists.
+ *
+ * It always themes `<html>` + `<body>` as the base surface, enforces WCAG AA on
+ * every text/surface pair against the FIXED reference surface, writes the single
+ * `<style id="themeMaker">` IN PLACE (no themeless gap → no flash), and installs
+ * an INCREMENTAL, debounced, TIME-SLICED `MutationObserver` for SPA/lazy content.
+ *
  * The algorithm is a SELF-CONTAINED port of the canonical, unit-tested core in
- * `src/lib/mapping.ts` + `src/lib/color.ts` (kept in lockstep with those).
+ * `src/lib/mapping.ts` + `src/lib/color.ts` (kept in lockstep on the COLORS the
+ * two produce).
  */
 import { isHexColor, normalizeHex } from "./color";
 import type { Palette } from "./palette";
@@ -138,6 +153,9 @@ export function removeSchemeStyle(): boolean {
     __themeMakerArgs?: unknown;
     __themeMakerNextId?: number;
     __themeMakerOriginals?: unknown;
+    __themeMakerDone?: unknown;
+    __themeMakerThemedCount?: unknown;
+    __themeMakerCapped?: unknown;
   };
   if (w.__themeMakerObserver) {
     w.__themeMakerObserver.disconnect();
@@ -145,8 +163,12 @@ export function removeSchemeStyle(): boolean {
   }
   w.__themeMakerArgs = undefined;
   w.__themeMakerNextId = undefined;
-  // Drop the original-style cache so a fresh apply re-captures true originals.
+  // Drop the frozen-original cache so a fresh apply re-captures true originals.
   w.__themeMakerOriginals = undefined;
+  // Drop the per-apply walk state (done-set, themed counter, cap flag).
+  w.__themeMakerDone = undefined;
+  w.__themeMakerThemedCount = undefined;
+  w.__themeMakerCapped = undefined;
   // Clear the cached base background so a reset/disabled site does NOT
   // early-paint a stale theme on its next load. Inlined (self-contained) key,
   // kept in sync with BASE_CACHE_KEY. Best-effort.
@@ -157,6 +179,8 @@ export function removeSchemeStyle(): boolean {
   }
   // Drop the per-tag override layer too.
   document.getElementById("themeMakerOverrides")?.remove();
+  // Remove the ROOT MARKER from <html> so no stale role-text rules could match.
+  document.documentElement.removeAttribute("data-thememaker");
   const old = document.getElementById(STYLE_ID);
   if (old) {
     old.remove();
@@ -513,29 +537,17 @@ export function applyAdaptiveScheme(
     ]);
   };
 
-  // Text color from a ROLE SEED. SOURCE-OF-TRUTH with a READABILITY FLOOR: at
-  // full intensity (t>=1) paint the EXACT seed, but passed through `nudgeToAA` —
-  // which returns it UNCHANGED when already readable (so the swatch == the DOM
-  // color), and only nudges a truly-unreadable color to the nearest readable
-  // shade of the SAME hue. Below full intensity, blend toward the seed and keep
-  // it readable. Mirrors `blendedText` in src/lib/mapping.ts.
-  const blendedText = (
-    originalText: string | null,
-    bg: string,
-    seed: string,
-    t: number,
-    large: boolean,
-  ): string => {
-    if (t >= 1) {
-      return nudgeToAA(seed, bg, large);
-    }
-    const themed = nudgeToAA(seed, bg, large);
-    if (!originalText) {
-      return themed;
-    }
-    const cand = mix(originalText, themed, t);
-    return nudgeToAA(cand, bg, large);
-  };
+  // DETERMINISTIC text color from a ROLE SEED, floored for readability against a
+  // DETERMINISTIC reference background (`refBg`). The result is a pure function of
+  // (seed, refBg, large): it does NOT depend on the element's current/original
+  // color, on the intensity dial, or on the LIVE painted ancestor bg — which is
+  // what made text FLICKER / drift on churny SPAs. The intensity slider crossfades
+  // BACKGROUNDS only; text stays at this stable, readable role color across ALL
+  // intensities. `nudgeToAA` returns the seed UNCHANGED when already readable, else
+  // nudges to the nearest readable shade of the SAME hue. Mirrors `roleText` in
+  // src/lib/mapping.ts (keep in lockstep).
+  const roleText = (seed: string, refBg: string, large: boolean): string =>
+    nudgeToAA(seed, refBg, large);
 
   const classifyVarName = (
     name: string,
@@ -620,10 +632,25 @@ export function applyAdaptiveScheme(
   // ---- remap variables (additive layer) -----------------------------------
   const varDecls: string[] = [];
   if (variableDriven || intensity >= 100) {
-    const surfaceVar = detectedVars.find((v) => v.role === "surface");
-    const primarySurface = surfaceFor(
-      surfaceVar ? bucketOf(surfaceVar.value) : "light",
-    );
+    // The RENDERED (blended) value each surface var becomes — that is what a
+    // var-driven element actually paints behind its text. Floor every text/border
+    // var against the LIGHTEST of these (the worst case for dark-ish ink), so a
+    // remapped link/heading/body is AA against WHICHEVER surface var it lands on
+    // (e.g. a link inside a card on `--surface`, not just the page `--bg`).
+    const renderedSurface = (val: string): string =>
+      mix(val, surfaceFor(bucketOf(val)), factor);
+    let floorSurface = themedBase;
+    let floorLum = -1;
+    for (const v of detectedVars) {
+      if (v.role === "surface") {
+        const rendered = renderedSurface(v.value);
+        const l = lumOfHex(rendered);
+        if (l > floorLum) {
+          floorLum = l;
+          floorSurface = rendered;
+        }
+      }
+    }
     for (const v of detectedVars) {
       if (v.role === "surface") {
         // Blend each surface var from its ORIGINAL value toward the mapped one.
@@ -631,7 +658,9 @@ export function applyAdaptiveScheme(
         varDecls.push(`${v.name}: ${mix(v.value, mapped, factor)} !important;`);
       } else if (v.role === "text") {
         // Route text vars to the matching ROLE color so heading/link vars carry
-        // their own accent hue (not all one seed), then AA-nudge (hue-preserving).
+        // their own accent hue (not all one seed), then AA-nudge against the
+        // lightest RENDERED surface (hue-preserving) so it is readable on any of
+        // the page's remapped surfaces.
         const n = v.name.toLowerCase();
         const seed = /heading|title/.test(n)
           ? roleHeading
@@ -641,23 +670,30 @@ export function applyAdaptiveScheme(
               ? roleTextSecondary
               : roleTextPrimary;
         varDecls.push(
-          `${v.name}: ${blendedText(v.value, primarySurface, seed, factor, false)} !important;`,
+          `${v.name}: ${roleText(seed, floorSurface, false)} !important;`,
         );
       } else if (v.role === "border") {
-        const mapped = nudgeToAA(roleBorder, primarySurface, true);
+        const mapped = nudgeToAA(roleBorder, floorSurface, true);
         varDecls.push(`${v.name}: ${mix(v.value, mapped, factor)} !important;`);
       }
     }
   }
 
-  // ---- a single element's rule emitter (shared with the observer) ---------
+  // ---- per-apply + persistent engine state (shared with the observer) -----
   type OriginalStyle = { bg: string | null; fg: string | null };
   const w = window as unknown as {
     __themeMakerObserver?: MutationObserver;
     __themeMakerArgs?: [Palette, ApplyOptions];
     __themeMakerNextId?: number;
     __themeMakerWriting?: boolean;
+    /** TRACK 1: each surface's FROZEN original bg/fg, captured once. */
     __themeMakerOriginals?: WeakMap<Element, OriginalStyle>;
+    /** Surfaces already TAGGED + frozen — never re-walk/re-theme them. */
+    __themeMakerDone?: WeakSet<Element>;
+    /** Running total of themed surfaces (for the MAX_THEMED budget). */
+    __themeMakerThemedCount?: number;
+    /** Set once we hit MAX_THEMED, so we warn only once. */
+    __themeMakerCapped?: boolean;
   };
 
   // Monotonic id counter — NEVER reset to 0 (so incremental observer rules
@@ -666,21 +702,31 @@ export function applyAdaptiveScheme(
     w.__themeMakerNextId = 0;
   }
 
-  // Cache of each element's ORIGINAL (pre-theming) background/text, captured the
-  // FIRST time we see it. Crucial for idempotent re-apply: once our <style> is
-  // live, getComputedStyle returns OUR themed colors, so re-detecting from the
-  // live computed style would re-map already-mapped colors and DRIFT (e.g.
-  // dragging the slider left→right wouldn't return to the same result). We
-  // always detect against these originals instead.
+  // TRACK 1 — the FROZEN-ORIGINAL cache. Each surface's original bg is captured
+  // the FIRST time we see it and FROZEN: it feeds ONLY the crossfade blend, never
+  // the theme-color choice. Persisting it across applies keeps re-apply idempotent
+  // (once our <style> is live, getComputedStyle returns OUR themed colors, so we
+  // must blend from the cached original, not re-read drifted values).
   if (!w.__themeMakerOriginals) {
     w.__themeMakerOriginals = new WeakMap<Element, OriginalStyle>();
   }
   const originals = w.__themeMakerOriginals;
 
+  // Set of surfaces ALREADY tagged + emitted into the CURRENT stylesheet. The
+  // OBSERVER path uses it to skip already-themed nodes (a re-added subtree is a
+  // cheap no-op). An explicit `applyAdaptiveScheme` call REBUILDS the sheet from
+  // scratch (slider drags / new themes must recolor everything), so we RESET this
+  // set + counter + style content per apply below. `originals` + monotonic
+  // `nextId` persist across applies (true frozen state).
+  w.__themeMakerDone = new WeakSet<Element>();
+  const doneSet = w.__themeMakerDone;
+  w.__themeMakerThemedCount = 0;
+  w.__themeMakerCapped = false;
+
   /**
-   * Returns an element's ORIGINAL bg/fg, capturing it once. On the very first
-   * apply the live computed style IS the original; on re-applies we read the
-   * cached value so detection never sees our own themed output.
+   * Returns an element's FROZEN ORIGINAL bg/fg, capturing it once. On the very
+   * first sighting the live computed style IS the original; afterwards we read the
+   * cached value so detection never sees our own themed output (idempotent).
    */
   const originalStyleOf = (el: HTMLElement): OriginalStyle => {
     const cached = originals.get(el);
@@ -696,8 +742,8 @@ export function applyAdaptiveScheme(
     return captured;
   };
 
-  // Base surface (html/body): ALWAYS painted, blended from the page's ORIGINAL
-  // body background toward the themed base by the intensity factor.
+  // Base surface (html/body): ALWAYS painted, crossfaded from the page's FROZEN
+  // ORIGINAL body background toward the themed base by the intensity factor.
   const bodyOriginal = document.body
     ? originalStyleOf(document.body)
     : { bg: null, fg: null };
@@ -712,30 +758,22 @@ export function applyAdaptiveScheme(
   } catch {
     // localStorage unavailable — no early-paint cache next load; not fatal.
   }
-  // Page base ink carries the faintly-tinted body (textPrimary) slot.
-  const baseText = blendedText(
-    bodyOriginal.fg || "#111111",
-    baseBackground,
-    roleTextPrimary,
-    factor,
-    false,
-  );
+  // Page base ink carries the faintly-tinted body (textPrimary) slot. Floored
+  // against the DETERMINISTIC base surface (`themedBase` = roles.bg), NOT the
+  // blended `baseBackground`, so the base text color is identical at every
+  // intensity / re-apply / reload (stability-first).
+  const baseText = roleText(roleTextPrimary, themedBase, false);
 
-  // ---- semantic element classification (port of src/lib/mapping.ts) -------
-  // These mirror the pure core's `classifyText` / `classifySurface` /
-  // `classifyButton`, so the in-page engine spends the whole palette by role.
-  const HEADING_TAGS = " h1 h2 ";
-  const SUBHEADING_TAGS = " h3 h4 h5 h6 ";
-  const MUTED_TAGS = " small figcaption caption time label ";
-  const EMPHASIS_TAGS = " strong em b i mark dfn th ";
-  const QUOTE_TAGS = " blockquote q cite ";
+  // ---- semantic SURFACE classification (port of src/lib/mapping.ts) -------
+  // Surfaces are classified by tag/class into roles (code/card/banner/comp/
+  // button) that pull dedicated palette slots. TEXT role classification now lives
+  // in the ROOT-SCOPED tag rules emitted in the base CSS (not here), so the walk
+  // only ever touches surfaces.
   const CODE_TAGS = " pre code kbd samp ";
   const CARD_TAGS =
     " article section figure dialog details fieldset blockquote ";
   const BANNER_TAGS = " header nav ";
   const COMPLEMENTARY_TAGS = " aside footer ";
-  const MUTED_CLASS =
-    /(^|[-_ ])(muted|secondary|subtle|meta|caption|help|hint|dim|faint|footnote)([-_ ]|$)/;
   const PRIMARY_CLASS =
     /(^|[-_ ])(primary|cta|submit|btn-primary|is-primary|accent|main)([-_ ]|$)/;
   const SECONDARY_CLASS =
@@ -797,15 +835,34 @@ export function applyAdaptiveScheme(
     return (buttonOrder.get(el) ?? 0) === 0 ? "primary" : "secondary";
   };
 
+  // The DETERMINISTIC tinted bg of each tinted SEMANTIC surface role — the scoped
+  // role-text rules floor text inside such a surface against THESE.
+  const bannerBg = mix(roleHeading, themedBase, 0.86);
+  const complementaryBg = mix(roleLink, themedBase, 0.86);
+  // Surface scope tokens → the DETERMINISTIC reference bg the scoped text rules
+  // floor against. Tinted SEMANTIC surfaces (card/code/banner/comp) carry a token
+  // so text inside them floors against THAT surface (AA + colorful). Generic
+  // surfaces are NOT tokenized (their text uses the page-level role rules, floored
+  // against the page base — `roleSurface` is close to `bg`, so AA holds).
+  const SURFACE_ROLE_BG: Record<string, string> = {
+    card: roleSurface,
+    code: roleSurfaceAlt,
+    banner: bannerBg,
+    comp: complementaryBg,
+  };
+
   /**
-   * The surface fill + label seed for an element. Buttons → primary/secondary
-   * fills with their on-color; code/card → dedicated tinted surfaces; generic
-   * surfaces → null (fall back to luminance-bucket mapping so the page's own
-   * dark/light hierarchy is preserved).
+   * The surface FIXED-THEME fill + label seed + a short `data-tm-surf` token for
+   * an element. THE CORE FIX: every surface's `bg` is a PURE FUNCTION OF ITS ROLE
+   * — buttons → primary/secondary; code/card/banner/comp → their tinted slots;
+   * generic surfaces → the ONE fixed `roleSurface`. It is NEVER derived from the
+   * element's original-bg luminance, so recycled/restyled nodes and identical rows
+   * share one theme color. Total (never null): a generic surface is a first-class
+   * role. Buttons carry no token (their content is a label, not document text).
    */
   const surfaceFillFor = (
     el: HTMLElement,
-  ): { bg: string; label: string } | null => {
+  ): { bg: string; label: string; surf?: string } => {
     const tag = el.tagName.toLowerCase();
     if (isButtonLike(el)) {
       return classifyButton(el) === "primary"
@@ -813,206 +870,210 @@ export function applyAdaptiveScheme(
         : { bg: roleSecondary, label: roleOnSecondary };
     }
     if (CODE_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { bg: roleSurfaceAlt, label: roleTextPrimary };
+      return { bg: roleSurfaceAlt, label: roleTextPrimary, surf: "code" };
     }
     if (BANNER_TAGS.indexOf(` ${tag} `) >= 0) {
       // Header/nav get their OWN hued surface tint (heading hue → bg).
-      return { bg: mix(roleHeading, themedBase, 0.86), label: roleTextPrimary };
+      return { bg: bannerBg, label: roleTextPrimary, surf: "banner" };
     }
     if (COMPLEMENTARY_TAGS.indexOf(` ${tag} `) >= 0) {
       // Aside/footer get a different hued tint (link hue → bg).
-      return { bg: mix(roleLink, themedBase, 0.86), label: roleTextPrimary };
+      return { bg: complementaryBg, label: roleTextPrimary, surf: "comp" };
     }
     if (CARD_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { bg: roleSurface, label: roleTextPrimary };
+      return { bg: roleSurface, label: roleTextPrimary, surf: "card" };
     }
-    return null;
+    // GENERIC surface → the ONE fixed role surface (decoupled from original bg).
+    return { bg: roleSurface, label: roleTextPrimary };
   };
 
-  /**
-   * The TEXT role seed + AA size for an element: a → link; h1/h2 → heading;
-   * h3–h6 → accent (subheading); strong/em/… → primary (emphasis);
-   * blockquote/cite → secondary (quote); small/caption/muted-class → muted;
-   * else body. Mirrors `classifyText` + `textRoleColor` in mapping.ts.
-   */
-  const textSeedFor = (el: HTMLElement): { seed: string; large: boolean } => {
+  const isSkippable = (el: HTMLElement): boolean => {
     const tag = el.tagName.toLowerCase();
-    const cls = (el.getAttribute("class") || "").toLowerCase();
-    if (tag === "a") {
-      return { seed: roleLink, large: false };
-    }
-    if (HEADING_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { seed: roleHeading, large: true };
-    }
-    if (SUBHEADING_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { seed: roleAccent, large: true };
-    }
-    if (MUTED_TAGS.indexOf(` ${tag} `) >= 0 || MUTED_CLASS.test(cls)) {
-      return { seed: roleTextSecondary, large: false };
-    }
-    if (EMPHASIS_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { seed: rolePrimary, large: false };
-    }
-    if (QUOTE_TAGS.indexOf(` ${tag} `) >= 0) {
-      return { seed: roleSecondary, large: false };
-    }
-    return { seed: roleTextPrimary, large: false };
+    return (
+      tag === "style" ||
+      tag === "script" ||
+      tag === "svg" ||
+      tag === "path" ||
+      tag === "img" ||
+      tag === "canvas" ||
+      tag === "video" ||
+      tag === "iframe"
+    );
   };
+
+  // Editable regions (compose boxes, inputs) must NEVER be re-walked/re-themed:
+  // typing churns their subtree on every keystroke, and they inherit the correct
+  // text color from their surface/base anyway. Skipping them keeps typing smooth.
+  const isEditableRoot = (el: HTMLElement): boolean => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "input" || tag === "textarea") {
+      return true;
+    }
+    const ce = el.getAttribute("contenteditable");
+    return ce === "" || ce === "true" || ce === "plaintext-only";
+  };
+
+  // ---- performance budgets (large + churny DOM safety) --------------------
+  // The walk (initial AND incremental) is TIME-SLICED: process elements until a
+  // small per-slice budget is spent, then YIELD and resume — so a huge/churny DOM
+  // never blocks the main thread in one long synchronous pass. A hard cap bounds
+  // total themed surfaces so the <style> + work can't grow without limit.
+  const SLICE_BUDGET_MS = 4;
+  const MAX_NODES_PER_SLICE = 400;
+  const MAX_THEMED = 12000;
 
   /**
-   * Process ONE element subtree (the element + its descendants): tag each in
-   * DOM order, decide surfaces (pass 1) then text (pass 2 against the effective
-   * ancestor background), and return the CSS rules. Used for the full initial
-   * walk AND for incremental observer updates.
+   * TAG + emit the per-element SURFACE rule for ONE element. Returns its CSS rule
+   * (or null if it is not a surface / is skipped / capped).
+   *
+   * SURFACE COLOR = `mix(frozenOriginal, fixedTheme, factor)` — the DJ-mixer
+   * crossfade. `fixedTheme` (`fill.bg`) is a PURE FUNCTION OF ROLE (never the
+   * original bg), so identical-role surfaces share one theme color and recycled
+   * nodes never drift; `frozenOriginal` (captured once) only feeds the blend. The
+   * element is tagged once with a stable `[data-thememaker="N"]` id + (for tinted
+   * semantic surfaces) a `data-tm-surf` token; once in `doneSet` it is never
+   * re-walked. The label color floors against the DETERMINISTIC `fill.bg`, so it
+   * is stable + AA at every intensity.
+   *
+   * TEXT IS NOT COLORED PER-ELEMENT: role colors come from the ROOT-SCOPED tag
+   * rules emitted once below, so newly created/typed text is instantly correct.
    */
-  const processSubtree = (rootEl: HTMLElement): string[] => {
-    const els: HTMLElement[] = [rootEl];
-    const descendants = rootEl.querySelectorAll<HTMLElement>("*");
-    for (let i = 0; i < descendants.length; i += 1) {
-      els.push(descendants[i]);
+  const processElement = (el: HTMLElement): string | null => {
+    if (doneSet.has(el) || isSkippable(el)) {
+      return null;
     }
-
-    // paintedBg: element → new bg (for effective-bg resolution in pass 2).
-    const paintedBg = new Map<HTMLElement, string>();
-    const out: string[] = [];
-
-    const isSkippable = (el: HTMLElement): boolean => {
-      const tag = el.tagName.toLowerCase();
-      return (
-        tag === "style" ||
-        tag === "script" ||
-        tag === "svg" ||
-        tag === "path" ||
-        tag === "img" ||
-        tag === "canvas" ||
-        tag === "video" ||
-        tag === "iframe"
-      );
-    };
-
-    // PASS 1 — surfaces (DOM order, so ancestors resolve before descendants).
-    // EVERY element that owns a background gets repainted; the NEW background is
-    // a BLEND from its ORIGINAL color toward the mapped palette surface.
-    for (const el of els) {
-      if (isSkippable(el)) {
-        continue;
-      }
-      // Detect against the ORIGINAL background, not our themed output, so
-      // re-apply (e.g. dragging the intensity slider) is idempotent.
-      const orig = originalStyleOf(el);
-      const bgRgb = parseColor(orig.bg ?? "");
-      if (!bgRgb) {
-        continue;
-      }
-      // tag + emit a surface rule.
-      let id = el.getAttribute(ATTR);
-      if (id === null) {
-        id = String(w.__themeMakerNextId as number);
-        w.__themeMakerNextId = (w.__themeMakerNextId as number) + 1;
-        w.__themeMakerWriting = true;
-        el.setAttribute(ATTR, id);
-        w.__themeMakerWriting = false;
-      }
-      const originalBg = toHex(bgRgb);
-      // Role-aware fill: buttons/code/cards pull dedicated palette slots; other
-      // surfaces fall back to luminance-bucket mapping (preserves dark/light).
-      const fill = surfaceFillFor(el);
-      const mapped = fill ? fill.bg : surfaceFor(bucketOf(originalBg));
-      const background = mix(originalBg, mapped, factor);
-      paintedBg.set(el, background);
-      const labelSeed = fill ? fill.label : roleTextPrimary;
-      const color = blendedText(orig.fg, background, labelSeed, factor, false);
-      out.push(
-        `[${ATTR}="${id}"] { background-color: ${background} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`,
-      );
-    }
-
-    // Resolve the effective background for an element: nearest ancestor-or-self
-    // that pass 1 painted (in THIS subtree), else the base background.
-    const effectiveBg = (el: HTMLElement): string => {
-      let cursor: HTMLElement | null = el;
-      while (cursor) {
-        const bg = paintedBg.get(cursor);
-        if (bg) {
-          return bg;
-        }
-        cursor = cursor.parentElement;
-      }
-      return baseBackground;
-    };
-
-    // PASS 2 — text (ALWAYS, regardless of intensity). Enforce AA against the
-    // EFFECTIVE rendered background behind the text.
-    for (const el of els) {
-      if (isSkippable(el)) {
-        continue;
-      }
-      // Surfaces already emitted their own (AA) text color in pass 1; don't
-      // also emit a text-only rule for them.
-      if (paintedBg.has(el)) {
-        continue;
-      }
-      // Detect against the ORIGINAL text color, not our themed output.
-      const origFg = originalStyleOf(el).fg;
-      const fgRgb = parseColor(origFg ?? "");
-      if (!fgRgb) {
-        continue;
-      }
-      // Only bother with elements that actually hold their own text content.
-      let hasText = false;
-      for (let i = 0; i < el.childNodes.length; i += 1) {
-        const cn = el.childNodes[i];
-        if (cn.nodeType === 3 && (cn.textContent || "").trim().length > 0) {
-          hasText = true;
-          break;
+    // Honor the total themed-surface budget. Past the cap we stop tagging new
+    // surfaces (already-themed ones keep their frozen rules). Warn once.
+    if ((w.__themeMakerThemedCount as number) >= MAX_THEMED) {
+      if (!w.__themeMakerCapped) {
+        w.__themeMakerCapped = true;
+        try {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[thememaker] themed-element budget reached (${MAX_THEMED}); ` +
+              `further new elements on this page are left un-themed to stay fast.`,
+          );
+        } catch {
+          // console unavailable — ignore.
         }
       }
-      if (!hasText) {
-        continue;
-      }
-      // Reuse the element's stable id if already tagged; otherwise assign one.
-      let id = el.getAttribute(ATTR);
-      if (id === null) {
-        id = String(w.__themeMakerNextId as number);
-        w.__themeMakerNextId = (w.__themeMakerNextId as number) + 1;
-        w.__themeMakerWriting = true;
-        el.setAttribute(ATTR, id);
-        w.__themeMakerWriting = false;
-      }
-      const effBg = effectiveBg(el);
-      // Role-aware seed: link/heading/subheading/muted/body each pull their own
-      // palette slot, so multi-hue palettes spend the whole harmony — AA-nudged
-      // (hue-preserving) against the effective rendered background.
-      const ts = textSeedFor(el);
-      const color = blendedText(origFg, effBg, ts.seed, factor, ts.large);
-      out.push(
-        `[${ATTR}="${id}"] { color: ${color} !important; text-shadow: none !important; }`,
-      );
+      return null;
     }
 
-    return out;
+    // Detect against the FROZEN ORIGINAL bg, not our themed output, so re-apply is
+    // idempotent. Only elements that own a (non-transparent) background are
+    // surfaces; everything else inherits / matches a role tag rule.
+    const orig = originalStyleOf(el);
+    const bgRgb = parseColor(orig.bg ?? "");
+    if (!bgRgb) {
+      doneSet.add(el);
+      return null;
+    }
+
+    doneSet.add(el);
+    w.__themeMakerThemedCount = (w.__themeMakerThemedCount as number) + 1;
+    let id = el.getAttribute(ATTR);
+    if (id === null) {
+      id = String(w.__themeMakerNextId as number);
+      w.__themeMakerNextId = (w.__themeMakerNextId as number) + 1;
+      w.__themeMakerWriting = true;
+      el.setAttribute(ATTR, id);
+      w.__themeMakerWriting = false;
+    }
+    const frozenOriginal = toHex(bgRgb);
+    // FIXED THEME by role (never `bucketOf(frozenOriginal)`); crossfade from the
+    // frozen original toward it by the intensity factor.
+    const fill = surfaceFillFor(el);
+    const background = mix(frozenOriginal, fill.bg, factor);
+    // Tag tinted SEMANTIC surfaces (card/code/banner/comp) with their role token
+    // so the scoped role-text rules floor text inside them against THIS surface —
+    // keeping that text AA + colorful with no per-element text rule. Deterministic.
+    if (fill.surf && el.getAttribute("data-tm-surf") !== fill.surf) {
+      w.__themeMakerWriting = true;
+      el.setAttribute("data-tm-surf", fill.surf);
+      w.__themeMakerWriting = false;
+    }
+    // The surface sets the inherited body-text color for its subtree, floored
+    // against its DETERMINISTIC fixed-theme bg (`fill.bg`) — stable + readable on
+    // what it lands on at full theme. Role tags (a/h1/…) still override per role.
+    const color = roleText(fill.label, fill.bg, false);
+    return `[${ATTR}="${id}"] { background-color: ${background} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`;
   };
 
-  // ---- assemble the full CSS FIRST (no themeless gap) ---------------------
-  const cssParts: string[] = [];
+  // ---- write the BASE rules IMMEDIATELY (no themeless gap) -----------------
+  const baseParts: string[] = [];
   if (varDecls.length > 0) {
-    cssParts.push(`:root { ${varDecls.join(" ")} }`);
+    baseParts.push(`:root { ${varDecls.join(" ")} }`);
   }
-  // html + body are ALWAYS themed as the base surface.
-  cssParts.push(
+  baseParts.push(
     `html { background-color: ${baseBackground} !important; background-image: none !important; color: ${baseText} !important; }`,
     `body { background-color: ${baseBackground} !important; background-image: none !important; color: ${baseText} !important; }`,
   );
-  if (document.body) {
-    for (const rule of processSubtree(document.body)) {
-      cssParts.push(rule);
+
+  // ---- ROLE TEXT as ROOT-SCOPED TAG rules (no per-element text) ------------
+  // Text color is delivered by INHERITANCE + these tag/role selectors, emitted
+  // ONCE — NOT per element. So any newly-created or typed <p>/<a>/<h1>/… is the
+  // right color the instant it exists (no observer round-trip → no per-keystroke
+  // flash) and the walk/observer never touch text.
+  //
+  // SPECIFICITY (the real-SPA fix). Bare tag selectors are (0,0,1), which a site's
+  // single-CLASS color (e.g. Gmail's `.Zt{color:…!important}` at (0,1,0)) BEATS.
+  // We SCOPE every role rule under a stable ROOT MARKER attribute on <html>
+  // (`[data-thememaker]`, set below), lifting page-level rules to (0,1,1) — beating
+  // a single site class — while STILL being a descendant selector, so new/typed
+  // nodes match instantly. Per-surface variants scope one level deeper (0,2,1).
+  // Each rule floors its role seed against a DETERMINISTIC reference surface.
+  const ROOT = `[${ATTR}]`;
+  // The PAGE-LEVEL role rules must be readable on BOTH the page base AND a generic
+  // surface (which lands on `roleSurface`), since an un-tokenized generic
+  // container can hold any text. So floor each page-level seed against whichever of
+  // {themedBase, roleSurface} gives it LOWER contrast (the harder case) — that
+  // makes it AA against both endpoints and every blend between them (a generic
+  // surface at any intensity). The per-surface scoped rules floor against their
+  // own single fixed surface.
+  const harderRef = (seed: string): string => {
+    const a = themedBase;
+    const b = roleSurface;
+    if (a === b) {
+      return a;
+    }
+    return contrast(seed, a) <= contrast(seed, b) ? a : b;
+  };
+  const roleRulesFor = (
+    refFor: (seed: string, large: boolean) => string,
+    scope: string,
+  ): string[] => {
+    const prefix = scope ? `${ROOT} ${scope}` : ROOT;
+    const sel = (tags: string): string =>
+      tags
+        .split(", ")
+        .map((t) => `${prefix} ${t}`)
+        .join(", ");
+    const c = (seed: string, large: boolean): string =>
+      roleText(seed, refFor(seed, large), large);
+    return [
+      `${sel("p, li, td, th, dd, dt, span, div")} { color: ${c(roleTextPrimary, false)} !important; }`,
+      `${sel("a")} { color: ${c(roleLink, false)} !important; }`,
+      `${sel("h1, h2")} { color: ${c(roleHeading, true)} !important; }`,
+      `${sel("h3, h4, h5, h6")} { color: ${c(roleAccent, true)} !important; }`,
+      `${sel("small, figcaption, caption, time, label")} { color: ${c(roleTextSecondary, false)} !important; }`,
+      `${sel("strong, em, b, i, mark, dfn")} { color: ${c(rolePrimary, false)} !important; }`,
+      `${sel("blockquote, q, cite")} { color: ${c(roleSecondary, false)} !important; }`,
+    ];
+  };
+  // Page level (readable on the page base AND any generic surface), then each
+  // tinted surface role (floored against THAT fixed surface).
+  for (const r of roleRulesFor(harderRef, "")) {
+    baseParts.push(r);
+  }
+  for (const key of Object.keys(SURFACE_ROLE_BG)) {
+    const ref = SURFACE_ROLE_BG[key];
+    for (const r of roleRulesFor(() => ref, `[data-tm-surf="${key}"]`)) {
+      baseParts.push(r);
     }
   }
-  const css = cssParts.join("\n");
 
   // ---- write the single <style id="themeMaker"> IN PLACE ------------------
-  // Create only if missing; otherwise overwrite textContent — never
-  // remove-then-append, so there is no themeless frame (no flash).
   const head = document.querySelector("head") || document.documentElement;
   let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
   if (!style) {
@@ -1022,14 +1083,198 @@ export function applyAdaptiveScheme(
     head.appendChild(style);
     w.__themeMakerWriting = false;
   }
-  style.textContent = css;
+  const styleEl = style;
+  // Each explicit apply REBUILDS the sheet: start from empty, write base rules,
+  // then stream the surface walk in.
+  w.__themeMakerWriting = true;
+  styleEl.textContent = "";
+  // ROOT MARKER: a stable presence attribute on <html> that every role-text rule
+  // is scoped under, so the engine's text colors clear site single-class
+  // specificity. It carries no value, so it never collides with the per-element
+  // `[data-thememaker="N"]` surface rules.
+  if (!document.documentElement.hasAttribute(ATTR)) {
+    document.documentElement.setAttribute(ATTR, "");
+  }
+  w.__themeMakerWriting = false;
+
+  const appendRules = (rules: string[]): void => {
+    if (rules.length === 0) {
+      return;
+    }
+    w.__themeMakerWriting = true;
+    const existing = styleEl.textContent ?? "";
+    styleEl.textContent = existing
+      ? `${existing}\n${rules.join("\n")}`
+      : rules.join("\n");
+    w.__themeMakerWriting = false;
+  };
+
+  // ---- TIME-SLICED walk drainer -------------------------------------------
+  const yieldThen = (cb: () => void): void => {
+    const ric = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void, opts?: unknown) => void;
+      }
+    ).requestIdleCallback;
+    if (ric) {
+      ric(() => cb(), { timeout: 200 });
+    } else {
+      setTimeout(cb, 16);
+    }
+  };
+
+  // Each work item is a flattened list of elements (a subtree expanded once) plus
+  // a cursor, so we can pause mid-subtree and resume without re-querying the DOM.
+  // EDITABLE subtrees are EXCLUDED (typing churns them; their text inherits).
+  type WorkItem = { els: HTMLElement[]; i: number };
+  const EDITABLE_SEL =
+    'input, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
+  const expand = (rootEl: HTMLElement): HTMLElement[] => {
+    if (isEditableRoot(rootEl)) {
+      return [];
+    }
+    const els: HTMLElement[] = [rootEl];
+    const d = rootEl.querySelectorAll<HTMLElement>("*");
+    const hasEditable = rootEl.querySelector(EDITABLE_SEL) !== null;
+    if (!hasEditable) {
+      for (let i = 0; i < d.length; i += 1) {
+        els.push(d[i]);
+      }
+      return els;
+    }
+    for (let i = 0; i < d.length; i += 1) {
+      const el = d[i];
+      if (el.closest(EDITABLE_SEL)) {
+        continue;
+      }
+      els.push(el);
+    }
+    return els;
+  };
+
+  let work: WorkItem[] = [];
+  let draining = false;
+
+  const now = (): number =>
+    typeof performance !== "undefined" && performance.now
+      ? performance.now()
+      : Date.now();
+
+  const drainQueue = (): void => {
+    draining = true;
+    const obs = w.__themeMakerObserver;
+    // Disconnect while we mutate (attribute + style writes) so our own writes
+    // never re-enter the observer queue; reconnect when the slice ends.
+    if (obs) {
+      obs.disconnect();
+    }
+    const start = now();
+    const rules: string[] = [];
+    let processed = 0;
+    if ((w.__themeMakerThemedCount as number) >= MAX_THEMED) {
+      work = [];
+    }
+    outer: while (work.length > 0) {
+      const item = work[0];
+      while (item.i < item.els.length) {
+        const rule = processElement(item.els[item.i]);
+        item.i += 1;
+        processed += 1;
+        if (rule !== null) {
+          rules.push(rule);
+        }
+        if (
+          processed >= MAX_NODES_PER_SLICE ||
+          (processed >= 64 && now() - start >= SLICE_BUDGET_MS)
+        ) {
+          if (item.i >= item.els.length) {
+            work.shift();
+          }
+          if ((w.__themeMakerThemedCount as number) >= MAX_THEMED) {
+            work = [];
+          }
+          break outer;
+        }
+      }
+      work.shift();
+    }
+    appendRules(rules);
+    if (obs && document.body) {
+      obs.observe(document.body, { childList: true, subtree: true });
+    }
+    draining = false;
+    if (work.length > 0) {
+      yieldThen(() => {
+        if (work.length > 0) {
+          drainQueue();
+        }
+      });
+    }
+  };
+
+  // Is `el` (even partially) within the current viewport? Theme ABOVE-THE-FOLD
+  // content FIRST. In jsdom every rect is 0×0 at (0,0) → in-viewport, so the split
+  // is a no-op there (DOM order preserved; unit tests unaffected).
+  const vh = (): number =>
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  const vw = (): number =>
+    window.innerWidth || document.documentElement.clientWidth || 0;
+  const inViewport = (el: HTMLElement): boolean => {
+    let r: DOMRect;
+    try {
+      r = el.getBoundingClientRect();
+    } catch {
+      return true;
+    }
+    const h = vh();
+    const w2 = vw();
+    if (r.width === 0 && r.height === 0 && r.top === 0 && r.left === 0) {
+      return true;
+    }
+    return r.bottom >= 0 && r.right >= 0 && r.top <= h && r.left <= w2;
+  };
+
+  const enqueue = (rootEl: HTMLElement, prioritizeViewport = false): void => {
+    if (doneSet.has(rootEl) && rootEl.querySelectorAll("*").length === 0) {
+      return;
+    }
+    const els = expand(rootEl);
+    if (!prioritizeViewport || els.length < 200) {
+      work.push({ els, i: 0 });
+      return;
+    }
+    const visible: HTMLElement[] = [];
+    const rest: HTMLElement[] = [];
+    for (const el of els) {
+      (inViewport(el) ? visible : rest).push(el);
+    }
+    if (visible.length > 0) {
+      work.push({ els: visible, i: 0 });
+    }
+    if (rest.length > 0) {
+      work.push({ els: rest, i: 0 });
+    }
+  };
+
+  // Write the base rules now, then kick off the (time-sliced) surface walk. The
+  // first slice runs synchronously inside this call, ABOVE-THE-FOLD first.
+  appendRules(baseParts);
+  if (document.body) {
+    enqueue(document.body, true);
+    if (!draining) {
+      drainQueue();
+    }
+  }
 
   // ---- per-tag custom overrides: a SEPARATE CSS layer ON TOP ---------------
-  // Customize is per-TAG: `options.overrides` maps `<tag>|<prop>` → exact hex.
-  // Emit a sibling <style id="themeMakerOverrides"> AFTER the main one so it
-  // wins. Real tags target `<tag>[data-thememaker]` (specificity 0,1,1, beating
-  // the engine's per-element `[data-thememaker="N"]` at 0,1,0); the page base
-  // uses a bare `html`/`body` rule (equal specificity, later source order wins).
+  // `options.overrides` maps `<tag>|<prop>` → exact hex. Emit a sibling
+  // <style id="themeMakerOverrides"> AFTER the main one so it wins.
+  //  - BACKGROUND on a real tag → `tag[data-thememaker]` (0,1,1) beats the
+  //    engine's per-element `[data-thememaker="N"]` (0,1,0).
+  //  - TEXT on a real tag → ROOT-SCOPED `[data-thememaker] tag` (mirrors the
+  //    engine's role rules) + a per-surface variant, so it TIES the engine's
+  //    specificity and WINS by later source order, clearing site single-class.
+  //  - `page` → bare `html, body`; html/body → bare tag.
   const OVR_ID = "themeMakerOverrides";
   const ovr = options.overrides || {};
   const ovrKeys = Object.keys(ovr);
@@ -1053,86 +1298,71 @@ export function applyAdaptiveScheme(
         continue; // only safe element names
       }
       const cssProp = prop === "background" ? "background-color" : "color";
-      // `page` → both html + body; html/body → bare tag; everything else →
-      // `tag[data-thememaker]` (beats the engine's per-element rules).
-      const sel =
-        tag === "page"
-          ? "html, body"
-          : tag === "html" || tag === "body"
-            ? tag
-            : `${tag}[data-thememaker]`;
-      rules.push(`${sel}{${cssProp}:${val} !important}`);
+      if (tag === "page") {
+        rules.push(`html, body{${cssProp}:${val} !important}`);
+      } else if (tag === "html" || tag === "body") {
+        rules.push(`${tag}{${cssProp}:${val} !important}`);
+      } else if (cssProp === "background-color") {
+        rules.push(`${tag}[data-thememaker]{${cssProp}:${val} !important}`);
+      } else {
+        rules.push(`[data-thememaker] ${tag}{${cssProp}:${val} !important}`);
+        for (const surfKey of ["card", "code", "banner", "comp"]) {
+          rules.push(
+            `[data-thememaker] [data-tm-surf="${surfKey}"] ${tag}{${cssProp}:${val} !important}`,
+          );
+        }
+      }
     }
     if (!ovrStyle) {
       ovrStyle = document.createElement("style");
       ovrStyle.id = OVR_ID;
     }
-    // (Re-)append so it stays AFTER #themeMaker in source order.
     head.appendChild(ovrStyle);
     ovrStyle.textContent = rules.join("\n");
   }
   w.__themeMakerWriting = false;
 
-  // ---- MutationObserver: INCREMENTAL + debounced re-theme -----------------
+  // ---- MutationObserver: INCREMENTAL + DEBOUNCED + TIME-SLICED re-theme -----
+  // Coalesce all added nodes into one trailing-edge flush ~250ms after the last
+  // mutation (anti-flicker), then feed those roots into the SAME time-sliced
+  // drainer. Only genuinely NEW surfaces do work (`doneSet` skips the rest).
+  const DEBOUNCE_MS = 250;
   if (w.__themeMakerObserver) {
     w.__themeMakerObserver.disconnect();
   }
   w.__themeMakerArgs = [palette, options];
 
-  const styleEl = style;
-  let pending: HTMLElement[] = [];
-  let scheduled = false;
+  let pending = new Set<HTMLElement>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  // True when `el` is one of the engine's OWN elements — never re-theme our output.
+  const isOwnElement = (el: HTMLElement): boolean =>
+    el.id === STYLE_ID ||
+    el.id === "themeMakerOverrides" ||
+    el.id === "themeMakerEarly";
 
   const flush = (): void => {
-    scheduled = false;
-    const obs = w.__themeMakerObserver;
-    if (obs) {
-      obs.disconnect();
-    }
-    const additions: string[] = [];
+    timer = null;
     for (const el of pending) {
-      if (!el.isConnected) {
+      if (!el.isConnected || isOwnElement(el)) {
         continue;
       }
-      for (const rule of processSubtree(el)) {
-        additions.push(rule);
-      }
+      enqueue(el, true);
     }
-    pending = [];
-    if (additions.length > 0) {
-      // Append to the EXISTING style — never re-walk the whole document.
-      w.__themeMakerWriting = true;
-      styleEl.textContent = `${styleEl.textContent ?? ""}\n${additions.join("\n")}`;
-      w.__themeMakerWriting = false;
-    }
-    if (obs && document.body) {
-      obs.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
+    pending = new Set<HTMLElement>();
+    if (work.length > 0 && !draining) {
+      drainQueue();
     }
   };
 
   const schedule = (): void => {
-    if (scheduled) {
-      return;
+    if (timer !== null) {
+      clearTimeout(timer);
     }
-    scheduled = true;
-    const ric = (
-      window as unknown as { requestIdleCallback?: (cb: () => void) => void }
-    ).requestIdleCallback;
-    if (ric) {
-      ric(flush);
-    } else {
-      setTimeout(flush, 200);
-    }
+    timer = setTimeout(flush, DEBOUNCE_MS);
   };
 
   const observer = new MutationObserver((mutations) => {
-    // Ignore mutations caused by our OWN style/attribute writes.
-    if (w.__themeMakerWriting) {
-      return;
-    }
     let queued = false;
     for (const mm of mutations) {
       if (mm.type !== "childList") {
@@ -1142,11 +1372,10 @@ export function applyAdaptiveScheme(
         if (!(n instanceof HTMLElement)) {
           return;
         }
-        // Skip our own <style> element.
-        if (n.id === STYLE_ID) {
+        if (isOwnElement(n)) {
           return;
         }
-        pending.push(n);
+        pending.add(n);
         queued = true;
       });
     }

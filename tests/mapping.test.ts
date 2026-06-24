@@ -224,13 +224,15 @@ describe("buildMapping — intensity is a BLEND (theme vs. original)", () => {
     expect(luminanceOf(low)).toBeGreaterThan(luminanceOf(high));
   });
 
-  it("at intensity 100 the surface bg equals the fully-mapped palette surface", () => {
+  it("at intensity 100 a generic surface bg equals the FIXED role surface (decoupled from original)", () => {
+    // A generic surface's theme color is its ROLE color (`roles.surface`), NOT a
+    // luminance bucket of its original bg — so a dark and a light generic surface
+    // map to the SAME fixed surface at full theme (the SPA stability trade-off).
     const node = surfaceNode("[data-tm='dark']", "#0c0c0c");
     const r = buildMapping([node], [], palette, MAX);
     const bg = r.decisions.find((d) => d.selector === "[data-tm='dark']")
       ?.background as string;
-    // dark source → mapped onto the darkest palette surface, fully (factor 1).
-    expect(bg.toLowerCase()).toBe(palette.surfaces[0].toLowerCase());
+    expect(bg.toLowerCase()).toBe(palette.roles.surface.toLowerCase());
   });
 
   it("intensity < 100 SKIPS borders; intensity 100 paints them", () => {
@@ -251,8 +253,13 @@ describe("buildMapping — intensity is a BLEND (theme vs. original)", () => {
   });
 });
 
-describe("buildMapping — luminance bucket mapping", () => {
-  it("maps dark/medium/light source surfaces onto distinct palette surfaces", () => {
+describe("buildMapping — generic surfaces map by ROLE, not original-bg luminance", () => {
+  it("dark/medium/light source surfaces all map to the SAME fixed role surface (no original-bg dependence)", () => {
+    // THE SPA FIX. Generic surfaces no longer bucket by their original-bg
+    // luminance — every generic surface maps to the one fixed `roles.surface`.
+    // So three wildly different original bgs yield the IDENTICAL theme bg at full
+    // intensity: identical-role rows can never split into "2 colors", and a
+    // recycled/restyled node can't change color.
     const nodes = [
       surfaceNode("[data-tm='d']", "#0c0c0c"),
       surfaceNode("[data-tm='m']", "#808080"),
@@ -261,19 +268,19 @@ describe("buildMapping — luminance bucket mapping", () => {
     const result = buildMapping(nodes, [], palette, MAX);
     const bgFor = (sel: string): string =>
       result.decisions.find((d) => d.selector === sel)?.background as string;
-    const dark = bgFor("[data-tm='d']");
-    const light = bgFor("[data-tm='l']");
-    // hierarchy preserved: the dark source maps darker than the light source
-    expect(contrastRatio(dark, "#ffffff")).toBeGreaterThan(
-      contrastRatio(light, "#ffffff"),
-    );
+    const surf = palette.roles.surface.toLowerCase();
+    expect(bgFor("[data-tm='d']").toLowerCase()).toBe(surf);
+    expect(bgFor("[data-tm='m']").toLowerCase()).toBe(surf);
+    expect(bgFor("[data-tm='l']").toLowerCase()).toBe(surf);
   });
 });
 
-describe("buildMapping — text against EFFECTIVE background (bug #3)", () => {
-  it("text under a DARK themed ancestor is AA against THAT dark bg, not a default", () => {
-    // Force the parent surface to map DARK by giving it a near-black own bg.
-    // Node 0 is the surface (parent), node 1 is the text child pointing at it.
+describe("buildMapping — text against the DETERMINISTIC reference surface (bug #3)", () => {
+  it("text under a themed ancestor is AA against that ancestor's FIXED role surface", () => {
+    // The panel is a generic surface → its DETERMINISTIC reference surface is
+    // `roles.surface` (independent of its near-black original bg). The child text
+    // floors against THAT fixed surface, so it is readable on what actually
+    // renders at full theme — and stable regardless of the panel's original bg.
     const nodes: DetectedNode[] = [
       surfaceNode("[data-tm='panel']", "#050505", { area: 300_000 }),
       textNode("[data-tm='label']", { parent: 0 }),
@@ -285,13 +292,11 @@ describe("buildMapping — text against EFFECTIVE background (bug #3)", () => {
     const label = result.decisions.find(
       (d) => d.selector === "[data-tm='label']",
     );
-    // The panel mapped onto the DARK end of the palette.
-    expect(panel?.background).toBe(palette.surfaces[0]);
-    // The label's color is AA against the panel's NEW dark background — the
-    // invisible-text floor holds even at full intensity (the swatch color is
-    // relit only if it would be unreadable on the effective ancestor bg).
+    // The generic panel mapped onto the FIXED role surface (not a luminance bucket).
+    expect(panel?.background).toBe(palette.roles.surface);
+    // The label's color is AA against that deterministic surface.
     expect(
-      contrastRatio(label?.color as string, panel?.background as string),
+      contrastRatio(label?.color as string, palette.roles.surface),
     ).toBeGreaterThanOrEqual(AA_NORMAL);
   });
 
@@ -342,44 +347,57 @@ describe("buildMapping — AA GUARANTEE across intensities", () => {
     { name: "--panel-bg", value: "#0d0d0d" },
   ];
 
-  // The AA / invisible-text guarantee holds at EVERY intensity, including full.
-  // Even though full intensity paints the swatch color as the source of truth,
-  // it is floored through `nudgeToAA`, so a truly-unreadable swatch color is
-  // minimally relit (same hue) rather than left invisible.
+  // STABILITY-FIRST AA. A surface's text/label is floored against the
+  // DETERMINISTIC reference surface its role lands on (the bg at FULL theme), NOT
+  // the intensity-blended bg — so the label color is identical at every intensity
+  // and readable on what actually renders at full theme. We verify AA against
+  // that deterministic reference (each surface's bg at MAX intensity), at every
+  // dial position (the label color itself does not move with the dial).
   for (const opts of [LOW, MID, MAX]) {
-    it(`every surface's text passes AA against its new bg (intensity ${opts.intensity})`, () => {
+    it(`every surface's text passes AA against its FIXED reference surface (intensity ${opts.intensity})`, () => {
       const result = buildMapping(nodes, vars, palette, opts);
+      // The deterministic reference bg per selector = its bg at full theme.
+      const refBgOf = new Map<string, string>();
+      for (const d of buildMapping(nodes, vars, palette, MAX).decisions) {
+        if (d.role === "surface" && d.background) {
+          refBgOf.set(d.selector, d.background);
+        }
+      }
       for (const d of result.decisions) {
         if (d.role === "surface") {
           expect(isHexColor(d.background as string)).toBe(true);
           expect(isHexColor(d.color as string)).toBe(true);
-          expect(
-            contrastRatio(d.color as string, d.background as string),
-          ).toBeGreaterThanOrEqual(AA_NORMAL);
+          const ref = refBgOf.get(d.selector) ?? (d.background as string);
+          expect(contrastRatio(d.color as string, ref)).toBeGreaterThanOrEqual(
+            AA_NORMAL,
+          );
         }
       }
     });
 
-    it(`every text node passes AA against its effective bg (intensity ${opts.intensity})`, () => {
+    it(`every text node passes AA against its FIXED reference surface (intensity ${opts.intensity})`, () => {
       const result = buildMapping(nodes, vars, palette, opts);
-      // Reconstruct the effective bg the engine used for each text node.
-      const paintedSel = new Map<string, string>();
-      for (const d of result.decisions) {
+      // Text floors against the DETERMINISTIC reference surface of its nearest
+      // themed ancestor (the page `bg` role, or a surface's bg at FULL theme) —
+      // NOT the intensity-blended painted bg. So we verify AA against those fixed
+      // references (each surface's bg at MAX intensity, plus the page base role).
+      const refSel = new Map<string, string>();
+      for (const d of buildMapping(nodes, vars, palette, MAX).decisions) {
         if (d.role === "surface" && d.background) {
-          paintedSel.set(d.selector, d.background);
+          refSel.set(d.selector, d.background);
         }
       }
       for (const d of result.decisions) {
         if (d.role === "text" && d.color) {
           expect(isHexColor(d.color)).toBe(true);
-          // It must be AA against SOME real surface in the palette + base; the
-          // weakest guarantee is the base background.
+          // AA against the deterministic page base role, or any fixed reference
+          // surface (its nearest themed ancestor lands on one of these).
           const okAgainstBase =
-            contrastRatio(d.color, result.baseBackground) >= AA_NORMAL;
-          const okAgainstAnyPainted = [...paintedSel.values()].some(
+            contrastRatio(d.color, palette.roles.bg) >= AA_NORMAL;
+          const okAgainstAnyRef = [...refSel.values()].some(
             (bg) => contrastRatio(d.color as string, bg) >= AA_NORMAL,
           );
-          expect(okAgainstBase || okAgainstAnyPainted).toBe(true);
+          expect(okAgainstBase || okAgainstAnyRef).toBe(true);
         }
       }
     });
@@ -661,5 +679,118 @@ describe("buildMapping — spends the WHOLE palette (anti-monochrome)", () => {
     const secondaryBg = bgOf(decisions, "[btn2]");
     // primary carries more saturation than secondary (the visual hierarchy).
     expect(hexToHsl(primaryBg).s).toBeGreaterThan(hexToHsl(secondaryBg).s);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DETERMINISTIC TEXT COLOR (the SPA stability fix).
+//
+// On a churny SPA (the user's Gmail repro) text was colored per-element against
+// the LIVE painted ancestor background and blended toward each element's CURRENT
+// computed color — so results varied with transient DOM structure / paint order
+// / timing, producing flicker + inconsistency + refresh-variance. The fix makes
+// text color a PURE FUNCTION of (role seed, deterministic reference surface,
+// size): it must NOT move with the intensity dial, NOT depend on the element's
+// own original color, and NOT depend on the volatile live ancestor bg.
+// ---------------------------------------------------------------------------
+describe("buildMapping — DETERMINISTIC text color (SPA stability)", () => {
+  // A row of free text under a themed card ancestor — the Gmail "email row" shape.
+  const rowPage = (
+    rowOriginalBg: string,
+    textOriginalColor: string,
+  ): DetectedNode[] => [
+    surfaceNode("body", "#ffffff", { tagName: "body" }),
+    // node 1: the row container (a card surface), child of body (node 0)
+    surfaceNode("[row]", rowOriginalBg, { tagName: "article", parent: 0 }),
+    // node 2: the row's text, child of the row (node 1)
+    textNode("[rowtext]", {
+      tagName: "span",
+      textColor: textOriginalColor,
+      parent: 1,
+    }),
+  ];
+  const colorOf = (
+    decisions: ReturnType<typeof buildMapping>["decisions"],
+    sel: string,
+  ) => (decisions.find((d) => d.selector === sel)?.color ?? "").toLowerCase();
+
+  it("text color is INDEPENDENT of the element's own original color", () => {
+    // Same role + same ancestor, but wildly different original text colors —
+    // the emitted color must be identical (no blend toward the original).
+    const a = buildMapping(rowPage("#ffffff", "#000000"), [], palette, MAX);
+    const b = buildMapping(rowPage("#ffffff", "#ff00ff"), [], palette, MAX);
+    expect(colorOf(a.decisions, "[rowtext]")).toBe(
+      colorOf(b.decisions, "[rowtext]"),
+    );
+  });
+
+  it("text color is INDEPENDENT of the intensity dial (stable across the range)", () => {
+    const page = rowPage("#ffffff", "#000000");
+    const at = (intensity: number) =>
+      colorOf(
+        buildMapping(page, [], palette, { intensity }).decisions,
+        "[rowtext]",
+      );
+    const low = at(10);
+    const mid = at(50);
+    const high = at(100);
+    expect(low).toBe(high);
+    expect(mid).toBe(high);
+  });
+
+  it("text color is INDEPENDENT of the ancestor row's CURRENT (swapped) background", () => {
+    // Gmail swaps a row's bg class on hover/select. The text color must not
+    // change when the row's own original background changes (same surface ROLE).
+    const normal = buildMapping(
+      rowPage("#ffffff", "#222222"),
+      [],
+      palette,
+      MAX,
+    );
+    const hovered = buildMapping(
+      rowPage("#eef3ff", "#222222"),
+      [],
+      palette,
+      MAX,
+    );
+    const selected = buildMapping(
+      rowPage("#d2e3ff", "#222222"),
+      [],
+      palette,
+      MAX,
+    );
+    const c = colorOf(normal.decisions, "[rowtext]");
+    expect(colorOf(hovered.decisions, "[rowtext]")).toBe(c);
+    expect(colorOf(selected.decisions, "[rowtext]")).toBe(c);
+  });
+
+  it("re-running buildMapping on the SAME input is byte-identical (idempotent)", () => {
+    const page = rowPage("#ffffff", "#000000");
+    const first = buildMapping(page, [], palette, MAX).css;
+    const again = buildMapping(page, [], palette, MAX).css;
+    expect(again).toBe(first);
+  });
+
+  it("a given text role floors against the DETERMINISTIC surface its role lands on (AA holds)", () => {
+    // The row is a card → its deterministic reference surface is roles.surface.
+    // The row text must be AA against roles.surface (what actually renders),
+    // regardless of intensity.
+    for (const intensity of [10, 50, 100]) {
+      const r = buildMapping(rowPage("#ffffff", "#000000"), [], palette, {
+        intensity,
+      });
+      const text = colorOf(r.decisions, "[rowtext]");
+      expect(
+        contrastRatio(text, palette.roles.surface),
+        `intensity ${intensity}: ${text} on ${palette.roles.surface}`,
+      ).toBeGreaterThanOrEqual(AA_NORMAL);
+    }
+  });
+
+  it("base (page) text is identical at every intensity", () => {
+    const at = (intensity: number) =>
+      buildMapping([], [], palette, { intensity }).baseText.toLowerCase();
+    expect(at(10)).toBe(at(100));
+    expect(at(50)).toBe(at(100));
   });
 });

@@ -5,8 +5,14 @@
  * "color") with EXACT `#rrggbb` values (no AA floor — a deliberate manual
  * choice). The engine emits a sibling `<style id="themeMakerOverrides">` AFTER
  * the main `<style id="themeMaker">` so it wins:
- *   - a real tag → `tag[data-thememaker]{ background-color|color: hex !important }`
- *     (specificity 0,1,1 — beats the engine's per-element `[data-thememaker="N"]`);
+ *   - a real tag, BACKGROUND → `tag[data-thememaker]{ background-color: hex !important }`
+ *     (surfaces are still per-element; specificity 0,1,1 beats the engine's
+ *     per-element `[data-thememaker="N"]`);
+ *   - a real tag, TEXT → ROOT-SCOPED `[data-thememaker] tag{ color: hex !important }`
+ *     PLUS a `[data-thememaker] [data-tm-surf="…"] tag` variant per tinted surface
+ *     (text is colored by the engine's root-scoped role rules now, so the override
+ *     mirrors their selectors — clearing site single-class colors and winning by
+ *     later source order at equal specificity);
  *   - `html`/`body` → a BARE selector (later source order wins at equal spec);
  *   - the sentinel tag `page` → `html, body`.
  * The layer is cleared on reset (`removeSchemeStyle` drops it).
@@ -46,17 +52,23 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
     document.body.innerHTML = "";
   });
 
-  it("emits `tag[data-thememaker]{ prop: hex !important }` for a real tag", () => {
+  it("emits the right override selector per prop (bg → data-attr; text → tag)", () => {
     document.body.innerHTML = "<div>x</div><h3>y</h3>";
     applyAdaptiveScheme(palette, {
       intensity: 80,
       overrides: { "div|background": "#112233", "h3|color": "#445566" },
     });
     const css = overrideCss();
+    // BACKGROUND overrides target the per-element surface (still data-attr based).
     expect(css).toContain(
       "div[data-thememaker]{background-color:#112233 !important}",
     );
-    expect(css).toContain("h3[data-thememaker]{color:#445566 !important}");
+    // TEXT overrides are ROOT-SCOPED (to clear site single-class specificity and
+    // tie/beat the engine's own root-scoped role rules), page-level + per-surface.
+    expect(css).toContain("[data-thememaker] h3{color:#445566 !important}");
+    expect(css).toContain(
+      '[data-thememaker] [data-tm-surf="card"] h3{color:#445566 !important}',
+    );
   });
 
   it("uses the EXACT hex (no AA floor — overrides are a manual choice)", () => {
@@ -68,7 +80,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
       overrides: { "p|color": "#fffbe0" },
     });
     expect(overrideCss()).toContain(
-      "p[data-thememaker]{color:#fffbe0 !important}",
+      "[data-thememaker] p{color:#fffbe0 !important}",
     );
   });
 
@@ -131,7 +143,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
     const css = overrideCss();
     expect(css).not.toContain("not-a-color");
     expect(css).not.toContain("#123456");
-    expect(css).toContain("span[data-thememaker]{color:#abcdef !important}");
+    expect(css).toContain("[data-thememaker] span{color:#abcdef !important}");
   });
 
   it("is cleared on reset (removeSchemeStyle drops the override layer)", () => {

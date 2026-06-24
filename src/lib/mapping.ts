@@ -13,31 +13,41 @@
  * algorithm (it can't import across the `executeScript` boundary). Keep the two
  * in lockstep; the tests here pin the behavior.
  *
- * ## Algorithm (two passes)
+ * ## Algorithm — the "DJ mixer" (two passes)
  *
- * The page's `<html>` and `<body>` ALWAYS receive a base surface background +
- * an AA-readable base text color — so the page background always changes and a
- * readable default is inherited everywhere.
+ * Every themed color = `mix(frozenOriginal, fixedTheme, factor)`,
+ * `factor = intensity/100`. Two tracks, a crossfader:
  *
- *  - PASS 1 (surfaces): decide a NEW background for html, body, and every
- *    element that OWNS a non-transparent background. The new background is a
- *    BLEND from the element's ORIGINAL color toward the mapped palette surface,
- *    by the intensity factor. Borders are only painted at the top of the dial.
- *  - PASS 2 (text): for EVERY text-bearing node, compute its EFFECTIVE new
- *    background — the new (blended) background of the nearest ancestor-or-self
- *    that pass 1 themed, defaulting to the base — and set its color to a
- *    blended-but-AA-safe color against it. This makes invisible text impossible:
- *    contrast is enforced against the background that actually renders behind it.
+ *  - TRACK 2 (`fixedTheme`) is a PURE FUNCTION OF THE ELEMENT'S ROLE / STRUCTURE,
+ *    NEVER of its original color. This is THE SPA fix: generic surfaces map to ONE
+ *    fixed palette surface (`roles.surface`); semantic surfaces (card/code/banner/
+ *    button) to their fixed distinct role colors; text to role colors. So
+ *    identical-role elements share one theme color and a recycled/restyled node
+ *    can't change color.
+ *  - TRACK 1 (`frozenOriginal`) is the element's original color; it feeds ONLY the
+ *    crossfade blend, never the theme-color choice.
  *
- * Intensity is a PERCENTAGE: "how much of the theme is applied versus the
- * original" (100 = fully themed; lower = tint toward the page's own colors). It
- * applies UNIFORMLY to every surface/text color, so the dial always has a
- * visible, continuous effect on every site. Text readability (pass 2) is ALWAYS
- * enforced regardless of intensity.
+ * The page's `<html>` and `<body>` ALWAYS receive a base surface background + an
+ * AA-readable base text color.
+ *
+ *  - PASS 1 (surfaces): decide a NEW background for html, body, and every element
+ *    that OWNS a non-transparent background = `mix(frozenOriginal, fixedTheme,
+ *    factor)`, with `fixedTheme` chosen BY ROLE (never by original-bg luminance).
+ *    Borders are only painted at the top of the dial.
+ *  - PASS 2 (text): for EVERY text-bearing node, color it from its ROLE and floor
+ *    it for AA against the DETERMINISTIC reference surface its nearest themed
+ *    ancestor lands on (NOT the volatile blended bg) — so text color is a pure
+ *    function of (role, reference surface, size), stable across intensity / DOM
+ *    churn / reload, and readable on what actually renders.
+ *
+ * Intensity is the CROSSFADER: 100 = fully themed (original silent → all
+ * same-role elements identical); lower tints each surface toward its FROZEN
+ * original. Text readability is ALWAYS enforced; text does NOT move with the dial.
  */
 import {
   isHexColor,
   luminanceBucket,
+  luminanceOf,
   mixHex,
   normalizeHex,
   nudgeToAA,
@@ -527,12 +537,22 @@ export const remapVariables = (
 ): VarDecision[] => {
   const out: VarDecision[] = [];
   const roles = rolesOverride ?? palette.roles;
-  // Primary surface = the bucket the first surface var falls into (or medium).
-  const surfaceVar = vars.find((v) => classifyVarName(v.name) === "surface");
-  const primaryBucket: LuminanceBucket = surfaceVar
-    ? luminanceBucket(surfaceVar.value)
-    : "light";
-  const primarySurface = surfaceForBucket(palette, primaryBucket);
+  // Floor every text/border var against the LIGHTEST mapped surface var (the
+  // worst case for dark-ish ink), so a remapped link/heading/body is AA against
+  // WHICHEVER surface var it lands on (e.g. a link inside a card on `--surface`,
+  // not just the page `--bg`). Falls back to the lightest palette surface.
+  let floorSurface = surfaceForBucket(palette, "light");
+  let floorLum = -1;
+  for (const v of vars) {
+    if (classifyVarName(v.name) === "surface") {
+      const mapped = surfaceForBucket(palette, luminanceBucket(v.value));
+      const l = luminanceOf(mapped);
+      if (l > floorLum) {
+        floorLum = l;
+        floorSurface = mapped;
+      }
+    }
+  }
 
   for (const v of vars) {
     const role = classifyVarName(v.name);
@@ -544,7 +564,7 @@ export const remapVariables = (
     } else if (role === "text") {
       // Route text vars to the matching ROLE color so heading/link vars carry
       // their own accent hue (not all one seed), then AA-nudge against the
-      // surface — preserving the hue rather than collapsing to black/white.
+      // lightest mapped surface — preserving the hue rather than collapsing.
       const n = v.name.toLowerCase();
       const seed = /heading|title/.test(n)
         ? roles.heading
@@ -555,12 +575,12 @@ export const remapVariables = (
             : roles.textPrimary;
       out.push({
         name: v.name,
-        value: nudgeToAA(seed, primarySurface),
+        value: nudgeToAA(seed, floorSurface),
       });
     } else if (role === "border") {
       out.push({
         name: v.name,
-        value: nudgeToAA(roles.border, primarySurface, true),
+        value: nudgeToAA(roles.border, floorSurface, true),
       });
     }
   }
@@ -589,7 +609,7 @@ const bucketHexFromLuminance = (lum: number): string => {
 const surfaceRoleFill = (
   semantic: SemanticRole,
   roles: PaletteRoles,
-): { bg: string; label?: string } | null => {
+): { bg: string; label?: string } => {
   switch (semantic) {
     case "primaryButton":
       return { bg: roles.primary, label: roles.onPrimary };
@@ -597,8 +617,6 @@ const surfaceRoleFill = (
       return { bg: roles.secondary, label: roles.onSecondary };
     case "code":
       return { bg: roles.surfaceAlt };
-    case "card":
-      return { bg: roles.surface };
     // Banner (header/nav) and complementary (aside/footer) chrome get their OWN
     // hued surface tints — a heavy mix of an accent toward the page bg, so they
     // read as distinctly-colored regions (not another white) while staying
@@ -608,31 +626,31 @@ const surfaceRoleFill = (
       return { bg: mixHex(roles.heading, roles.bg, 0.86) };
     case "complementary":
       return { bg: mixHex(roles.link, roles.bg, 0.86) };
+    // card AND generic surfaces both map to the single elevated `surface` slot.
+    // THIS IS THE CORE SPA FIX: a generic surface's THEME color is a FIXED
+    // function of its ROLE (`roles.surface`), NOT of its own original-bg
+    // luminance. So recycled/restyled nodes and identical rows always get the
+    // SAME theme color (no random drift, no "2 colors"). code/banner/comp/buttons
+    // keep their own DISTINCT slots so they still pop.
+    case "card":
+    case "surface":
     default:
-      return null;
+      return { bg: roles.surface };
   }
 };
 
 /**
- * Maps a detected surface node's own bg onto a new palette surface, BY ROLE
- * first (buttons/code/cards get their dedicated slots), else by luminance bucket
- * so the page's light/dark surface hierarchy is preserved.
+ * Maps a surface's SEMANTIC ROLE to its NEW palette surface — a PURE FUNCTION of
+ * the role + palette, INDEPENDENT of the element's own original background.
+ * (Previously generic surfaces were bucketed by their original-bg luminance,
+ * which is exactly what made recycled/restyled SPA nodes change color and
+ * identical rows split into "2 colors".) `surfaceForBucket`/`luminanceBucket`
+ * remain ONLY for the CSS-variable remap path.
  */
 const surfaceBackgroundFor = (
-  node: DetectedNode,
-  palette: Palette,
   roles: PaletteRoles,
   semantic: SemanticRole,
-): string => {
-  const roleFill = surfaceRoleFill(semantic, roles);
-  if (roleFill) {
-    return roleFill.bg;
-  }
-  const bucket = luminanceBucket(
-    node.bgColor ?? bucketHexFromLuminance(node.luminance),
-  );
-  return surfaceForBucket(palette, bucket);
-};
+): string => surfaceRoleFill(semantic, roles).bg;
 
 /**
  * The intensity dial as a BLEND FACTOR in [0, 1]: "how much of the theme is
@@ -703,41 +721,30 @@ const effectiveBackground = (
 };
 
 /**
- * Resolves the text color for `effBg` from a ROLE SEED (heading/link/body/…).
+ * Resolves the DETERMINISTIC text color for a ROLE SEED, floored for readability
+ * against a DETERMINISTIC reference background (`refBg`).
  *
- * SOURCE-OF-TRUTH with a READABILITY FLOOR ("exact unless truly unreadable"):
- *  - At FULL intensity (`factor >= 1`) we paint the EXACT swatch/role color —
- *    but always passed through `nudgeToAA` against the effective background.
- *    `nudgeToAA` returns the color UNCHANGED when it already meets the
- *    size-appropriate threshold, so readable swatch colors stay EXACT (the
- *    fidelity the user wants); only a genuinely-unreadable color is nudged to
- *    the nearest readable shade of the SAME hue (never collapsing to black/white
- *    unless no shade of that hue can reach the floor). So a swatch == the DOM
- *    color whenever it is readable, and we never recreate invisible text.
- *  - BELOW full intensity the color blends from the page's ORIGINAL toward the
- *    seed by `factor`, kept AA-readable via the same `nudgeToAA`.
+ * STABILITY-FIRST (the SPA fix). Text color is a PURE FUNCTION of (role seed,
+ * reference background, size) — it does NOT depend on the element's current/
+ * original color, on the intensity dial, or on the LIVE painted ancestor bg
+ * (which is what made text FLICKER / drift across re-renders + reloads on churny
+ * SPAs like Gmail). The seed is the element's palette role color (a deterministic
+ * palette value); `refBg` is a DETERMINISTIC surface derived from the palette
+ * (the page `bg` role, or the element's surface-role bg — `roles.surface` /
+ * `surfaceAlt` / a button fill / …), NEVER the volatile blended/painted value.
+ * Because surfaces map to deterministic role colors, flooring against `refBg`
+ * both STABILIZES the color (same role + same surface → same color every render,
+ * re-apply, reload) AND fixes contrast against what actually renders (a row's
+ * hover/selected bg swap lands on the SAME deterministic surface role).
+ *
+ * We intentionally do NOT blend text toward the element's original (that was the
+ * drift source): the intensity slider crossfades BACKGROUNDS only; text stays at
+ * this readable, stable role color across ALL intensities. `nudgeToAA` returns
+ * the seed UNCHANGED when already readable, else nudges to the nearest readable
+ * shade of the SAME hue.
  */
-const blendedText = (
-  originalText: string | undefined,
-  effBg: string,
-  seed: string,
-  factor: number,
-  large = false,
-): string => {
-  // Full intensity → the swatch color, but floored for readability (unchanged
-  // when already readable, so exact-swatch fidelity is preserved).
-  if (factor >= 1) {
-    return nudgeToAA(seed, effBg, large);
-  }
-  const themed = nudgeToAA(seed, effBg, large); // AA target, hue-preserving
-  if (!originalText) {
-    return themed;
-  }
-  const candidate = mixHex(originalText, themed, factor);
-  // Keep the blended color only if it is still AA against the (blended) bg —
-  // re-nudge (not just snap) so a blended accent keeps its hue where it can.
-  return nudgeToAA(candidate, effBg, large);
-};
+const roleText = (seed: string, refBg: string, large = false): string =>
+  nudgeToAA(seed, refBg, large);
 
 /**
  * THE mapping core. Given detected nodes + `:root` variables + a palette +
@@ -780,15 +787,10 @@ export const buildMapping = (
     factor,
   );
   // Body ink for the page base (carries the faintly-tinted textPrimary slot).
-  const originalBaseFg = nodes.find(
-    (n) => n.selector === BODY_SELECTOR,
-  )?.textColor;
-  const baseText = blendedText(
-    originalBaseFg ?? "#111111",
-    baseBackground,
-    roles.textPrimary,
-    factor,
-  );
+  // Floored against the DETERMINISTIC base surface (`themedBase` = roles.bg), NOT
+  // the intensity-blended `baseBackground`, so the base text color is identical at
+  // every intensity / re-apply / reload (stability-first).
+  const baseText = roleText(roles.textPrimary, themedBase);
 
   // ---- variable remap (additive) ----------------------------------------
   // Remap when the page is variable-driven, OR at the top of the dial.
@@ -797,11 +799,19 @@ export const buildMapping = (
       ? remapVariables(vars, palette, roles)
       : [];
 
-  // ---- PASS 1: surfaces (ALL of them — blended toward the palette) -------
-  // paintedBg maps node index → its NEW (blended) background for pass-2 lookup.
-  // Surfaces are classified into semantic roles so buttons/code/cards pull their
-  // dedicated palette slots (primary ≠ secondary, code ≠ card ≠ page).
+  // ---- PASS 1: surfaces (ALL of them — DJ-mixer crossfade) ---------------
+  // `paintedBg` maps node index → its NEW background = `mix(frozenOriginal,
+  // fixedTheme, factor)` — the crossfade between the element's FROZEN original
+  // (track 1) and its role-based FIXED theme color (track 2). `referenceBg` maps
+  // node index → the DETERMINISTIC mapped surface (track 2 alone) for that node:
+  // text (pass 2) and every surface label floor against `referenceBg`, NOT the
+  // blended/painted value, so a text/label color is a pure function of role +
+  // palette and never drifts with intensity or transient DOM state. CRITICAL:
+  // `fixedTheme` (`mapped`) is chosen BY ROLE only — never from the element's
+  // original-bg luminance — so recycled/restyled nodes and identical rows share
+  // one theme color.
   const paintedBg = new Map<number, string>();
+  const referenceBg = new Map<number, string>();
   const surfaceDecisions: StyleDecision[] = [];
   // Order index among SURFACE nodes that are button-like — drives the
   // primary-then-secondary button heuristic deterministically.
@@ -815,20 +825,26 @@ export const buildMapping = (
     if (isButton) {
       buttonOrder += 1;
     }
-    const original = node.bgColor ?? bucketHexFromLuminance(node.luminance);
-    const mapped = surfaceBackgroundFor(node, palette, roles, semantic);
-    const background = mixHex(original, mapped, factor);
+    // Track 1: the element's FROZEN original bg. Track 2: its role-based FIXED
+    // theme color. Crossfade between them by the intensity factor.
+    const frozenOriginal =
+      node.bgColor ?? bucketHexFromLuminance(node.luminance);
+    const mapped = surfaceBackgroundFor(roles, semantic);
+    const background = mixHex(frozenOriginal, mapped, factor);
     paintedBg.set(i, background);
+    referenceBg.set(i, mapped);
     // Buttons emit their dedicated label color (onPrimary/onSecondary) as the
-    // seed; other surfaces use body ink. Either way it is AA-nudged vs the bg.
+    // seed; other surfaces use body ink. The label floors against the surface's
+    // DETERMINISTIC mapped reference (`mapped`), so it is stable + AA at every
+    // intensity (not the volatile blended bg).
     const fill = surfaceRoleFill(semantic, roles);
-    const labelSeed = fill?.label ?? roles.textPrimary;
+    const labelSeed = fill.label ?? roles.textPrimary;
     surfaceDecisions.push({
       selector: node.selector,
       role: "surface",
       semantic,
       background,
-      color: blendedText(node.textColor, background, labelSeed, factor),
+      color: roleText(labelSeed, mapped),
     });
   });
 
@@ -849,10 +865,16 @@ export const buildMapping = (
           }))
       : [];
 
-  // ---- PASS 2: text (ALWAYS) — AA against the EFFECTIVE blended bg --------
+  // ---- PASS 2: text (ALWAYS) — AA against the DETERMINISTIC reference bg --
   // Each text node is classified into a semantic role (heading/link/body/muted)
   // and colored from its OWN palette slot, so multi-hue palettes spend their
-  // whole harmony and roles are mutually distinct — then AA-nudged vs effBg.
+  // whole harmony and roles are mutually distinct. CRUCIAL FOR SPA STABILITY: the
+  // AA floor runs against the DETERMINISTIC reference background of the nearest
+  // themed ancestor (its mapped palette surface), defaulting to the deterministic
+  // page `bg` role (`themedBase`) — NOT the volatile live/blended painted value.
+  // So a given role under a given surface gets the SAME color every render,
+  // re-apply, and reload, and that color is readable against the surface that
+  // actually paints (a hover/selected row-bg swap lands on the same role bg).
   const textDecisions: StyleDecision[] = [];
   nodes.forEach((node, i) => {
     if (node.role !== "text") {
@@ -860,7 +882,7 @@ export const buildMapping = (
     }
     const semantic = classifyText(node);
     const seed = textRoleColor(semantic, roles);
-    const effBg = effectiveBackground(i, nodes, paintedBg, baseBackground);
+    const refBg = effectiveBackground(i, nodes, referenceBg, themedBase);
     // Headings/links are large/emphasised — allow the AA-large threshold so the
     // accent hue survives more often; body/muted use the stricter normal AA.
     const large = semantic === "heading" || semantic === "subheading";
@@ -868,7 +890,7 @@ export const buildMapping = (
       selector: node.selector,
       role: "text",
       semantic,
-      color: blendedText(node.textColor, effBg, seed, factor, large),
+      color: roleText(seed, refBg, large),
     });
   });
 

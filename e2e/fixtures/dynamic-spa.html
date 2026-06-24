@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thememaker E2E — Dynamic SPA fixture</title>
+    <style>
+      /*
+       * A deliberately CHURNY SPA, modeled on Gmail's inbox: a list of "email
+       * rows" whose BACKGROUND is driven by a CLASS that swaps on hover/select
+       * (so the rendered row bg changes without the row's text changing role),
+       * plus controls that TEAR DOWN + REBUILD the list ("navigate in/out") and
+       * APPEND more rows ("load more"). This is exactly the shape that made the
+       * old engine flicker: text was colored against the LIVE painted ancestor
+       * bg and blended toward each element's current computed color, so a row's
+       * text color depended on transient DOM state / paint order / timing.
+       *
+       * Every row carries an explicit, opaque original color so the engine has a
+       * concrete computed style to detect. The three row states use DIFFERENT
+       * background colors but the SAME semantic role (an email row) — so the fix
+       * must paint the row TEXT identically across all three states.
+       */
+      html,
+      body {
+        background-color: #ffffff;
+        color: #202124;
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        padding: 16px;
+      }
+      .toolbar {
+        background-color: #f1f3f4;
+        color: #202124;
+        padding: 8px 12px;
+        margin-bottom: 12px;
+      }
+      .toolbar button {
+        background-color: #1a73e8;
+        color: #ffffff;
+        border: none;
+        padding: 6px 12px;
+        margin-right: 8px;
+        cursor: pointer;
+      }
+      #list {
+        background-color: #ffffff;
+      }
+      /*
+       * The three row STATES. Same role (a list row), different background — the
+       * inbox swaps these classes on hover/select. The engine must keep the row
+       * text color identical across all three.
+       */
+      .row {
+        background-color: #ffffff;
+        color: #202124;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e0e0e0;
+        cursor: pointer;
+      }
+      .row.is-hovered {
+        background-color: #f2f6fc;
+        color: #202124;
+      }
+      .row.is-selected {
+        background-color: #c2dbff;
+        color: #202124;
+      }
+      /*
+       * MIXED ORIGINAL ROW BACKGROUNDS — a virtualized inbox rarely has uniform
+       * row bgs: read/unread differ, zebra striping alternates, and some rows have
+       * NO own background (transparent → they must inherit a themed backdrop, not
+       * "stay light"). These are DIFFERENT original bgs for the SAME semantic role
+       * (a list row), so the FIXED-THEME engine MUST paint them ONE surface color.
+       * The class is also what a recycler SWAPS when it reuses a node for new
+       * content — so a recycled node's original bg changes, and its themed color
+       * must NOT.
+       */
+      .row.bg-white {
+        background-color: #ffffff;
+      }
+      .row.bg-gray {
+        background-color: #f1f3f4;
+      }
+      .row.bg-stripe {
+        background-color: #fafafa;
+      }
+      .row.bg-transparent {
+        background-color: transparent;
+      }
+      /*
+       * Gmail-style SINGLE-CLASS text colors with `!important`, at specificity
+       * (0,1,0). These BEAT a bare tag rule like `a{…!important}` (0,0,1) — so the
+       * engine's text would LOSE unless its role rules are scoped under the root
+       * marker to (0,1,1). The color CLASS on the text element SWAPS on
+       * hover/selected (the click handler toggles `c-normal`/`c-hover`/`c-sel`),
+       * so if the engine ever lost, the rendered text would visibly DRIFT across
+       * state changes. The engine must keep winning regardless of state.
+       */
+      .c-normal {
+        color: #202124 !important;
+      }
+      .c-hover {
+        color: #0b57d0 !important;
+      }
+      .c-sel {
+        color: #b3261e !important;
+      }
+      .subject {
+        font-weight: 600;
+      }
+      /* A link inside a row, colored by a single site class with !important. */
+      .rowlink {
+        color: #1a73e8 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <strong>Inbox</strong>
+      <button id="navigate" type="button">Open / Close email</button>
+      <button id="loadMore" type="button">Load more</button>
+    </div>
+
+    <div id="list"></div>
+
+    <!-- The "opened email" detail view, torn down + rebuilt on navigate. -->
+    <div id="detail" hidden></div>
+
+    <!--
+      A Gmail-style COMPOSE box: a contenteditable region. Typing appends text
+      nodes (and, here, <span> wrappers) on every keystroke — the engine must NOT
+      re-theme it (so typing stays smooth) and any new text must already be the
+      right color the instant it appears (no per-keystroke flash).
+    -->
+    <div
+      id="compose"
+      contenteditable="true"
+      style="
+        background-color: #ffffff;
+        color: #202124;
+        min-height: 60px;
+        padding: 8px;
+        border: 1px solid #dadce0;
+      "
+    >
+      Compose your message…
+    </div>
+
+    <script>
+      // ---- a tiny, dependency-free inbox SPA --------------------------------
+      // Renders N rows; each row's background is class-driven. Buttons mutate the
+      // DOM the way a real SPA does: rebuild on navigate, append on load-more,
+      // and swap a row's state class on click — all of which the engine's
+      // MutationObserver sees, and all of which must NOT change the row text.
+
+      const list = document.getElementById("list");
+      const detail = document.getElementById("detail");
+      let nextId = 0;
+
+      /** Builds one row element with subject + snippet text. */
+      function makeRow(i) {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.dataset.row = String(i);
+        const subject = document.createElement("div");
+        subject.className = "subject c-normal";
+        subject.textContent = "Subject line number " + i;
+        const snippet = document.createElement("div");
+        snippet.className = "snippet c-normal";
+        snippet.textContent =
+          "A preview snippet of the email body for message " + i + ".";
+        // A link colored by a single site class with !important (specificity case).
+        const link = document.createElement("a");
+        link.className = "rowlink";
+        link.href = "#";
+        link.textContent = "open";
+        snippet.appendChild(link);
+        row.appendChild(subject);
+        row.appendChild(snippet);
+        // Clicking a row cycles its STATE: it swaps the BACKGROUND class on the
+        // row AND the single-class color on the text elements (none → hover →
+        // selected), exactly the kind of class swap that would make text drift if
+        // the engine ever lost the specificity battle.
+        row.addEventListener("click", function () {
+          if (row.classList.contains("is-selected")) {
+            setRowState(row, "normal");
+          } else if (row.classList.contains("is-hovered")) {
+            setRowState(row, "selected");
+          } else {
+            setRowState(row, "hover");
+          }
+        });
+        return row;
+      }
+
+      /** Swaps a row's background state class AND its text color classes. */
+      function setRowState(row, state) {
+        row.classList.remove("is-hovered", "is-selected");
+        if (state === "hover") {
+          row.classList.add("is-hovered");
+        } else if (state === "selected") {
+          row.classList.add("is-selected");
+        }
+        const colorClass =
+          state === "hover"
+            ? "c-hover"
+            : state === "selected"
+              ? "c-sel"
+              : "c-normal";
+        row.querySelectorAll(".subject, .snippet").forEach(function (el) {
+          el.classList.remove("c-normal", "c-hover", "c-sel");
+          el.classList.add(colorClass);
+        });
+      }
+
+      /** Renders a fresh list of `count` rows (tearing down the old ones). */
+      function renderList(count) {
+        list.textContent = "";
+        nextId = 0;
+        for (let i = 0; i < count; i += 1) {
+          list.appendChild(makeRow(nextId));
+          nextId += 1;
+        }
+      }
+
+      // The mixed original-bg classes a virtualized inbox cycles through (read/
+      // unread/striped/transparent). All are the SAME semantic role (a row).
+      const BG_CLASSES = ["bg-white", "bg-gray", "bg-stripe", "bg-transparent"];
+
+      /**
+       * Renders `count` rows whose ORIGINAL backgrounds are MIXED (cycling through
+       * white / light-gray / striped / transparent). Same role → the engine must
+       * theme them all to ONE surface color (no "2 colors", none left un-themed).
+       */
+      function renderMixed(count) {
+        list.textContent = "";
+        nextId = 0;
+        for (let i = 0; i < count; i += 1) {
+          const row = makeRow(nextId);
+          row.classList.add(BG_CLASSES[i % BG_CLASSES.length]);
+          list.appendChild(row);
+          nextId += 1;
+        }
+      }
+
+      /**
+       * RECYCLE a virtualized list: REUSE the SAME DOM nodes for new content as
+       * the user "scrolls". For each existing row we mutate IN PLACE — give it a
+       * new id, new subject/snippet text, AND swap its original-bg class to a
+       * DIFFERENT one (read↔unread / stripe parity flips). This is the exact
+       * pattern that broke the old engine: a recycled node kept a frozen per-node
+       * color while showing new content / a new original bg. The FIXED-THEME engine
+       * must keep each recycled row the SAME themed surface color.
+       */
+      function recycleScroll() {
+        const rows = list.querySelectorAll(".row");
+        rows.forEach(function (row, idx) {
+          // New content (as if scrolled to a different page of the inbox).
+          nextId += 1;
+          row.dataset.row = String(nextId);
+          const subject = row.querySelector(".subject");
+          const snippet = row.querySelector(".snippet");
+          if (subject) {
+            subject.textContent = "Recycled subject " + nextId;
+          }
+          if (snippet) {
+            snippet.childNodes[0].textContent =
+              "Recycled snippet for message " + nextId + " ";
+          }
+          // SWAP the original background class to a DIFFERENT one (read↔unread,
+          // stripe parity flip) — the node's ORIGINAL bg now differs.
+          for (const c of BG_CLASSES) {
+            row.classList.remove(c);
+          }
+          row.classList.add(BG_CLASSES[(idx + 1) % BG_CLASSES.length]);
+        });
+      }
+
+      /** Appends `count` more rows (the "load more" / infinite-scroll action). */
+      function loadMore(count) {
+        for (let i = 0; i < count; i += 1) {
+          list.appendChild(makeRow(nextId));
+          nextId += 1;
+        }
+      }
+
+      /**
+       * Appends `count` rows CHEAPLY via one HTML string (no per-row listeners) —
+       * a fast way for the perf/cap specs to grow the DOM to tens of thousands of
+       * nodes without the page itself becoming the bottleneck. Same shape as a
+       * normal row (a `.row` surface with `.subject` + `.snippet` text).
+       */
+      function bulkLoad(count) {
+        let html = "";
+        for (let i = 0; i < count; i += 1) {
+          const id = nextId + i;
+          html +=
+            '<div class="row" data-row="' +
+            id +
+            '"><div class="subject c-normal">Subject line number ' +
+            id +
+            '</div><div class="snippet c-normal">A preview snippet for message ' +
+            id +
+            ' <a class="rowlink" href="#">open</a></div></div>';
+        }
+        nextId += count;
+        list.insertAdjacentHTML("beforeend", html);
+      }
+
+      // "Navigate in/out": tear the whole list down, show a detail view, then on
+      // the next click tear THAT down and rebuild the list from scratch. This is
+      // the "click into an email and back out" path that made row colors drift.
+      let inDetail = false;
+      document
+        .getElementById("navigate")
+        .addEventListener("click", function () {
+          if (!inDetail) {
+            list.textContent = "";
+            detail.hidden = false;
+            const h = document.createElement("h2");
+            h.textContent = "An opened email";
+            const p = document.createElement("p");
+            p.textContent = "The full body of the opened email goes here.";
+            detail.appendChild(h);
+            detail.appendChild(p);
+            inDetail = true;
+          } else {
+            detail.textContent = "";
+            detail.hidden = true;
+            renderList(10);
+            inDetail = false;
+          }
+        });
+
+      document
+        .getElementById("loadMore")
+        .addEventListener("click", function () {
+          loadMore(5);
+        });
+
+      // Expose hooks so the e2e spec can drive the SPA deterministically without
+      // relying on click timing.
+      window.__inbox = {
+        renderList,
+        loadMore,
+        bulkLoad,
+        renderMixed,
+        recycleScroll,
+        rowState(i, state) {
+          const row = list.querySelector('[data-row="' + i + '"]');
+          if (!row) {
+            return;
+          }
+          setRowState(row, state);
+        },
+        openDetail() {
+          list.textContent = "";
+          detail.hidden = false;
+          detail.innerHTML =
+            "<h2>An opened email</h2><p>The full body of the opened email.</p>";
+          inDetail = true;
+        },
+        // Simulate typing `n` keystrokes into the compose box: each appends a
+        // text node (and occasionally a <span> wrapper, as real editors do). The
+        // returned colors let the spec assert each new node is already correct.
+        typeIntoCompose(n) {
+          const box = document.getElementById("compose");
+          for (let i = 0; i < n; i += 1) {
+            if (i % 5 === 0) {
+              const span = document.createElement("span");
+              span.textContent = "word" + i + " ";
+              box.appendChild(span);
+            } else {
+              box.appendChild(document.createTextNode("k" + i + " "));
+            }
+          }
+          // Return the computed color of the LAST appended element node.
+          const spans = box.querySelectorAll("span");
+          const last = spans[spans.length - 1];
+          return last ? getComputedStyle(last).color : "";
+        },
+        closeDetail() {
+          detail.textContent = "";
+          detail.hidden = true;
+          renderList(10);
+          inDetail = false;
+        },
+      };
+
+      // Initial render: a 10-row inbox.
+      renderList(10);
+    </script>
+  </body>
+</html>

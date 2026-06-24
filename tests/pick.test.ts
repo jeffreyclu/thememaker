@@ -100,13 +100,20 @@ describe("currentColorFor (#rrggbb seed for the row)", () => {
     expect(currentColorFor(q("d"), "background")).toBe("#010203");
   });
 
-  it("reads a transparent default background as its rgb channels", () => {
+  it("never seeds a transparent background as black; walks up to the visible bg", () => {
+    // A transparent element (`rgba(0,0,0,0)`) must NOT seed `#000000` — that
+    // would paint every element of its tag black. Instead we walk UP to the
+    // first ancestor with a real (opaque) background.
+    document.body.innerHTML =
+      '<div id="wrap" style="background-color: rgb(20,30,40)"><p id="p">x</p></div>';
+    expect(currentColorFor(q("p"), "background")).toBe("#141e28");
+  });
+
+  it("falls back to white when nothing up the tree has an opaque background", () => {
     document.body.innerHTML = '<p id="p">x</p>';
-    // jsdom reports an unstyled background as `rgba(0, 0, 0, 0)`; the picker
-    // parses the rgb channels (alpha is ignored) → black. The neutral-gray
-    // FALLBACK is a defensive guard for when getComputedStyle is unavailable
-    // (covered at the model level).
-    expect(currentColorFor(q("p"), "background")).toBe("#000000");
+    // jsdom reports every unstyled background as transparent `rgba(0,0,0,0)`,
+    // so the walk reaches the top empty-handed → assume a white page.
+    expect(currentColorFor(q("p"), "background")).toBe("#ffffff");
   });
 });
 
