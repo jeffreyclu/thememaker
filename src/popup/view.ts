@@ -6,6 +6,7 @@
  * `bindEvents`, dispatching intents back to the controller via callbacks.
  */
 import { type ModeSelection, type PopupState } from "./state";
+import { isCurrentSaved } from "./state-selectors";
 import { renderDetails } from "./view-details";
 import { renderFavorites, renderHistory } from "./view-lists";
 import { modes } from "../config";
@@ -181,23 +182,15 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
 
   refs.generate.disabled = state.loading;
   refs.generate.textContent = state.loading ? "Generating…" : "Generate";
-  // Can only save a favorite when there's a current scheme to save. After a
-  // save the button briefly confirms with "Saved ✓".
-  const justSaved = state.savedFavoriteId !== null;
-  refs.favoriteSave.disabled = !state.current;
-  refs.favoriteSave.textContent = justSaved ? "Saved ✓" : "Save";
+  // Save is disabled when there's no scheme, or the current scheme (at this
+  // intensity + overrides) is already a favorite — so you can't save a dupe, and
+  // it re-enables only once something changes.
+  refs.favoriteSave.disabled = !state.current || isCurrentSaved(state);
   refs.reset.disabled = !state.applied && !state.current;
 
+  // Status line shows errors only (no "applied"/"saved" chatter).
   refs.status.classList.toggle("popup__status--error", Boolean(state.error));
-  if (state.error) {
-    refs.status.textContent = state.error;
-  } else if (justSaved) {
-    refs.status.textContent = "Added to favorites.";
-  } else if (state.applied) {
-    refs.status.textContent = "Applied to this tab.";
-  } else {
-    refs.status.textContent = "";
-  }
+  refs.status.textContent = state.error ?? "";
 
   // Customize is a button that opens the IN-PAGE floating control; available
   // whenever there's a theme to layer overrides on (current OR applied).

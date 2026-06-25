@@ -110,11 +110,25 @@ describe("popup view", () => {
     expect(refs.reset.disabled).toBe(false);
     expect(refs.customize.disabled).toBe(false);
     expect(refs.detailsToggle.disabled).toBe(false);
-    expect(refs.status.textContent).toContain("Applied");
+    // Status line is errors-only now (no "Applied"/"Saved" chatter).
+    expect(refs.status.textContent).toBe("");
     // two history entries, most-recent first
     const items = refs.history.querySelectorAll("[data-history-index]");
     expect(items).toHaveLength(2);
     expect((items[0] as HTMLElement).dataset.historyIndex).toBe("1");
+  });
+
+  it("disables Save when the current scheme is already a favorite (dedupe)", () => {
+    const refs = mount();
+    const state: PopupState = {
+      ...initialPopupState,
+      current: mockScheme,
+      intensity:
+        mockScheme.schemeDetails.intensity ?? initialPopupState.intensity,
+      favorites: [{ id: "f1", name: "X", scheme: mockScheme }],
+    };
+    render(state, refs);
+    expect(refs.favoriteSave.disabled).toBe(true);
   });
 
   it("customize is enabled by `applied` even without a `current` scheme", () => {

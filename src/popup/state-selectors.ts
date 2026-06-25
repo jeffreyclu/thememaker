@@ -56,3 +56,53 @@ export const overrideRows = (
   state: PopupState,
 ): Array<{ role: string; color: string; label: string }> =>
   overrideRowsBase(state.overrides, overrideRoleLabel);
+
+/** Order-independent signature of a per-tag/role override map. */
+const overridesSig = (rec: Record<string, string>): string =>
+  Object.keys(rec)
+    .sort()
+    .map((k) => `${k}=${rec[k]}`)
+    .join(",");
+
+/**
+ * A content signature for "what a Save would capture": the palette identity
+ * (root color + mode + invert) plus the live intensity + overrides. Two schemes
+ * with the same signature are the same favorite, regardless of object identity.
+ */
+const saveSignature = (
+  details: { rootColor?: string; colorMode?: string; invert?: boolean },
+  intensity: number,
+  overrides: Record<string, string>,
+): string =>
+  [
+    details.rootColor ?? "",
+    details.colorMode ?? "",
+    details.invert ? "inv" : "",
+    intensity,
+    overridesSig(overrides),
+  ].join("|");
+
+/**
+ * Whether the current scheme — at the live intensity + overrides — is ALREADY in
+ * favorites (by content). Drives the Save button's disabled state: you can't save
+ * a duplicate, and Save re-enables only once something actually changes.
+ */
+export const isCurrentSaved = (state: PopupState): boolean => {
+  const cur = state.current;
+  if (!cur) {
+    return false;
+  }
+  const sig = saveSignature(
+    cur.schemeDetails,
+    state.intensity,
+    state.overrides,
+  );
+  return state.favorites.some(
+    (f) =>
+      saveSignature(
+        f.scheme.schemeDetails,
+        f.scheme.schemeDetails.intensity ?? state.intensity,
+        f.scheme.schemeDetails.overrides ?? {},
+      ) === sig,
+  );
+};

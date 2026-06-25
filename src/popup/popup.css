@@ -543,20 +543,21 @@ body {
   display: flex;
   align-items: stretch;
   gap: 4px;
-  border-radius: 8px;
 }
 
-/* Transient highlight on the row that was just saved (see view.ts). */
-.favorites__item--saved {
-  animation: tm-saved-flash 1.8s ease-out;
+/* Transient ring on the row that was just saved. Drawn as an INSET ring on the
+   visible apply button so it isn't hidden behind it (the row's own background is)
+   and isn't clipped by the list's overflow. */
+.favorites__item--saved .favorites__apply {
+  animation: tm-saved-ring 1.8s ease-out;
 }
-@keyframes tm-saved-flash {
+@keyframes tm-saved-ring {
   0%,
-  25% {
-    background-color: color-mix(in srgb, var(--tm-accent) 30%, transparent);
+  45% {
+    box-shadow: inset 0 0 0 2px var(--tm-accent);
   }
   100% {
-    background-color: transparent;
+    box-shadow: inset 0 0 0 2px transparent;
   }
 }
 
