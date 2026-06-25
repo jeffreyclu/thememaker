@@ -12,8 +12,8 @@ import {
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
   type OverrideRow,
-} from "../../../lib/override-keys";
-import type { RoleOverrides } from "../../../types";
+} from "../../lib/override-keys";
+import type { RoleOverrides } from "../../types";
 
 export type { OverrideRow };
 

@@ -26,10 +26,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 
-import { PickerProvider } from "../src/content/picker/app/PickerProvider";
-import { Panel } from "../src/content/picker/app/Panel";
-import { mountPickerApp } from "../src/content/picker/app/mount";
-import { PANEL_HOST_ID } from "../src/content/picker/picker-session";
+import { PickerProvider } from "../src/picker/state/PickerProvider";
+import { Panel } from "../src/picker/components/Panel";
+import { mountPickerApp } from "../src/picker/main";
+import { PANEL_HOST_ID } from "../src/picker/session";
 import type { Palette } from "../src/lib/palette";
 import type { RoleOverrides } from "../src/types";
 
@@ -41,7 +41,7 @@ vi.mock("../src/lib/engine", () => ({
     applyWhenReady: (...args: unknown[]) => applyWhenReady(...args),
   },
 }));
-vi.mock("../src/content/picker/app/persist-overrides", () => ({
+vi.mock("../src/picker/client/persist-overrides", () => ({
   persistOverrides: (...args: unknown[]) => persistOverrides(...args),
 }));
 

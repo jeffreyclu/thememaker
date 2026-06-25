@@ -13,16 +13,16 @@
  */
 import { useMemo } from "react";
 
-import { optionsFor } from "./apply-options";
-import { persistOverrides } from "./persist-overrides";
+import { optionsFor } from "../client/apply-options";
+import { persistOverrides } from "../client/persist-overrides";
 import {
   mergeColor,
   overridesReducer,
   usePickerActions,
   type OverridesAction,
-} from "./PickerProvider";
-import { engine } from "../../../lib/engine";
-import type { RoleOverrides } from "../../../types";
+} from "../state/PickerProvider";
+import { engine } from "../../lib/engine";
+import type { RoleOverrides } from "../../types";
 
 /** The three row intents the panel binds to. */
 export interface ApplyIntents {

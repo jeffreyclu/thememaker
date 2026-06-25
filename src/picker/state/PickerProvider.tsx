@@ -33,10 +33,10 @@ import {
   type ReactNode,
 } from "react";
 
-import { isHexColor, normalizeHex } from "../../../lib/color/color";
-import { FALLBACK_COLOR } from "../../../lib/override-keys";
-import type { Palette } from "../../../lib/palette";
-import type { RoleOverrides } from "../../../types";
+import { isHexColor, normalizeHex } from "../../lib/color/color";
+import { FALLBACK_COLOR } from "../../lib/override-keys";
+import type { Palette } from "../../lib/palette";
+import type { RoleOverrides } from "../../types";
 
 /** The current live theme the apply/persist hooks read (via a ref accessor). */
 export interface PickerTheme {

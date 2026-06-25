@@ -4,8 +4,8 @@
  * The popup sends SHOW_PICKER (carrying the live theme) then closes; we lazily
  * mount a React app into a Shadow DOM host. ALL session state (overrides /
  * palette / intensity) and ALL logic (element-pick arming, apply + persist,
- * Esc-to-close) live INSIDE that app (`./app`) — this file owns no state, no
- * handlers, and no apply/persist logic. It only:
+ * Esc-to-close) live INSIDE that app (`./main` + the React tree) — this file owns
+ * no state, no handlers, and no apply/persist logic. It only:
  *   - shows the picker  → lazy `import()` + mount the app with the initial theme;
  *   - hides the picker  → unmount the app;
  *   - applies live      → re-apply via the engine AND re-render the open app with
@@ -17,10 +17,10 @@
  * chunk. `PANEL_HOST_ID` is defined HERE (not in the lazy chunk) so the pick
  * session can exclude the host synchronously, without loading React.
  */
-import type { PickerAppHandle } from "./app/mount";
-import { engine } from "../../lib/engine";
-import type { Palette } from "../../lib/palette";
-import type { ApplyOptions } from "../../types";
+import type { PickerAppHandle } from "./main";
+import { engine } from "../lib/engine";
+import type { Palette } from "../lib/palette";
+import type { ApplyOptions } from "../types";
 
 /** The id on the Shadow DOM host element — the engine + picker exclude this. */
 export const PANEL_HOST_ID = "themeMakerPickerHost";
@@ -53,7 +53,7 @@ export const showPicker = (palette: Palette, options: ApplyOptions): void => {
 
   // Lazily load the app chunk (React + the picker tree). When it resolves, mount
   // it — UNLESS this session was already torn down or replaced meanwhile.
-  void import("./app/mount").then(({ mountPickerApp }) => {
+  void import("./main").then(({ mountPickerApp }) => {
     if (generation !== mine) {
       return;
     }

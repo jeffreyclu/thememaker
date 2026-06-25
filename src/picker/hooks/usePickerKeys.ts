@@ -6,7 +6,7 @@
  */
 import { useEffect } from "react";
 
-import { usePickerState } from "./PickerProvider";
+import { usePickerState } from "../state/PickerProvider";
 
 export const usePickerKeys = (): void => {
   const { onClose } = usePickerState();

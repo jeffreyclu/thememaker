@@ -7,7 +7,7 @@
  * fire-and-forget.
  */
 import { runApply, runQuery, runReset } from "./apply-handlers";
-import { applyLive, hidePicker, showPicker } from "./picker/picker-session";
+import { applyLive, hidePicker, showPicker } from "../picker/session";
 import type {
   ContentMessage,
   ContentReplyMessage,

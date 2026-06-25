@@ -23,12 +23,12 @@ import {
   isPickable,
   pickKeyFor,
   propForElement,
-} from "../src/content/picker/app/pick-resolve";
-import { OVERLAY_ID } from "../src/content/picker/app/usePickSession";
-import { usePickSession } from "../src/content/picker/app/usePickSession";
-import { PickerProvider } from "../src/content/picker/app/PickerProvider";
-import { usePickerState } from "../src/content/picker/app/PickerProvider";
-import { PANEL_HOST_ID } from "../src/content/picker/picker-session";
+} from "../src/picker/hooks/pick-resolve";
+import { OVERLAY_ID } from "../src/picker/hooks/usePickSession";
+import { usePickSession } from "../src/picker/hooks/usePickSession";
+import { PickerProvider } from "../src/picker/state/PickerProvider";
+import { usePickerState } from "../src/picker/state/PickerProvider";
+import { PANEL_HOST_ID } from "../src/picker/session";
 import type { Palette } from "../src/lib/palette";
 import type { RoleOverrides } from "../src/types";
 
@@ -36,7 +36,7 @@ const applyWhenReady = vi.fn();
 vi.mock("../src/lib/engine", () => ({
   engine: { applyWhenReady: (...a: unknown[]) => applyWhenReady(...a) },
 }));
-vi.mock("../src/content/picker/app/persist-overrides", () => ({
+vi.mock("../src/picker/client/persist-overrides", () => ({
   persistOverrides: vi.fn(),
 }));
 

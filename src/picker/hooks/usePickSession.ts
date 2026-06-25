@@ -15,17 +15,17 @@
  */
 import { useEffect } from "react";
 
-import { optionsFor } from "./apply-options";
+import { optionsFor } from "../client/apply-options";
 import {
   currentColorFor,
   isPickable,
   pickKeyFor,
   propForElement,
 } from "./pick-resolve";
-import { persistOverrides } from "./persist-overrides";
-import { overridesReducer, usePickerActions } from "./PickerProvider";
-import { engine } from "../../../lib/engine";
-import { PANEL_HOST_ID } from "../picker-session";
+import { persistOverrides } from "../client/persist-overrides";
+import { overridesReducer, usePickerActions } from "../state/PickerProvider";
+import { engine } from "../../lib/engine";
+import { PANEL_HOST_ID } from "../session";
 
 /** The hover-overlay id (kept distinct from the engine's `<style>`/attrs). */
 const OVERLAY_ID = "themeMakerPickOverlay";

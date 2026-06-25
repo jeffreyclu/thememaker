@@ -11,10 +11,10 @@
 import { memo } from "react";
 
 import { OverrideRow } from "./OverrideRow";
-import { usePickerState } from "./PickerProvider";
-import { useApplyOverrides } from "./useApplyOverrides";
-import { usePickerKeys } from "./usePickerKeys";
-import { usePickSession } from "./usePickSession";
+import { usePickerState } from "../state/PickerProvider";
+import { useApplyOverrides } from "../hooks/useApplyOverrides";
+import { usePickerKeys } from "../hooks/usePickerKeys";
+import { usePickSession } from "../hooks/usePickSession";
 import { overrideRows } from "./override-rows";
 
 export const Panel = memo(function Panel() {

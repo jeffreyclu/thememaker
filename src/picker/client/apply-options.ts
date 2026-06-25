@@ -3,7 +3,7 @@
  * theme: intensity always, `overrides` ONLY when non-empty (its absence is the
  * "no overrides" convention the persist + `loadDecision` share).
  */
-import type { ApplyOptions, RoleOverrides } from "../../../types";
+import type { ApplyOptions, RoleOverrides } from "../../types";
 
 export const optionsFor = (
   intensity: number,

@@ -31,11 +31,11 @@ import { FALLBACK_COLOR } from "../src/lib/override-keys";
 import {
   overrideRows,
   roleLabel,
-} from "../src/content/picker/app/override-rows";
+} from "../src/picker/components/override-rows";
 import {
   mergeColor,
   overridesReducer,
-} from "../src/content/picker/app/PickerProvider";
+} from "../src/picker/state/PickerProvider";
 
 const OVERRIDES_ID = "themeMakerOverrides";
 const palette = generatePalette("#3a7bd5", "triad");

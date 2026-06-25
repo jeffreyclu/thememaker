@@ -43,5 +43,5 @@ if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
   installMessageRouter();
 }
 
-export { showPicker, hidePicker } from "./picker/picker-session";
+export { showPicker, hidePicker } from "../picker/session";
 export { STYLE_ELEMENT_ID };

@@ -9,9 +9,9 @@
  * are SHARED with the engine, so they live in `lib/classify.ts` and
  * `lib/color-runtime.ts`; this module imports them rather than re-implementing.
  */
-import { isButtonLike } from "../../../lib/classify";
-import { cssColorToHex } from "../../../lib/color/color-runtime";
-import { makeOverrideKey } from "../../../lib/override-keys";
+import { isButtonLike } from "../../lib/classify";
+import { cssColorToHex } from "../../lib/color/color-runtime";
+import { makeOverrideKey } from "../../lib/override-keys";
 
 /**
  * True when the element renders its OWN non-transparent background.
