@@ -18,10 +18,10 @@ import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 import { App } from "./App";
-import { PANEL_STYLES } from "./components/panel-styles";
-// `PANEL_HOST_ID` lives in `session` (the eager chunk) so the pick session can
+import panelCss from "./panel.css?inline";
+// `PANEL_HOST_ID` lives in the eager picker entry so the pick session can
 // exclude the host without loading React; we import just that constant here.
-import { PANEL_HOST_ID } from "./session";
+import { PANEL_HOST_ID } from ".";
 import type { Palette } from "../lib/palette";
 import type { RoleOverrides } from "../types";
 
@@ -51,7 +51,7 @@ export const mountPickerApp = (props: PickerAppProps): PickerAppHandle => {
   const shadow = host.attachShadow({ mode: "open" });
 
   const style = document.createElement("style");
-  style.textContent = PANEL_STYLES;
+  style.textContent = panelCss;
   shadow.append(style);
 
   // React renders into this container inside the shadow root; the isolated

@@ -17,25 +17,29 @@
  *   - the sentinel tag `page` → `html, body`.
  * The layer is cleared on reset (`removeSchemeStyle` drops it).
  *
- * This file also covers the picker's PURE per-tag pieces now living in the React
- * app: row derivation + label formatting (`app/override-rows.ts`, incl. the
- * `page` sentinel) and the immutable add/edit/remove transitions (the
- * `overridesReducer` + `mergeColor` in `app/PickerProvider.tsx`).
+ * This file also covers the override grammar (`lib/override-keys`: row
+ * derivation + label formatting, incl. the `page` sentinel) and the picker's
+ * immutable add/edit/remove transitions (`overridesReducer` + `mergeColor` in the
+ * `PickerProvider`).
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Engine } from "../src/lib/engine";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
-import { FALLBACK_COLOR } from "../src/lib/override-keys";
 import {
+  FALLBACK_COLOR,
+  labelForOverrideKey,
   overrideRows,
-  roleLabel,
-} from "../src/picker/components/override-rows";
+} from "../src/lib/override-keys";
 import {
   mergeColor,
   overridesReducer,
 } from "../src/picker/state/PickerProvider";
+
+// The picker's row label config (mirrors Panel's `roleLabel`).
+const roleLabel = (key: string): string =>
+  labelForOverrideKey(key, { pageLabel: "Page · background" });
 
 const OVERRIDES_ID = "themeMakerOverrides";
 const palette = generatePalette("#3a7bd5", "triad");
@@ -188,10 +192,11 @@ describe("override-rows — per-tag rows", () => {
   });
 
   it("overrideRows renders one row per override, normalizing the hex", () => {
-    const rows = overrideRows({
-      "div|background": "#ABCDEF",
-      "h3|color": "#123456",
-    });
+    const rows = overrideRows(
+      { "div|background": "#ABCDEF", "h3|color": "#123456" },
+      roleLabel,
+      true,
+    );
     expect(rows).toStrictEqual([
       { role: "div|background", label: "div · background", color: "#abcdef" },
       { role: "h3|color", label: "h3 · text", color: "#123456" },
@@ -199,7 +204,7 @@ describe("override-rows — per-tag rows", () => {
   });
 
   it("overrideRows falls back to a neutral color for an invalid stored value", () => {
-    const rows = overrideRows({ "div|background": "garbage" });
+    const rows = overrideRows({ "div|background": "garbage" }, roleLabel, true);
     expect(rows[0].color).toBe(FALLBACK_COLOR);
   });
 });

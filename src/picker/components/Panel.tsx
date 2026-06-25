@@ -1,9 +1,8 @@
 /**
  * The floating-control panel (connected root of the React app): activates the
  * picker's effect hooks (arm element-pick, Esc-to-close), reads the live
- * overrides from context, derives the rows via the pure model, and binds the
- * apply/persist intents. Renders the panel chrome (header, hint, rows list,
- * Clear all / Done).
+ * overrides from context, derives the rows, and binds the apply/persist intents.
+ * Renders the panel chrome (header, hint, rows list, Clear all / Done).
  *
  * The color input on each row stays uncontrolled (see {@link OverrideRow}), so a
  * color change applies live without re-rendering the input the user is dragging.
@@ -15,14 +14,19 @@ import { usePickerState } from "../state/PickerProvider";
 import { useApplyOverrides } from "../hooks/useApplyOverrides";
 import { usePickerKeys } from "../hooks/usePickerKeys";
 import { usePickSession } from "../hooks/usePickSession";
-import { overrideRows } from "./override-rows";
+import { labelForOverrideKey, overrideRows } from "../../lib/override-keys";
+
+/** The picker's label for a `<tag>|<prop>` key (the `page` sentinel reads as a
+ * friendly "Page · background"). */
+const roleLabel = (key: string): string =>
+  labelForOverrideKey(key, { pageLabel: "Page · background" });
 
 export const Panel = memo(function Panel() {
   usePickSession();
   usePickerKeys();
   const { overrides, onClose } = usePickerState();
   const { onColorChange, onClearRole, onClearAll } = useApplyOverrides();
-  const rows = overrideRows(overrides);
+  const rows = overrideRows(overrides, roleLabel, true);
 
   return (
     <div className="panel">

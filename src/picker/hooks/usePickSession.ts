@@ -4,33 +4,30 @@
  * While the panel is mounted it installs capture-phase listeners (so the page
  * can't act first) and a hover overlay tracking the element under the cursor.
  * Each click resolves a `<tag>|<prop>` key + the element's current color (the
- * `pick-resolve` helpers), dispatches a `pick` (re-rendering the rows), and
- * applies + persists the result live. The panel host (and its shadow root) is
+ * `lib/pick-resolve` helpers) and commits the pick via {@link useApplyOverrides}
+ * (dispatch → apply live → persist). The panel host (and its shadow root) is
  * excluded so the control never highlights/recolors itself. Cleanup removes every
  * listener + the overlay.
  *
- * The listeners install once and read live state through the stable `getTheme`
- * accessor + `dispatch`, so re-picks don't re-install them.
+ * The listeners install once and commit through the stable `pick` callback, so
+ * re-picks don't re-install them.
  */
 import { useEffect } from "react";
 
-import { optionsFor } from "../client/apply-options";
+import { useApplyOverrides } from "./useApplyOverrides";
 import {
   currentColorFor,
   isPickable,
-  pickKeyFor,
   propForElement,
-} from "./pick-resolve";
-import { persistOverrides } from "../client/persist-overrides";
-import { overridesReducer, usePickerActions } from "../state/PickerProvider";
-import { engine } from "../../lib/engine";
-import { PANEL_HOST_ID } from "../session";
+} from "../../lib/pick-resolve";
+import { makeOverrideKey } from "../../lib/override-keys";
+import { PANEL_HOST_ID } from "..";
 
 /** The hover-overlay id (distinct from the engine's `<style>`/attrs). */
 const OVERLAY_ID = "themeMakerPickOverlay";
 
 export const usePickSession = (): void => {
-  const { getTheme, dispatch } = usePickerActions();
+  const { pick } = useApplyOverrides();
 
   useEffect(() => {
     const isExcluded = (el: Element): boolean =>
@@ -108,20 +105,11 @@ export const usePickSession = (): void => {
       if (!isPickable(target)) {
         return;
       }
-      // Record the tag override seeded with its current color, then apply +
-      // persist. The reducer derives the next map (single source of truth).
+      // Resolve the tag override + its seed color, then commit (dispatch derives
+      // the next map, applies live, and persists).
       const prop = propForElement(target);
-      const key = pickKeyFor(target);
-      const action = {
-        type: "pick" as const,
-        key,
-        currentColor: currentColorFor(target, prop),
-      };
-      const { palette, intensity, overrides } = getTheme();
-      const next = overridesReducer(overrides, action);
-      dispatch(action);
-      engine.applyWhenReady(palette, optionsFor(intensity, next));
-      void persistOverrides({ palette, intensity, overrides: next });
+      const key = makeOverrideKey(target.tagName.toLowerCase(), prop);
+      pick(key, currentColorFor(target, prop));
     };
 
     document.addEventListener("mousemove", onMove, true);
@@ -134,7 +122,7 @@ export const usePickSession = (): void => {
       document.removeEventListener("scroll", onScroll, true);
       removeOverlay();
     };
-  }, [getTheme, dispatch]);
+  }, [pick]);
 };
 
 export { OVERLAY_ID };

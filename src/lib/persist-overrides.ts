@@ -13,9 +13,9 @@
  * A plain module-level queue (not React state): it is process-wide IO ordering,
  * decoupled from any component lifecycle.
  */
-import { storage } from "../../lib/storage";
-import type { Palette } from "../../lib/palette";
-import type { RoleOverrides, Scheme } from "../../types";
+import { storage } from "./storage";
+import type { Palette } from "./palette";
+import type { RoleOverrides, Scheme } from "../types";
 
 /** The live theme to persist: palette + intensity + the override map. */
 export interface PersistInput {

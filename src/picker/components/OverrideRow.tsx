@@ -10,7 +10,7 @@
  */
 import { memo } from "react";
 
-import type { OverrideRow as OverrideRowData } from "./override-rows";
+import type { OverrideRow as OverrideRowData } from "../../lib/override-keys";
 
 export const OverrideRow = memo(function OverrideRow({
   row,

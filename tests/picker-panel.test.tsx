@@ -29,7 +29,7 @@ import {
 import { PickerProvider } from "../src/picker/state/PickerProvider";
 import { Panel } from "../src/picker/components/Panel";
 import { mountPickerApp } from "../src/picker/main";
-import { PANEL_HOST_ID } from "../src/picker/session";
+import { PANEL_HOST_ID } from "../src/picker";
 import type { Palette } from "../src/lib/palette";
 import type { RoleOverrides } from "../src/types";
 
@@ -41,7 +41,7 @@ vi.mock("../src/lib/engine", () => ({
     applyWhenReady: (...args: unknown[]) => applyWhenReady(...args),
   },
 }));
-vi.mock("../src/picker/client/persist-overrides", () => ({
+vi.mock("../src/lib/persist-overrides", () => ({
   persistOverrides: (...args: unknown[]) => persistOverrides(...args),
 }));
 
