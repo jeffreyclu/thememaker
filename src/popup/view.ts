@@ -181,13 +181,18 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
 
   refs.generate.disabled = state.loading;
   refs.generate.textContent = state.loading ? "Generating…" : "Generate";
-  // Can only save a favorite when there's a current scheme to save.
+  // Can only save a favorite when there's a current scheme to save. After a
+  // save the button briefly confirms with "Saved ✓".
+  const justSaved = state.savedFavoriteId !== null;
   refs.favoriteSave.disabled = !state.current;
+  refs.favoriteSave.textContent = justSaved ? "Saved ✓" : "Save";
   refs.reset.disabled = !state.applied && !state.current;
 
   refs.status.classList.toggle("popup__status--error", Boolean(state.error));
   if (state.error) {
     refs.status.textContent = state.error;
+  } else if (justSaved) {
+    refs.status.textContent = "Added to favorites.";
   } else if (state.applied) {
     refs.status.textContent = "Applied to this tab.";
   } else {
@@ -227,6 +232,21 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
   if (!prev || prev.history !== state.history) {
     renderHistory(state, refs.history);
   }
+
+  // Highlight the just-saved favorite row — a cheap class toggle (no list
+  // rebuild). The flash animation fades on its own; clearing the flag drops the
+  // class, by which point the animation has finished.
+  for (const item of refs.favorites.querySelectorAll<HTMLElement>(
+    ".favorites__item",
+  )) {
+    const id =
+      item.querySelector<HTMLElement>("[data-favorite-id]")?.dataset.favoriteId;
+    item.classList.toggle(
+      "favorites__item--saved",
+      id != null && id === state.savedFavoriteId,
+    );
+  }
+
   lastRendered.set(refs, {
     current: state.current,
     overrides: state.overrides,

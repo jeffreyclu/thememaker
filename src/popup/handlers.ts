@@ -187,7 +187,10 @@ export const makeHandlers = (
         ),
       };
       const favorites = await storage.saveFavorite(favorite);
-      dispatch({ type: "setFavorites", favorites });
+      // Confirm the save: open favorites, flag the new row (button + status +
+      // highlight), then clear the transient confirmation after a moment.
+      dispatch({ type: "favoriteSaved", favorites, id: favorite.id });
+      setTimeout(() => dispatch({ type: "clearSaveFeedback" }), 2200);
     },
 
     onSelectFavorite: async (id: string): Promise<void> => {

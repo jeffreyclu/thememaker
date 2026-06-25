@@ -56,6 +56,12 @@ export interface PopupState {
   loading: boolean;
   /** Last error message, if the most recent action failed. */
   error: string | null;
+  /**
+   * Id of the just-saved favorite. Non-null briefly after Save — drives the
+   * "Saved ✓" button + status confirmation and the row highlight; the controller
+   * clears it after a moment.
+   */
+  savedFavoriteId: string | null;
 }
 
 export const initialPopupState: PopupState = {
@@ -75,6 +81,7 @@ export const initialPopupState: PopupState = {
   showHistory: false,
   loading: false,
   error: null,
+  savedFavoriteId: null,
 };
 
 /** Inputs for {@link hydratePartial}: persisted storage + active-tab state. */
@@ -125,6 +132,8 @@ export type PopupAction =
   | { type: "selectIntensity"; intensity: Intensity }
   | { type: "toggleInvert" }
   | { type: "setFavorites"; favorites: Favorite[] }
+  | { type: "favoriteSaved"; favorites: Favorite[]; id: string }
+  | { type: "clearSaveFeedback" }
   | { type: "applyFavorite"; scheme: Scheme }
   | { type: "generateStart" }
   | { type: "generateSuccess"; scheme: Scheme; history: Scheme[] }
@@ -157,6 +166,17 @@ export const popupReducer = (
       return { ...state, invert: !state.invert };
     case "setFavorites":
       return { ...state, favorites: action.favorites };
+    case "favoriteSaved":
+      // Open favorites + flag the new row so the view can confirm the save
+      // (button + status) and briefly highlight where it landed.
+      return {
+        ...state,
+        favorites: action.favorites,
+        showFavorites: true,
+        savedFavoriteId: action.id,
+      };
+    case "clearSaveFeedback":
+      return { ...state, savedFavoriteId: null };
     case "applyFavorite":
       // A favorite becomes the current scheme (so the slider / Apply / Details
       // act on it) and is marked applied; history is untouched. Its saved custom

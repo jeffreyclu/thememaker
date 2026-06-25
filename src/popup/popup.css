@@ -543,6 +543,21 @@ body {
   display: flex;
   align-items: stretch;
   gap: 4px;
+  border-radius: 8px;
+}
+
+/* Transient highlight on the row that was just saved (see view.ts). */
+.favorites__item--saved {
+  animation: tm-saved-flash 1.8s ease-out;
+}
+@keyframes tm-saved-flash {
+  0%,
+  25% {
+    background-color: color-mix(in srgb, var(--tm-accent) 30%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 
 .favorites__apply {

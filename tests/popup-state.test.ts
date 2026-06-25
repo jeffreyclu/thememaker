@@ -168,6 +168,25 @@ describe("popupReducer", () => {
     expect(next.favorites).toStrictEqual(favorites);
   });
 
+  it("favoriteSaved sets favorites, opens the panel, and flags the saved id", () => {
+    const favorites = [{ id: "fav-1", name: "A", scheme: mockScheme }];
+    const next = popupReducer(initialPopupState, {
+      type: "favoriteSaved",
+      favorites,
+      id: "fav-1",
+    });
+    expect(next.favorites).toStrictEqual(favorites);
+    expect(next.showFavorites).toBe(true);
+    expect(next.savedFavoriteId).toBe("fav-1");
+  });
+
+  it("clearSaveFeedback clears the saved-favorite flag", () => {
+    const flagged: PopupState = { ...initialPopupState, savedFavoriteId: "x" };
+    expect(
+      popupReducer(flagged, { type: "clearSaveFeedback" }).savedFavoriteId,
+    ).toBeNull();
+  });
+
   it("applyFavorite sets current + applied without touching history", () => {
     const state: PopupState = {
       ...initialPopupState,
