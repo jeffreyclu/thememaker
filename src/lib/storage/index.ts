@@ -6,15 +6,15 @@
  *  - `sync` area: settings + favorites scaffolding (small, roams with profile).
  *
  * The adapter is built on a minimal `StorageArea` interface so unit tests inject
- * a fake and never touch real browser APIs. `chromeArea()` adapts a real
+ * a fake and never touch real browser APIs. `Storage.chromeArea()` adapts a real
  * `chrome.storage.StorageArea` (callback API) to a promise-based one.
  *
  * Replaces ALL prior `localStorage` usage.
  */
 import { MAX_HISTORY } from "../../config";
 import { enqueueScheme } from "./history";
-import type { PaletteCacheStore } from "../palette/palette-source";
-import type { Palette } from "../palette/palette";
+import type { PaletteCacheStore } from "../palette";
+import type { Palette } from "../palette";
 import { DEFAULT_INTENSITY } from "../../types";
 import type { ColorMode, Intensity, Scheme } from "../../types";
 
@@ -86,58 +86,82 @@ export interface SiteState {
 export const DEFAULT_SITE_STATE: SiteState = { enabled: false };
 
 /**
- * Adapts a real `chrome.storage.StorageArea` to the promise-based
- * `StorageArea` interface. Not exercised by unit tests (which inject fakes).
- */
-export const chromeArea = (area: chrome.storage.StorageArea): StorageArea => ({
-  get: <T>(key: string) =>
-    new Promise<T | undefined>((resolve) => {
-      area.get(key, (items) => resolve(items[key] as T | undefined));
-    }),
-  set: <T>(key: string, value: T) =>
-    new Promise<void>((resolve) => {
-      area.set({ [key]: value }, () => resolve());
-    }),
-  remove: (key: string) =>
-    new Promise<void>((resolve) => {
-      area.remove(key, () => resolve());
-    }),
-});
-
-/**
- * Drops keys whose value is `undefined` so a partial/legacy stored object can't
- * shadow a default when spread over it (`{ ...DEFAULT, ...definedOnly(stored) }`).
- */
-const definedOnly = <T extends object>(stored: T | undefined): Partial<T> => {
-  if (!stored) {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(stored).filter(([, v]) => v !== undefined),
-  ) as Partial<T>;
-};
-
-/** Normalizes a tab URL to an origin used as the per-site storage key. */
-export const originFromUrl = (url: string | undefined): string | null => {
-  if (!url) {
-    return null;
-  }
-  try {
-    return new URL(url).origin;
-  } catch {
-    return null;
-  }
-};
-
-/**
- * The application storage facade. Both areas are injected so tests can supply
- * fakes; production wires `chromeArea(chrome.storage.local|sync)`.
+ * The application storage facade — the SOLE storage interface.
+ *
+ * Both areas are injected so tests can supply fakes; production wires the
+ * shared {@link storage} singleton over `chrome.storage.local|sync`. All
+ * behavior (key derivation, the chrome adapter, the URL→origin helper) lives
+ * here as methods rather than free functions, so the class is the one cohesive
+ * surface consumers reach for.
  */
 export class Storage {
-  constructor(
-    private readonly local: StorageArea,
-    private readonly sync: StorageArea,
-  ) {}
+  private readonly local: StorageArea;
+  private readonly sync: StorageArea;
+
+  /**
+   * By default the class wires itself over real `chrome.storage.local|sync` —
+   * callers just do `new Storage()`. Tests inject fake areas to stay off the
+   * browser APIs. Either area defaults to its chrome-backed adapter when omitted.
+   */
+  constructor(local?: StorageArea, sync?: StorageArea) {
+    this.local = local ?? Storage.chromeArea("local");
+    this.sync = sync ?? Storage.chromeArea("sync");
+  }
+
+  /**
+   * Adapts a real `chrome.storage` area (callback API) to the promise-based
+   * {@link StorageArea}. The area is looked up by NAME on each op (never
+   * captured) so the module-level {@link storage} singleton, built at import,
+   * always talks to the CURRENT `chrome.storage` — in production the areas are
+   * stable (byte-identical), and under unit tests this lets the per-test
+   * chrome-mock swap (a fresh `globalThis.chrome` each `beforeEach`) take effect.
+   */
+  private static chromeArea(name: "local" | "sync"): StorageArea {
+    return {
+      get: <T>(key: string) =>
+        new Promise<T | undefined>((done) => {
+          chrome.storage[name].get(key, (items) =>
+            done(items[key] as T | undefined),
+          );
+        }),
+      set: <T>(key: string, value: T) =>
+        new Promise<void>((done) => {
+          chrome.storage[name].set({ [key]: value }, () => done());
+        }),
+      remove: (key: string) =>
+        new Promise<void>((done) => {
+          chrome.storage[name].remove(key, () => done());
+        }),
+    };
+  }
+
+  /** Normalizes a tab URL to an origin used as the per-site storage key. */
+  static originFromUrl(url: string | undefined): string | null {
+    if (!url) {
+      return null;
+    }
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Drops keys whose value is `undefined` so a partial/legacy stored object
+   * can't shadow a default when spread over it
+   * (`{ ...DEFAULT, ...Storage.definedOnly(stored) }`).
+   */
+  private static definedOnly<T extends object>(
+    stored: T | undefined,
+  ): Partial<T> {
+    if (!stored) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(stored).filter(([, v]) => v !== undefined),
+    ) as Partial<T>;
+  }
 
   /** @returns the persisted scheme history (most-recent last), or `[]`. */
   async getHistory(): Promise<Scheme[]> {
@@ -170,7 +194,7 @@ export class Storage {
   /** @returns persisted settings merged over defaults. */
   async getSettings(): Promise<Settings> {
     const stored = await this.sync.get<Partial<Settings>>(KEYS.settings);
-    return { ...DEFAULT_SETTINGS, ...definedOnly(stored) };
+    return { ...DEFAULT_SETTINGS, ...Storage.definedOnly(stored) };
   }
 
   /** Merges `patch` into settings and persists the result. */
@@ -183,7 +207,7 @@ export class Storage {
   /** @returns per-site state for `origin`, defaulted when absent. */
   async getSiteState(origin: string): Promise<SiteState> {
     const stored = await this.local.get<SiteState>(KEYS.sitePrefix + origin);
-    return { ...DEFAULT_SITE_STATE, ...definedOnly(stored) };
+    return { ...DEFAULT_SITE_STATE, ...Storage.definedOnly(stored) };
   }
 
   /** Merges `patch` into the per-site state for `origin` and persists it. */
@@ -244,9 +268,10 @@ export class Storage {
   }
 }
 
-/** Production-wired storage backed by real `chrome.storage`. */
-export const createChromeStorage = (): Storage =>
-  new Storage(
-    chromeArea(chrome.storage.local),
-    chromeArea(chrome.storage.sync),
-  );
+/**
+ * The application-wide storage SINGLETON. The popup and content script share
+ * this one instance; with no args the class wires itself over real
+ * `chrome.storage` (lazily), so it is safe to construct at module load and
+ * stays correct under the per-test chrome mock.
+ */
+export const storage = new Storage();

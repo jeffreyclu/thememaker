@@ -20,7 +20,7 @@ import {
 } from "./picker-panel-model";
 import { engine } from "../../lib/engine";
 import { readSiteState, writeSiteState } from "../site-storage";
-import type { Palette } from "../../lib/palette/palette";
+import type { Palette } from "../../lib/palette";
 import type { ApplyOptions, RoleOverrides, Scheme } from "../../types";
 
 /** The single live floating-control session for this tab. */

@@ -16,7 +16,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { Storage, type StorageArea } from "../src/lib/storage";
 import { loadDecision, siteStateReducer } from "../src/lib/storage/site-state";
 import { schemeFromPalette, schemeWithIntensity } from "../src/popup/schemes";
-import { generatePalette } from "../src/lib/palette/palette";
+import { generatePalette } from "../src/lib/palette";
 import { mockPalette } from "./mocks";
 
 const memoryArea = (): StorageArea => {

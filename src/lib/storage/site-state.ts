@@ -12,7 +12,7 @@
  */
 import type { ApplyOptions, Scheme } from "../../types";
 import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
-import type { Palette } from "../palette/palette";
+import type { Palette } from "../palette";
 import type { SiteState } from ".";
 
 // `enable` is the only transition the app dispatches. The popup owns the "full

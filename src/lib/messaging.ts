@@ -13,7 +13,7 @@
  * each request type to its response type so callers stay end-to-end typed.
  */
 import type { ApplyOptions, Scheme } from "../types";
-import type { Palette } from "./palette/palette";
+import type { Palette } from "./palette";
 
 /**
  * Apply a generated palette to the active tab. The ADAPTIVE engine runs IN the

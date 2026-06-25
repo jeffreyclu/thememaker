@@ -1,13 +1,18 @@
 /**
- * Local-first, PURE palette generation via HSL color theory.
+ * Local-first, PURE palette generation via HSL color theory (the GENERATION
+ * CORE, composed by the `PaletteGenerator` class in `./index`).
  *
  * Given a seed hex + mode, this produces a deterministic, offline, instant
  * palette — the DEFAULT color source. `thecolorapi.com` is an OPTIONAL
- * "surprise me" source layered on top (see `color-source.ts`), which falls back
- * here when the network fails.
+ * "surprise me" source layered on top (see `palette-source.ts`), which falls
+ * back here when the network fails.
  *
- * No DOM, no `chrome.*`. The output is a structured `Palette` consumed by the
- * in-page adaptive engine (`inject.ts`) and surfaced in the popup as swatches.
+ * No DOM, no `chrome.*`. The output is a structured `Palette` DTO — a PLAIN,
+ * SERIALIZABLE data shape (NOT a class instance), because it travels from the
+ * popup to the in-page engine over `chrome.tabs.sendMessage` (structured clone)
+ * and is persisted to `chrome.storage`. Class methods would be lost over that
+ * boundary, so the wire object MUST stay plain; the `PaletteGenerator` class is a
+ * generator/factory that PRODUCES these plain DTOs.
  *
  * ## Semantic roles (the anti-monochrome fix)
  *
@@ -28,15 +33,12 @@ import { deriveRoles, wrapHue, type PaletteRoles } from "./palette-roles";
 import { themeSwatches, type ThemeColor } from "./palette-swatches";
 import type { ColorMode } from "../../types";
 
-// Re-exported so existing consumers keep importing the palette's public types
-// from `./palette` (the `Palette` interface below references both).
-export type { PaletteRoles, ThemeColor };
-
 /**
- * A structured palette. `surfaces` are ordered dark→light (used for luminance
- * bucketing onto the page's existing surfaces); `accents` are the harmony hues
- * for text/links/borders. `seed` is the originating color. `roles` is the
- * concrete semantic mapping the engine actually paints from.
+ * A structured palette — the PLAIN, SERIALIZABLE colors DTO that flows over the
+ * wire (popup → engine) and into storage. `surfaces` are ordered dark→light
+ * (used for luminance bucketing onto the page's existing surfaces); `accents`
+ * are the harmony hues for text/links/borders. `seed` is the originating color.
+ * `roles` is the concrete semantic mapping the engine actually paints from.
  */
 export interface Palette {
   seed: string;

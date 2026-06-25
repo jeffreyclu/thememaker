@@ -12,7 +12,7 @@ import { useEffect, type MutableRefObject } from "react";
 import { hydratePartial, type PopupAction } from "../state";
 import type { PopupStorage } from "../actions/deps";
 import { sendToContentWithReply } from "../../lib/messaging";
-import { originFromUrl, DEFAULT_SITE_STATE } from "../../lib/storage";
+import { Storage, DEFAULT_SITE_STATE } from "../../lib/storage";
 
 export const useHydrate = (
   storage: PopupStorage,
@@ -27,7 +27,7 @@ export const useHydrate = (
         currentWindow: true,
       });
       activeTabIdRef.current = tab?.id ?? null;
-      const origin = originFromUrl(tab?.url);
+      const origin = Storage.originFromUrl(tab?.url);
 
       const [settings, history, favorites] = await Promise.all([
         storage.getSettings(),

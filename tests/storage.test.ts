@@ -5,9 +5,7 @@ import {
   KEYS,
   MAX_FAVORITES,
   Storage,
-  chromeArea,
-  createChromeStorage,
-  originFromUrl,
+  storage as chromeStorage,
   type Favorite,
   type StorageArea,
 } from "../src/lib/storage";
@@ -28,15 +26,15 @@ const memoryArea = (): StorageArea => {
   };
 };
 
-describe("originFromUrl", () => {
+describe("Storage.originFromUrl", () => {
   it("extracts the origin from a url", () => {
-    expect(originFromUrl("https://example.com/path?q=1")).toBe(
+    expect(Storage.originFromUrl("https://example.com/path?q=1")).toBe(
       "https://example.com",
     );
   });
   it("returns null for missing or invalid urls", () => {
-    expect(originFromUrl(undefined)).toBeNull();
-    expect(originFromUrl("not a url")).toBeNull();
+    expect(Storage.originFromUrl(undefined)).toBeNull();
+    expect(Storage.originFromUrl("not a url")).toBeNull();
   });
 });
 
@@ -201,39 +199,30 @@ describe("Storage", () => {
   });
 });
 
-describe("chromeArea / createChromeStorage (against the chrome mock)", () => {
-  it("chromeArea adapts the callback API to promises", async () => {
-    const area = chromeArea(
-      getChromeMock().storage.local as unknown as chrome.storage.StorageArea,
-    );
-    await area.set("k", { v: 1 });
-    expect(await area.get("k")).toStrictEqual({ v: 1 });
-    await area.remove("k");
-    expect(await area.get("k")).toBeUndefined();
-  });
-
-  it("createChromeStorage round-trips history through chrome.storage.local", async () => {
-    const storage = createChromeStorage();
-    await storage.pushHistory(mockScheme);
+describe("storage singleton (against the chrome mock)", () => {
+  it("the singleton round-trips history through chrome.storage.local", async () => {
+    await chromeStorage.pushHistory(mockScheme);
     expect(getChromeMock().storage.local.store[KEYS.history]).toBeTruthy();
-    expect(await storage.getHistory()).toHaveLength(1);
+    expect(await chromeStorage.getHistory()).toHaveLength(1);
   });
 
-  it("createChromeStorage writes settings to chrome.storage.sync", async () => {
-    const storage = createChromeStorage();
-    await storage.setSettings({ mode: "quad" });
+  it("the singleton writes settings to chrome.storage.sync", async () => {
+    await chromeStorage.setSettings({ mode: "quad" });
     expect(getChromeMock().storage.sync.store[KEYS.settings]).toStrictEqual({
       ...DEFAULT_SETTINGS,
       mode: "quad",
     });
   });
 
-  it("createChromeStorage round-trips favorites through chrome.storage.sync", async () => {
-    const storage = createChromeStorage();
-    await storage.saveFavorite({ id: "a", name: "A", scheme: mockScheme });
+  it("the singleton round-trips favorites through chrome.storage.sync", async () => {
+    await chromeStorage.saveFavorite({
+      id: "a",
+      name: "A",
+      scheme: mockScheme,
+    });
     expect(getChromeMock().storage.sync.store[KEYS.favorites]).toHaveLength(1);
     // favorites are global → never in the local area
     expect(getChromeMock().storage.local.store[KEYS.favorites]).toBeUndefined();
-    expect(await storage.getFavorites()).toHaveLength(1);
+    expect(await chromeStorage.getFavorites()).toHaveLength(1);
   });
 });

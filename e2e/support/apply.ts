@@ -18,12 +18,12 @@
  *  - Theming itself is done by the REAL bundled content script + engine.
  */
 import type { BrowserContext, Page } from "@playwright/test";
-import { localPalette } from "../../src/lib/palette/palette-source";
-import type { Palette } from "../../src/lib/palette/palette";
+import { paletteGenerator } from "../../src/lib/palette";
+import type { Palette } from "../../src/lib/palette";
 
 /** Generates a real palette from a seed + mode (default a deterministic blue triad). */
 export const makePalette = (seed = "#1565c0", mode = "triad"): Palette =>
-  localPalette(seed, mode);
+  paletteGenerator.local(seed, mode);
 
 /**
  * Seeds per-site storage for `origin` exactly as the popup's "Apply" does:

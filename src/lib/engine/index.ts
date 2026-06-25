@@ -53,7 +53,7 @@ import { createSurfaceObserver, isOwnElement } from "./engine-observe";
 import { applyOverrideLayer } from "./engine-overrides";
 import type { SurfaceContext } from "./engine-surface";
 import type { EngineState, OriginalStyle } from "./engine-types";
-import type { Palette } from "../palette/palette";
+import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 
 const DEBOUNCE_MS = 250;

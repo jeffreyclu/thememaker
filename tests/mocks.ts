@@ -1,5 +1,5 @@
 import type { ApplyOptions, Scheme, SchemeDetails } from "../src/types";
-import type { Palette } from "../src/lib/palette/palette";
+import type { Palette } from "../src/lib/palette";
 
 export const mockSchemeDetails: SchemeDetails = {
   rootColor: "#B98790",

@@ -10,13 +10,10 @@
  * `Scheme` for history/swatches.
  */
 import { modes } from "../config";
-import { randomHexColor, randomMode } from "../lib/palette/random";
 import { describeColor } from "../lib/color/color-names";
 import { isHexColor, normalizeHex } from "../lib/color/color";
-import { localPalette, apiPalette } from "../lib/palette/palette-source";
-import type { PaletteSourceDeps } from "../lib/palette/palette-source";
-import { invertPalette } from "../lib/palette/palette";
-import type { Palette } from "../lib/palette/palette";
+import { paletteGenerator } from "../lib/palette";
+import type { Palette, PaletteSourceDeps } from "../lib/palette";
 import type { ModeSelection } from "./state";
 import { DEFAULT_INTENSITY } from "../types";
 import type {
@@ -37,7 +34,7 @@ export const modesForSelection = (selection: ModeSelection): string[] =>
 
 /** Picks a concrete mode for a selection ("random" → a random configured mode). */
 export const resolveMode = (selection: ModeSelection): ColorMode =>
-  selection === "random" ? randomMode(modes) : selection;
+  selection === "random" ? paletteGenerator.randomMode(modes) : selection;
 
 /**
  * Resolves the concrete seed hex Generate should use. When the caller supplies a
@@ -46,7 +43,7 @@ export const resolveMode = (selection: ModeSelection): ColorMode =>
  * RANDOM color. Pure + total: always returns a normalized `#rrggbb`.
  */
 export const resolveSeed = (seed?: string): string =>
-  seed && isHexColor(seed) ? normalizeHex(seed) : randomHexColor();
+  seed && isHexColor(seed) ? normalizeHex(seed) : paletteGenerator.randomSeed();
 
 /**
  * Builds a display-only `Scheme` from a palette so history/details panels keep
@@ -118,10 +115,10 @@ export const generateForSelection = async (
   const seedHex = resolveSeed(opts.seed);
 
   const raw: Palette = opts.online
-    ? await apiPalette(seedHex, mode, opts.deps)
-    : localPalette(seedHex, mode);
+    ? await paletteGenerator.api(seedHex, mode, opts.deps)
+    : paletteGenerator.local(seedHex, mode);
   // Invert (light↔dark) when requested; the slider still mutes from there.
-  const palette = opts.invert ? invertPalette(raw) : raw;
+  const palette = opts.invert ? paletteGenerator.invert(raw) : raw;
 
   // Name the seed locally so history/details show a real name (e.g. "Vivid
   // Blue") instead of the "scheme" placeholder.
@@ -143,7 +140,8 @@ export const generateForSelection = async (
  * resolves palettes identically.
  */
 const resolvePalette = (details: SchemeDetails): Palette =>
-  details.palette ?? localPalette(details.rootColor, details.colorMode);
+  details.palette ??
+  paletteGenerator.local(details.rootColor, details.colorMode);
 
 /**
  * Resolves the overrides to bake onto an apply payload: explicitly-passed
@@ -169,7 +167,7 @@ export const invertScheme = (scheme: Scheme): Scheme => {
   if (!details.palette) {
     return scheme;
   }
-  const palette = invertPalette(details.palette);
+  const palette = paletteGenerator.invert(details.palette);
   const next = schemeFromPalette(
     palette,
     details.intensity ?? DEFAULT_INTENSITY,

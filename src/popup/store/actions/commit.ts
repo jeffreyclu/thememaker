@@ -10,7 +10,6 @@
  * isolation.
  */
 import { applyPayloadForScheme, schemeWithIntensity } from "../schemes";
-import { siteStateReducer } from "../../lib/storage/site-state";
 import type { CommitDeps } from "./deps";
 import type { Intensity, RoleOverrides, Scheme } from "../../types";
 
@@ -38,7 +37,7 @@ export interface Commit {
 
 /** Builds the commit machinery over chrome-free {@link CommitDeps}. */
 export const makeCommit = (deps: CommitDeps): Commit => {
-  const { getState, dispatch, storage, send } = deps;
+  const { getState, dispatch, storage, siteState, send } = deps;
 
   /** The look to commit: an explicit snapshot, or the current reducer state. */
   const resolveLive = (live?: LiveScheme): LiveScheme | null => {
@@ -96,15 +95,14 @@ export const makeCommit = (deps: CommitDeps): Commit => {
     if (!state.origin || !resolved) {
       return;
     }
-    const next = siteStateReducer(await storage.getSiteState(state.origin), {
-      type: "enable",
-      scheme: schemeWithIntensity(
+    await siteState.persistEnabled(
+      state.origin,
+      schemeWithIntensity(
         resolved.scheme,
         resolved.intensity,
         resolved.overrides,
       ),
-    });
-    await storage.setSiteState(state.origin, next);
+    );
     if (!state.siteEnabled) {
       dispatch({ type: "setSiteEnabled", enabled: true });
     }

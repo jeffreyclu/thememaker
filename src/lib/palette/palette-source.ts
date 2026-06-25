@@ -10,7 +10,7 @@
  * Everything here is dependency-injected (fetch + a cache store), so it is fully
  * unit-testable without a network or `chrome.storage`.
  */
-import { generatePalette, type Palette } from "./palette";
+import { generatePalette, type Palette } from "./palette-generate";
 import { isHexColor, normalizeHex } from "../color/color";
 import type { ColorMode } from "../../types";
 

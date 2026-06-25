@@ -17,7 +17,7 @@ import { defaultFavoriteName, type ModeSelection } from "../state";
 import { dequeueScheme } from "../../lib/storage/history";
 import type { Commit } from "./commit";
 import type { ActionDeps } from "./deps";
-import type { Palette } from "../../lib/palette/palette";
+import type { Palette } from "../../lib/palette";
 import type { Favorite } from "../../lib/storage";
 import { clampIntensity, type Intensity } from "../../types";
 

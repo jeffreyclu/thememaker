@@ -14,7 +14,7 @@
  */
 import { isHexColor, normalizeHex } from "../color/color";
 import { BASE_CACHE_KEY } from "./theme-dom-constants";
-import type { Palette } from "../palette/palette";
+import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 
 // Re-exported so existing consumers keep importing the cache key from here too.

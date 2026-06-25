@@ -20,7 +20,7 @@ import {
 } from "vitest";
 
 import type { ApplyOptions } from "../src/types";
-import type { Palette } from "../src/lib/palette/palette";
+import type { Palette } from "../src/lib/palette";
 
 import { loadDecision } from "../src/lib/storage/site-state";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";

@@ -4,7 +4,7 @@ import {
   openExtensionPage,
   waitForThemeApplied,
 } from "../support/apply";
-import type { Palette } from "../../src/lib/palette/palette";
+import type { Palette } from "../../src/lib/palette";
 
 /**
  * CUSTOM-THEME OVERRIDES, end to end — the PER-TAG model.

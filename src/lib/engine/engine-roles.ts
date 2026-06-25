@@ -15,7 +15,7 @@
  */
 import { luminanceBucket, nudgeToAA } from "../color/color";
 import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
-import type { Palette } from "../palette/palette";
+import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 
 /** The concrete role colors + blend state the engine paints a page from. */

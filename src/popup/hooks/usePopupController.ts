@@ -14,8 +14,9 @@ import { makeCommit } from "../actions/commit";
 import { makeActions, type PopupActions } from "../actions/actions";
 import type { ActionDeps } from "../actions/deps";
 import { useHydrate } from "./useHydrate";
+import { useSiteState } from "./useSiteState";
 import { sendToContent, sendToContentWithReply } from "../../lib/messaging";
-import { createChromeStorage } from "../../lib/storage";
+import { storage } from "../../lib/storage";
 
 export interface PopupController {
   state: PopupState;
@@ -35,13 +36,17 @@ export const usePopupController = (): PopupController => {
   // target it. A ref so the built-once deps always read the current value.
   const activeTabIdRef = useRef<number | null>(null);
 
+  // Per-site enable/persist business logic — a stable hook api (built once).
+  const siteState = useSiteState();
+
   // Build the chrome-backed deps + actions ONCE — stable for the popup's life.
-  const { storage, actions } = useMemo(() => {
-    const store = createChromeStorage();
+  // `storage` / `siteState` are stable for the popup's life (singleton + memo).
+  const actions = useMemo(() => {
     const deps: ActionDeps = {
       getState: () => stateRef.current,
       dispatch,
-      storage: store,
+      storage,
+      siteState,
       send: (message) =>
         activeTabIdRef.current == null
           ? Promise.resolve({ ok: false, applied: false } as never)
@@ -53,7 +58,7 @@ export const usePopupController = (): PopupController => {
       activeTabId: () => activeTabIdRef.current,
       closeWindow: () => window.close(),
     };
-    return { storage: store, actions: makeActions(deps, makeCommit(deps)) };
+    return makeActions(deps, makeCommit(deps));
   }, []);
 
   // Hydrate settings/history/favorites/this origin's saved theme + applied flag.

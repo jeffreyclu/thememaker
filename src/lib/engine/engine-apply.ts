@@ -21,7 +21,7 @@ import {
 } from "./role-classify";
 import { originalStyleOf, type SurfaceContext } from "./engine-surface";
 import type { EngineState, OriginalStyle } from "./engine-types";
-import type { Palette } from "../palette/palette";
+import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 
 /** The resolved pieces an apply hands to the Engine's scheduler. */

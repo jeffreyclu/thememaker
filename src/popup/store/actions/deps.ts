@@ -14,9 +14,10 @@ import type {
   ContentReplyMessage,
   ResponseFor,
 } from "../../lib/messaging";
-import type { createChromeStorage } from "../../lib/storage";
+import type { Storage } from "../../lib/storage";
+import type { SiteStateApi } from "../hooks/useSiteState";
 
-export type PopupStorage = ReturnType<typeof createChromeStorage>;
+export type PopupStorage = Storage;
 
 /** Sends a reply-carrying message to the active tab's content script. */
 export type SendReply = <M extends ContentReplyMessage>(
@@ -31,6 +32,8 @@ export interface CommitDeps {
   getState: () => PopupState;
   dispatch: (action: PopupAction) => void;
   storage: PopupStorage;
+  /** Per-site enable/persist logic (owns the site-state transition). */
+  siteState: SiteStateApi;
   /** Apply / reset / query on the active tab, with the typed reply. */
   send: SendReply;
 }

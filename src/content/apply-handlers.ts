@@ -20,7 +20,7 @@ import type {
   QueryStateResponse,
   ResetSchemeResponse,
 } from "../lib/messaging";
-import type { Palette } from "../lib/palette/palette";
+import type { Palette } from "../lib/palette";
 import type { ApplyOptions, Scheme } from "../types";
 
 /**
