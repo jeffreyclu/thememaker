@@ -6,12 +6,12 @@
  *
  * A small pure helper (no React, no `chrome.*`) so the pick hook stays a thin
  * side-effect. The button classifier and the rgb()→hex parser are shared with
- * the engine, in `lib/classify.ts` and `lib/color/color-runtime.ts`; this module
+ * the engine, in `./classify` and `../color/color-runtime`; this module
  * imports them rather than re-implementing.
  */
 import { isButtonLike } from "./classify";
-import { cssColorToHex } from "./color/color-runtime";
-import { makeOverrideKey } from "./override-keys";
+import { cssColorToHex } from "../color/color-runtime";
+import { makeOverrideKey } from "./keys";
 
 /**
  * True when the element renders its own non-transparent background.

@@ -9,11 +9,11 @@
  * one color on SPAs. Text role classification lives in the root-scoped tag rules
  * (`role-rules.ts`), so these classifiers only ever decide surfaces.
  *
- * The shared `isButtonLike` lives in `classify.ts`; this module adds the engine's
+ * The shared `isButtonLike` lives in `lib/overrides`; this module adds the engine's
  * surface-only classifiers. Pure decisions over an element + resolved roles;
  * `getComputedStyle` reads stay in the walk, not here.
  */
-import { isButtonLike } from "../classify";
+import { isButtonLike } from "../overrides";
 import type { ResolvedRoles } from "./engine-roles";
 
 /** The surface fixed-theme fill for an element: bg, label seed, optional token. */

@@ -10,7 +10,7 @@ import { describeColor } from "../color/color-names";
 import {
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
-} from "../override-keys";
+} from "../overrides";
 import type { Favorite } from "../storage";
 import type {
   Intensity,

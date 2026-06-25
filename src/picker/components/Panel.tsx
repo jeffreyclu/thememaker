@@ -14,7 +14,7 @@ import { usePickerState } from "../state/PickerProvider";
 import { useApplyOverrides } from "../hooks/useApplyOverrides";
 import { usePickerKeys } from "../hooks/usePickerKeys";
 import { usePickSession } from "../hooks/usePickSession";
-import { labelForOverrideKey, overrideRows } from "../../lib/override-keys";
+import { labelForOverrideKey, overrideRows } from "../../lib/overrides";
 
 /** The picker's label for a `<tag>|<prop>` key (the `page` sentinel reads as a
  * friendly "Page · background"). */

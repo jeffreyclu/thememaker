@@ -1,5 +1,5 @@
 /**
- * In-page element picker — the PURE per-element RESOLVERS (`app/pick-resolve.ts`)
+ * In-page element picker — the PURE per-element RESOLVERS (`lib/overrides`)
  * plus the live PICK SESSION now folded into the `usePickSession` hook.
  *
  * Resolvers (no DOM session):
@@ -23,7 +23,7 @@ import {
   isPickable,
   pickKeyFor,
   propForElement,
-} from "../src/lib/pick-resolve";
+} from "../src/lib/overrides";
 import { OVERLAY_ID } from "../src/picker/hooks/usePickSession";
 import { usePickSession } from "../src/picker/hooks/usePickSession";
 import { PickerProvider } from "../src/picker/state/PickerProvider";
@@ -36,7 +36,7 @@ const applyWhenReady = vi.fn();
 vi.mock("../src/lib/engine", () => ({
   engine: { applyWhenReady: (...a: unknown[]) => applyWhenReady(...a) },
 }));
-vi.mock("../src/lib/persist-overrides", () => ({
+vi.mock("../src/lib/storage/persist-overrides", () => ({
   persistOverrides: vi.fn(),
 }));
 

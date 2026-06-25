@@ -17,7 +17,7 @@
  *   - the sentinel tag `page` → `html, body`.
  * The layer is cleared on reset (`removeSchemeStyle` drops it).
  *
- * This file also covers the override grammar (`lib/override-keys`: row
+ * This file also covers the override grammar (`lib/overrides`: row
  * derivation + label formatting, incl. the `page` sentinel) and the picker's
  * immutable add/edit/remove transitions (`overridesReducer` + `mergeColor` in the
  * `PickerProvider`).
@@ -31,7 +31,7 @@ import {
   FALLBACK_COLOR,
   labelForOverrideKey,
   overrideRows,
-} from "../src/lib/override-keys";
+} from "../src/lib/overrides";
 import {
   mergeColor,
   overridesReducer,

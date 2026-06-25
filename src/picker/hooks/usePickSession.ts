@@ -4,7 +4,7 @@
  * While the panel is mounted it installs capture-phase listeners (so the page
  * can't act first) and a hover overlay tracking the element under the cursor.
  * Each click resolves a `<tag>|<prop>` key + the element's current color (the
- * `lib/pick-resolve` helpers) and commits the pick via {@link useApplyOverrides}
+ * `lib/overrides` resolvers) and commits the pick via {@link useApplyOverrides}
  * (dispatch → apply live → persist). The panel host (and its shadow root) is
  * excluded so the control never highlights/recolors itself. Cleanup removes every
  * listener + the overlay.
@@ -18,9 +18,9 @@ import { useApplyOverrides } from "./useApplyOverrides";
 import {
   currentColorFor,
   isPickable,
+  makeOverrideKey,
   propForElement,
-} from "../../lib/pick-resolve";
-import { makeOverrideKey } from "../../lib/override-keys";
+} from "../../lib/overrides";
 import { PANEL_HOST_ID } from "..";
 
 /** The hover-overlay id (distinct from the engine's `<style>`/attrs). */
