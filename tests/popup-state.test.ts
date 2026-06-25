@@ -203,6 +203,18 @@ describe("popupReducer", () => {
     expect(next.history).toStrictEqual([mockScheme2]);
   });
 
+  it("applyFavorite syncs intensity to the favorite's saved value (so Save sees it as saved)", () => {
+    const fav = {
+      ...mockScheme,
+      schemeDetails: { ...mockScheme.schemeDetails, intensity: 35 },
+    };
+    const next = popupReducer(
+      { ...initialPopupState, intensity: 90 },
+      { type: "applyFavorite", scheme: fav },
+    );
+    expect(next.intensity).toBe(35);
+  });
+
   it("does not mutate the input state", () => {
     const before = { ...initialPopupState };
     popupReducer(initialPopupState, { type: "selectMode", mode: "triad" });

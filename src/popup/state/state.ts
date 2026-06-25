@@ -179,13 +179,17 @@ export const popupReducer = (
       return { ...state, savedFavoriteId: null };
     case "applyFavorite":
       // A favorite becomes the current scheme (so the slider / Apply / Details
-      // act on it) and is marked applied; history is untouched. Its saved custom
-      // overrides become the live editor state.
+      // act on it) and is marked applied; history is untouched. Its saved
+      // intensity + overrides become the live state — so the slider matches the
+      // favorite and Save sees it as already-saved (no duplicate re-save).
       return {
         ...state,
         current: action.scheme,
         applied: true,
         error: null,
+        intensity: clampIntensity(
+          action.scheme.schemeDetails.intensity ?? state.intensity,
+        ),
         overrides: action.scheme.schemeDetails.overrides ?? {},
       };
     case "generateStart":
