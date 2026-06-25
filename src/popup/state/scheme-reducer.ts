@@ -14,11 +14,11 @@
  * in a SEPARATE reducer (`popup-reducer.ts`); scheme actions drive that view via
  * the `usePopup` actions.
  */
-import { dequeueScheme } from "../lib/storage/history";
-import { clampIntensity, DEFAULT_INTENSITY } from "../types";
-import type { Intensity, RoleOverrides, Scheme } from "../types";
-import type { Favorite } from "../lib/storage";
-import type { ModeSelection } from "../lib/scheme";
+import { dequeueScheme } from "../../lib/storage/history";
+import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
+import type { Intensity, RoleOverrides, Scheme } from "../../types";
+import type { Favorite } from "../../lib/storage";
+import type { ModeSelection } from "../../lib/scheme";
 
 export type { ModeSelection };
 

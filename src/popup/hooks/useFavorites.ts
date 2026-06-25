@@ -10,8 +10,8 @@
 import { useMemo } from "react";
 
 import { schemeWithIntensity, defaultFavoriteName } from "../../lib/scheme";
-import { useSchemeEffects } from "./useSchemeEffects";
-import { useSchemeStore } from "../SchemeProvider";
+import { schemeClient } from "../client/scheme-client";
+import { useSchemeStore } from "../state/SchemeProvider";
 import { usePopup } from "./usePopup";
 import { storage } from "../../lib/storage";
 import type { Favorite } from "../../lib/storage";
@@ -32,11 +32,10 @@ const newFavoriteId = (): string =>
 export const useFavorites = (): FavoriteActions => {
   const store = useSchemeStore();
   const popup = usePopup();
-  const effects = useSchemeEffects(store, popup);
   const { getState, dispatch } = store;
 
   return useMemo<FavoriteActions>(() => {
-    const { commitCurrent } = effects;
+    const { commitCurrent } = schemeClient(store, popup);
 
     return {
       onSaveFavorite: async (): Promise<void> => {
@@ -77,5 +76,5 @@ export const useFavorites = (): FavoriteActions => {
       },
     };
     // `store`/`popup` are stable for the popup's life → build the actions once.
-  }, [store, popup, effects]);
+  }, [store, popup]);
 };

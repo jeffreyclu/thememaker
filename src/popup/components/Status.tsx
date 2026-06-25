@@ -4,7 +4,7 @@
  */
 import { memo } from "react";
 
-import { usePopupState } from "../PopupProvider";
+import { usePopupState } from "../state/PopupProvider";
 
 export const Status = memo(function Status() {
   const { error } = usePopupState();

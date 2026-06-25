@@ -1,19 +1,12 @@
 /**
- * Shared SCHEME side-effect engine — the transport + apply/persist primitives the
- * focused scheme hooks (`useApplyScheme`, `useGenerate`, `useFavorites`,
- * `useHistory`, `usePersist`) build their intents on.
- *
- * One factory over the scheme store + the popup view actions, so the primitives
- * stay built-once + read the latest state. This is the SHARED commit logic (no
- * duplication across the focused hooks), NOT a public action layer — each hook
- * composes only what it needs and owns its own dispatch/orchestration.
+ * The popup's SCHEME CLIENT — the transport + apply/persist operations the action
+ * hooks call to drive the page and persistence. `schemeClient(store, popup)`
+ * binds a client to the current scheme store + popup view actions.
  *
  * CRITICAL — React's `dispatch` is DEFERRED: callers that apply a scheme right
  * after dispatching it pass an explicit `LiveScheme` SNAPSHOT, since reading
  * `getState()` after `dispatch` would still see the pre-dispatch scheme.
  */
-import { useMemo } from "react";
-
 import { applyPayloadForScheme, schemeWithIntensity } from "../../lib/scheme";
 import { siteStateReducer } from "../../lib/storage/site-state";
 import { sendToContent, sendToContentWithReply } from "../../lib/messaging";
@@ -24,8 +17,8 @@ import type {
 } from "../../lib/messaging";
 import { storage } from "../../lib/storage";
 import type { Intensity, RoleOverrides, Scheme } from "../../types";
-import type { SchemeStore } from "../SchemeProvider";
-import type { PopupActions } from "./usePopup";
+import type { SchemeStore } from "../state/SchemeProvider";
+import type { PopupActions } from "../hooks/usePopup";
 
 /** The exact look to commit (apply + persist): scheme + live intensity + overrides. */
 export interface LiveScheme {
@@ -34,7 +27,7 @@ export interface LiveScheme {
   overrides: RoleOverrides;
 }
 
-export interface SchemeEffects {
+export interface SchemeClient {
   /** Send a content message that expects a typed reply (no tab → not-ok). */
   send: <M extends ContentReplyMessage>(
     message: M,
@@ -51,11 +44,11 @@ export interface SchemeEffects {
   commitCurrent: (live?: LiveScheme) => Promise<void>;
 }
 
-/** Builds the shared effect primitives over the scheme store + popup actions. */
-const createSchemeEffects = (
+/** Binds a scheme client to the current store + popup view actions. */
+export const schemeClient = (
   store: SchemeStore,
   popup: PopupActions,
-): SchemeEffects => {
+): SchemeClient => {
   const { getState, dispatch, activeTabId } = store;
 
   const send = <M extends ContentReplyMessage>(
@@ -147,13 +140,3 @@ const createSchemeEffects = (
     commitCurrent,
   };
 };
-
-/**
- * The shared scheme effects, memoized over the store + popup so the focused
- * action hooks compose them as stable, built-once primitives.
- */
-export const useSchemeEffects = (
-  store: SchemeStore,
-  popup: PopupActions,
-): SchemeEffects =>
-  useMemo(() => createSchemeEffects(store, popup), [store, popup]);

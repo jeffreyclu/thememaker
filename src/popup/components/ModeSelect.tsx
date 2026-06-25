@@ -5,7 +5,7 @@
 import { memo } from "react";
 
 import { modes } from "../../config";
-import type { ModeSelection } from "../scheme-reducer";
+import type { ModeSelection } from "../state/scheme-reducer";
 
 export const ModeSelect = memo(function ModeSelect({
   value,

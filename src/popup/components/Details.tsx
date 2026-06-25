@@ -7,8 +7,8 @@ import { memo } from "react";
 
 import { Swatch } from "./Swatch";
 import { Disclosure } from "./Disclosure";
-import { useSchemeState } from "../SchemeProvider";
-import { usePopupState } from "../PopupProvider";
+import { useSchemeState } from "../state/SchemeProvider";
+import { usePopupState } from "../state/PopupProvider";
 import { usePopup } from "../hooks/usePopup";
 import { overrideRows, schemeDetailRows } from "../../lib/scheme";
 import { describeColor } from "../../lib/color/color-names";

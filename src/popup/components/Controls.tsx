@@ -6,7 +6,7 @@
  */
 import { memo } from "react";
 
-import { useSchemeState } from "../SchemeProvider";
+import { useSchemeState } from "../state/SchemeProvider";
 import { useGenerate } from "../hooks/useGenerate";
 import { useApplyScheme } from "../hooks/useApplyScheme";
 import { ModeSelect } from "./ModeSelect";

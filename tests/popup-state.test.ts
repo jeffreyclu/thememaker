@@ -4,7 +4,7 @@ import {
   schemeInitialState,
   schemeReducer,
   type SchemeState,
-} from "../src/popup/scheme-reducer";
+} from "../src/popup/state/scheme-reducer";
 import {
   currentSchemeDetails,
   defaultFavoriteName,
@@ -15,7 +15,7 @@ import {
   popupInitialState,
   popupReducer,
   type PopupState,
-} from "../src/popup/popup-reducer";
+} from "../src/popup/state/popup-reducer";
 import {
   applyPayloadForScheme,
   generateForSelection,

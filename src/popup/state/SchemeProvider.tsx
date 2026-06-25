@@ -29,8 +29,8 @@ import {
   type SchemeAction,
   type SchemeState,
 } from "./scheme-reducer";
-import { sendToContentWithReply } from "../lib/messaging";
-import { storage, Storage, DEFAULT_SITE_STATE } from "../lib/storage";
+import { sendToContentWithReply } from "../../lib/messaging";
+import { storage, Storage, DEFAULT_SITE_STATE } from "../../lib/storage";
 
 // Exported so tests can read the live scheme state.
 export const SchemeStateContext = createContext<SchemeState | null>(null);

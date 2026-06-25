@@ -8,9 +8,9 @@ import { memo } from "react";
 
 import { ApplyButton } from "./ApplyButton";
 import { Disclosure } from "./Disclosure";
-import { useSchemeState } from "../SchemeProvider";
+import { useSchemeState } from "../state/SchemeProvider";
 import { useFavorites } from "../hooks/useFavorites";
-import { usePopupState } from "../PopupProvider";
+import { usePopupState } from "../state/PopupProvider";
 import { usePopup } from "../hooks/usePopup";
 import { schemeSwatches } from "../../lib/scheme";
 import type { Favorite } from "../../lib/storage";

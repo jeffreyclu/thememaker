@@ -7,9 +7,9 @@ import { memo } from "react";
 
 import { ApplyButton } from "./ApplyButton";
 import { Disclosure } from "./Disclosure";
-import { useSchemeState } from "../SchemeProvider";
+import { useSchemeState } from "../state/SchemeProvider";
 import { useHistory } from "../hooks/useHistory";
-import { usePopupState } from "../PopupProvider";
+import { usePopupState } from "../state/PopupProvider";
 import { usePopup } from "../hooks/usePopup";
 import { historyLabel, schemeSwatches } from "../../lib/scheme";
 

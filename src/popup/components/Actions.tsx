@@ -6,11 +6,11 @@
  */
 import { memo } from "react";
 
-import { useSchemeState } from "../SchemeProvider";
+import { useSchemeState } from "../state/SchemeProvider";
 import { useGenerate } from "../hooks/useGenerate";
 import { useApplyScheme } from "../hooks/useApplyScheme";
 import { useFavorites } from "../hooks/useFavorites";
-import { usePopupState } from "../PopupProvider";
+import { usePopupState } from "../state/PopupProvider";
 import { isCurrentSaved } from "../../lib/scheme";
 
 interface ButtonSpec {

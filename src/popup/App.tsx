@@ -6,8 +6,8 @@
  * from context, so the root does NO prop drilling and reads NO state itself — it's
  * pure composition.
  */
-import { PopupProvider } from "./PopupProvider";
-import { SchemeProvider } from "./SchemeProvider";
+import { PopupProvider } from "./state/PopupProvider";
+import { SchemeProvider } from "./state/SchemeProvider";
 import { Controls } from "./components/Controls";
 import { Actions } from "./components/Actions";
 import { Status } from "./components/Status";

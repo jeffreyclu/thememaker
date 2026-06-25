@@ -9,8 +9,8 @@
  */
 import { useMemo } from "react";
 
-import { useSchemeEffects, type LiveScheme } from "./useSchemeEffects";
-import { useSchemeStore } from "../SchemeProvider";
+import { schemeClient, type LiveScheme } from "../client/scheme-client";
+import { useSchemeStore } from "../state/SchemeProvider";
 import { usePopup } from "./usePopup";
 
 export interface PersistActions {
@@ -21,10 +21,9 @@ export interface PersistActions {
 export const usePersist = (): PersistActions => {
   const store = useSchemeStore();
   const popup = usePopup();
-  const effects = useSchemeEffects(store, popup);
 
   return useMemo<PersistActions>(() => {
-    const { persistTheme } = effects;
+    const { persistTheme } = schemeClient(store, popup);
     return {
       persist: async (live?: LiveScheme): Promise<void> => {
         try {
@@ -35,5 +34,5 @@ export const usePersist = (): PersistActions => {
       },
     };
     // `store`/`popup` are stable for the popup's life → build the actions once.
-  }, [store, popup, effects]);
+  }, [store, popup]);
 };

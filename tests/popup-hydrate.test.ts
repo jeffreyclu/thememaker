@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { hydratePartial } from "../src/popup/scheme-reducer";
+import { hydratePartial } from "../src/popup/state/scheme-reducer";
 import type { Settings, SiteState } from "../src/lib/storage";
 import type { Scheme } from "../src/types";
 

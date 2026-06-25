@@ -9,13 +9,13 @@
 import { useMemo } from "react";
 
 import { generateForSelection } from "../../lib/scheme";
-import { useSchemeEffects } from "./useSchemeEffects";
-import { useSchemeStore } from "../SchemeProvider";
+import { schemeClient } from "../client/scheme-client";
+import { useSchemeStore } from "../state/SchemeProvider";
 import { usePopup } from "./usePopup";
 import { usePersist } from "./usePersist";
 import { storage } from "../../lib/storage";
 import type { Palette } from "../../lib/palette";
-import type { ModeSelection } from "../scheme-reducer";
+import type { ModeSelection } from "../state/scheme-reducer";
 
 export interface GenerateActions {
   onGenerate: () => void;
@@ -25,13 +25,12 @@ export interface GenerateActions {
 export const useGenerate = (): GenerateActions => {
   const store = useSchemeStore();
   const popup = usePopup();
-  const effects = useSchemeEffects(store, popup);
   const { getState, dispatch } = store;
   // Generate persists the fresh look through the per-site persistence hook.
   const { persist } = usePersist();
 
   return useMemo<GenerateActions>(() => {
-    const { send } = effects;
+    const { send } = schemeClient(store, popup);
     // Session-scoped in-memory palette cache for the API source, reused across
     // Generate clicks so repeated seed+mode lookups skip network + persistent store.
     const paletteMemoryCache = new Map<string, Palette>();
@@ -77,5 +76,5 @@ export const useGenerate = (): GenerateActions => {
       },
     };
     // `store`/`popup`/`persist` are stable → build the actions once.
-  }, [store, popup, persist, effects]);
+  }, [store, popup, persist]);
 };
