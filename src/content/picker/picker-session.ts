@@ -1,197 +1,79 @@
 /**
- * In-page floating picker control session.
+ * In-page floating picker control — the THIN VANILLA SHIM around the React app.
  *
- * The popup sends SHOW_PICKER (carrying the live theme) then closes. We mount a
- * Shadow DOM panel and a RE-ARMING pick session: clicking page elements adds
- * override rows; editing a row's color (or clearing it) applies live + persists.
- * Storage is the source of truth — overrides live on the per-site savedScheme,
- * so a reload restores them via `loadDecision`. Esc / Done close the panel.
+ * The popup sends SHOW_PICKER (carrying the live theme) then closes; we lazily
+ * mount a React app into a Shadow DOM host. ALL session state (overrides /
+ * palette / intensity) and ALL logic (element-pick arming, apply + persist,
+ * Esc-to-close) live INSIDE that app (`./app`) — this file owns no state, no
+ * handlers, and no apply/persist logic. It only:
+ *   - shows the picker  → lazy `import()` + mount the app with the initial theme;
+ *   - hides the picker  → unmount the app;
+ *   - applies live      → re-apply via the engine AND re-render the open app with
+ *                         the new theme (the popup's "Clear all" etc. re-seeds it).
+ *
+ * LAZY REACT: the app statically imports React + react-dom. This file runs in the
+ * ALWAYS-ON content script (every page), so it `await import`s the app ONLY when
+ * the picker is shown, letting Vite code-split React out of the content entry
+ * chunk. `PANEL_HOST_ID` is defined HERE (not in the lazy chunk) so the pick
+ * session can exclude the host synchronously, without loading React.
  */
-import { startPick, type PickSession } from "./pick";
-import {
-  mountPickerPanel,
-  PANEL_HOST_ID,
-  type PanelHandle,
-} from "./picker-panel";
-import {
-  withoutRole,
-  withPickedRole,
-  withRoleColor,
-} from "./picker-panel-model";
+import type { PickerAppHandle } from "./app/mount";
 import { engine } from "../../lib/engine";
-import { readSiteState, writeSiteState } from "../site-storage";
 import type { Palette } from "../../lib/palette";
-import type { ApplyOptions, RoleOverrides, Scheme } from "../../types";
+import type { ApplyOptions } from "../../types";
 
-/** The single live floating-control session for this tab. */
-interface PickerSession {
-  panel: PanelHandle;
-  pick: PickSession;
-  palette: Palette;
-  /** The live theme intensity (panel re-applies + persists at this value). */
-  intensity: number;
-  /** The live override map the panel renders + applies + persists. */
-  overrides: RoleOverrides;
-}
-let picker: PickerSession | null = null;
-
-/** The current options (intensity + overrides) for a re-apply. */
-const optionsFor = (s: PickerSession): ApplyOptions =>
-  Object.keys(s.overrides).length > 0
-    ? { intensity: s.intensity, overrides: s.overrides }
-    : { intensity: s.intensity };
+/** The id on the Shadow DOM host element — the engine + picker exclude this. */
+export const PANEL_HOST_ID = "themeMakerPickerHost";
 
 /**
- * SERIALIZES persistence: a tail promise that each persist chains onto, so the
- * read-modify-write cycles never interleave. Without this, a fast color-drag
- * (each `input` event → a persist) could fire overlapping read→merge→write
- * cycles and lose an update (last-writer-wins on a STALE read). Chaining makes
- * each persist read AFTER the previous one's write committed.
+ * The single live app for this tab, plus a generation token so a lazy mount that
+ * resolves AFTER a teardown/replacement is discarded. `app` is null while its
+ * lazy chunk is still loading (or when no picker is open).
  */
-let persistQueue: Promise<void> = Promise.resolve();
+let app: PickerAppHandle | null = null;
+let generation = 0;
 
-/** Read-modify-write of this origin's saved scheme from the session's state. */
-const persistSession = async (s: PickerSession): Promise<void> => {
-  const origin = location.origin;
-  const site = (await readSiteState(origin)) ?? { enabled: false };
-  // Drop any previously-saved `overrides` here so it can't linger: "no
-  // overrides" is the ABSENCE of the key (same convention as `optionsFor`),
-  // re-added below only when there are some.
-  const { overrides: _prevOverrides, ...prevDetails } =
-    site.savedScheme?.schemeDetails ??
-    ({
-      rootColor: s.palette.seed,
-      colorMode: s.palette.mode,
-    } as Scheme["schemeDetails"]);
-  const hasOverrides = Object.keys(s.overrides).length > 0;
-  // Build/refresh the saved scheme: carry the live palette + intensity +
-  // overrides so `loadDecision` reapplies the exact custom theme next load.
-  const savedScheme: Scheme = {
-    ...(site.savedScheme ?? {
-      colors: {},
-      schemeDetails: {} as Scheme["schemeDetails"],
-    }),
-    schemeDetails: {
-      ...prevDetails,
-      palette: s.palette,
-      intensity: s.intensity,
-      ...(hasOverrides ? { overrides: s.overrides } : {}),
-    },
-  };
-  await writeSiteState(origin, { ...site, enabled: true, savedScheme });
-};
+/** The props the app re-renders from (theme + the host close intent). */
+const propsFor = (palette: Palette, options: ApplyOptions) => ({
+  palette,
+  intensity: options.intensity,
+  overrides: { ...(options.overrides ?? {}) },
+  onClose: hidePicker,
+});
 
 /**
- * Applies the session's overrides LIVE (in-page engine) AND persists them into
- * this origin's saved scheme, ENABLING auto-reapply so a reload restores them.
- * Storage is the single source of truth the popup reads. The live apply is
- * immediate; the persist is SERIALIZED via {@link persistQueue} so overlapping
- * edits can't lose an update.
- */
-const applyAndPersist = (s: PickerSession): Promise<void> => {
-  engine.applyWhenReady(s.palette, optionsFor(s));
-  // Chain onto the queue; a failed persist must not break the chain for the next.
-  persistQueue = persistQueue.then(() => persistSession(s)).catch(() => {});
-  return persistQueue;
-};
-
-/** Re-renders the panel rows from the current overrides (if the panel is open). */
-const renderPicker = (): void => {
-  picker?.panel.render(picker.overrides);
-};
-
-/** Esc closes the floating control (delegates to the panel's Done). */
-const onPickerKey = (e: KeyboardEvent): void => {
-  if (e.key === "Escape" && picker) {
-    e.preventDefault();
-    e.stopPropagation();
-    hidePicker();
-  }
-};
-
-/**
- * Shows the in-page floating control, mounting the Shadow DOM panel + a
- * re-arming pick session. Replaces any existing session. Seeds from the popup's
- * current theme (palette + intensity + overrides) so edits start from the live
- * look and persist back onto the per-site saved scheme.
+ * Shows the in-page floating control: lazily loads the React app chunk and mounts
+ * it with the popup's current theme (palette + intensity + overrides). Replaces
+ * any existing session. The app arms element-pick + Esc itself on mount.
  */
 export const showPicker = (palette: Palette, options: ApplyOptions): void => {
   hidePicker();
+  const mine = ++generation;
+  const props = propsFor(palette, options);
 
-  // The panel/pick handlers need to read + mutate the LIVE session state, but the
-  // panel/pick handles don't exist until we build them — a chicken-and-egg. We
-  // break it WITHOUT a placeholder cast: the handlers close over `session` (the
-  // `const` declared below), which is assigned BEFORE any handler can fire
-  // (handlers only run on later user interaction — past the TDZ). So `panel`/
-  // `pick` are built with honest types and the session is assembled once,
-  // complete.
-  const panel = mountPickerPanel({
-    onColorChange: (role, color) => {
-      // Do NOT re-render here: rebuilding the rows would replace the
-      // <input type="color"> the user is actively dragging, which closes the
-      // native color dialog. The input already shows its own value — just
-      // update the override and apply live.
-      session.overrides = withRoleColor(session.overrides, role, color);
-      void applyAndPersist(session);
-    },
-    onClearRole: (role) => {
-      session.overrides = withoutRole(session.overrides, role);
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    onClearAll: () => {
-      session.overrides = {};
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    onDone: () => hidePicker(),
+  // Lazily load the app chunk (React + the picker tree). When it resolves, mount
+  // it — UNLESS this session was already torn down or replaced meanwhile.
+  void import("./app/mount").then(({ mountPickerApp }) => {
+    if (generation !== mine) {
+      return;
+    }
+    app = mountPickerApp(props);
   });
-
-  const pick = startPick({
-    onPicked: (key, currentColor) => {
-      session.overrides = withPickedRole(session.overrides, key, currentColor);
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    // The panel host (and everything inside its shadow root) is excluded so the
-    // control never highlights or recolors itself.
-    isExcluded: (el) => el.closest(`#${PANEL_HOST_ID}`) !== null,
-  });
-
-  const session: PickerSession = {
-    palette,
-    intensity: options.intensity,
-    overrides: { ...(options.overrides ?? {}) },
-    panel,
-    pick,
-  };
-
-  picker = session;
-  panel.render(session.overrides);
-  document.addEventListener("keydown", onPickerKey, true);
 };
 
-/** Hides the floating control + ends pick mode (idempotent). */
+/** Hides the floating control (idempotent). Unmounts the app (ending pick mode). */
 export const hidePicker = (): void => {
-  if (!picker) {
-    return;
-  }
-  document.removeEventListener("keydown", onPickerKey, true);
-  picker.pick.stop();
-  picker.panel.destroy();
-  picker = null;
+  generation++;
+  app?.destroy();
+  app = null;
 };
 
 /**
  * Re-applies the theme in place (popup → content, e.g. after "Clear all" in the
- * popup) and, if the floating control is open, keeps its rows in sync.
+ * popup) and, if the floating control is open, re-renders it with the new theme
+ * so its rows stay in sync (the app re-seeds its state from the new props).
  */
 export const applyLive = (palette: Palette, options: ApplyOptions): void => {
   engine.applyWhenReady(palette, options);
-  if (picker) {
-    picker.palette = palette;
-    picker.intensity = options.intensity;
-    picker.overrides = { ...(options.overrides ?? {}) };
-    renderPicker();
-  }
+  app?.update(propsFor(palette, options));
 };

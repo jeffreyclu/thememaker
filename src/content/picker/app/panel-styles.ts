@@ -1,0 +1,46 @@
+/**
+ * The floating-control panel's inline stylesheet (injected into the shadow root).
+ *
+ * Identical to the pre-React vanilla panel's `<style>` so the migrated panel is
+ * byte-identical visually. Lives in its own module (a plain string constant, not
+ * a fake hook) so the panel component stays a thin view. The page can't see these
+ * rules (Shadow encapsulation), and our engine never themes the host (it carries
+ * {@link PANEL_HOST_ID} and lives outside `<body>`).
+ */
+export const PANEL_STYLES = `
+  :host { all: initial; }
+  .panel {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 2147483647;
+    width: 248px;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    color: #1a1a1e;
+    background: #ffffff;
+    border: 1px solid #e2e2e6;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22);
+    box-sizing: border-box;
+  }
+  .header { display: flex; align-items: center; justify-content: space-between; }
+  .title { font-weight: 600; }
+  .hint { margin: 0; font-size: 12px; color: #6b6b73; }
+  .rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+  .empty { font-size: 12px; color: #6b6b73; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .row__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row__color { flex: 0 0 auto; width: 28px; height: 24px; padding: 0; border: 1px solid #e2e2e6; border-radius: 4px; background: #fff; cursor: pointer; }
+  .actions { display: flex; gap: 8px; }
+  .btn { flex: 1; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 500; color: #1a1a1e; background: #f5f5f7; border: 1px solid #e2e2e6; border-radius: 8px; cursor: pointer; }
+  .btn:hover { border-color: #4f46e5; }
+  .btn--primary { color: #fff; background: #4f46e5; border-color: #4f46e5; }
+  .iconbtn { flex: 0 0 auto; width: 22px; height: 22px; padding: 0; line-height: 1; font-size: 15px; color: #6b6b73; background: #f5f5f7; border: 1px solid #e2e2e6; border-radius: 6px; cursor: pointer; }
+  .iconbtn:hover { color: #fff; background: #b42318; border-color: #b42318; }
+`;

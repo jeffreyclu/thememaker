@@ -1,28 +1,46 @@
 /**
- * In-page element picker (`src/content/pick.ts`) — the PER-TAG model.
+ * In-page element picker — the PURE per-element RESOLVERS (`app/pick-resolve.ts`)
+ * plus the live PICK SESSION now folded into the `usePickSession` hook.
  *
- * Customize is now tag-based: a pick reports a `"<tag>|<prop>"` override key plus
- * the element's current color, and the session RE-ARMS (it does not exit on
- * click — the panel owns teardown via `stop()`). There is no cancellation
- * callback. This covers:
- *  - `isPickable`: media/structural tags are rejected, everything else accepted;
+ * Resolvers (no DOM session):
+ *  - `isPickable`: media/structural tags rejected, everything else accepted;
  *  - `propForElement`: buttons / html|body / own-background → "background";
  *    text-bearing leaves → "color"; plain containers → "background";
  *  - `pickKeyFor`: `<tag>|<prop>`;
- *  - `currentColorFor`: the element's computed color as `#rrggbb`;
- *  - `startPick`: capture-phase click reports the key (re-arming), hover overlay,
- *    and idempotent `stop()` teardown.
+ *  - `currentColorFor`: the element's computed color as `#rrggbb` (walks up for a
+ *    transparent background; falls back to white / neutral text).
+ *
+ * Session (the hook): capture-phase click reports the key + re-arms (the panel
+ * stays open), a hover overlay tracks the element, excluded host elements pass
+ * through untouched, and unmount tears down the listeners + overlay.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, render } from "@testing-library/react";
+import { createElement, type ReactElement } from "react";
 
 import {
   currentColorFor,
   isPickable,
   pickKeyFor,
   propForElement,
-  startPick,
-  OVERLAY_ID,
-} from "../src/content/picker/pick";
+} from "../src/content/picker/app/pick-resolve";
+import { OVERLAY_ID } from "../src/content/picker/app/usePickSession";
+import { usePickSession } from "../src/content/picker/app/usePickSession";
+import { PickerProvider } from "../src/content/picker/app/PickerProvider";
+import { usePickerState } from "../src/content/picker/app/PickerProvider";
+import { PANEL_HOST_ID } from "../src/content/picker/picker-session";
+import type { Palette } from "../src/lib/palette";
+import type { RoleOverrides } from "../src/types";
+
+const applyWhenReady = vi.fn();
+vi.mock("../src/lib/engine", () => ({
+  engine: { applyWhenReady: (...a: unknown[]) => applyWhenReady(...a) },
+}));
+vi.mock("../src/content/picker/app/persist-overrides", () => ({
+  persistOverrides: vi.fn(),
+}));
+
+const palette = { seed: "#123456", mode: "dark" } as unknown as Palette;
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -101,9 +119,6 @@ describe("currentColorFor (#rrggbb seed for the row)", () => {
   });
 
   it("never seeds a transparent background as black; walks up to the visible bg", () => {
-    // A transparent element (`rgba(0,0,0,0)`) must NOT seed `#000000` — that
-    // would paint every element of its tag black. Instead we walk UP to the
-    // first ancestor with a real (opaque) background.
     document.body.innerHTML =
       '<div id="wrap" style="background-color: rgb(20,30,40)"><p id="p">x</p></div>';
     expect(currentColorFor(q("p"), "background")).toBe("#141e28");
@@ -111,88 +126,103 @@ describe("currentColorFor (#rrggbb seed for the row)", () => {
 
   it("falls back to white when nothing up the tree has an opaque background", () => {
     document.body.innerHTML = '<p id="p">x</p>';
-    // jsdom reports every unstyled background as transparent `rgba(0,0,0,0)`,
-    // so the walk reaches the top empty-handed → assume a white page.
     expect(currentColorFor(q("p"), "background")).toBe("#ffffff");
   });
 });
 
-describe("startPick (re-arming pick session)", () => {
-  it("reports `<tag>|<prop>` + current color on a capture-phase click and RE-ARMS", () => {
-    document.body.innerHTML = '<h1 id="h" style="color: rgb(0,0,0)">Title</h1>';
-    const onPicked = vi.fn();
-    const session = startPick({ onPicked });
-    expect(session.active).toBe(true);
+/** Mounts `usePickSession` in a provider; `latest` captures the live overrides. */
+let latest: RoleOverrides = {};
+const Probe = (): null => {
+  usePickSession();
+  latest = usePickerState().overrides;
+  return null;
+};
+const mountSession = (
+  onClose: () => void = () => {},
+): { unmount: () => void } =>
+  render(
+    createElement(
+      PickerProvider,
+      { palette, intensity: 60, overrides: {}, onClose },
+      createElement(Probe),
+    ) as ReactElement,
+  );
 
-    const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
-    q("h").dispatchEvent(evt);
+/** Dispatch a capture-phase click on `el` (inside act) and return the event. */
+const clickEl = (el: Element): MouseEvent => {
+  const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
+  act(() => {
+    el.dispatchEvent(evt);
+  });
+  return evt;
+};
 
+describe("usePickSession (re-arming pick session)", () => {
+  beforeEach(() => {
+    applyWhenReady.mockClear();
+    latest = {};
+  });
+
+  it("reports `<tag>|<prop>` + color on a capture-phase click and RE-ARMS", () => {
+    mountSession();
+    document.body.innerHTML +=
+      '<h1 id="h" style="color: rgb(0,0,0)">Title</h1>';
+    const evt = clickEl(q("h"));
     // The page's default action is prevented (capture phase) and the per-tag key
-    // is reported with the element's current color.
+    // is recorded with the element's current color.
     expect(evt.defaultPrevented).toBe(true);
-    expect(onPicked).toHaveBeenCalledWith("h1|color", "#000000");
-    // RE-ARMS: the session stays live so several elements can be picked in a row.
-    expect(session.active).toBe(true);
-
-    // A second pick on another element keeps reporting.
-    document.body.innerHTML += '<button id="b">Go</button>';
-    q("b").dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
-    expect(onPicked).toHaveBeenCalledWith(
-      "button|background",
-      expect.any(String),
-    );
-    session.stop();
-  });
-
-  it("does NOT register a pick for a non-pickable element (but still swallows the click)", () => {
-    document.body.innerHTML = '<img id="img" />';
-    const onPicked = vi.fn();
-    const session = startPick({ onPicked });
-    const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
-    q("img").dispatchEvent(evt);
-    // Click is swallowed (pick mode), but nothing is reported.
-    expect(evt.defaultPrevented).toBe(true);
-    expect(onPicked).not.toHaveBeenCalled();
-    session.stop();
-  });
-
-  it("excluded elements pass through untouched (panel's own host)", () => {
-    document.body.innerHTML = '<div id="panel"><button id="b">x</button></div>';
-    const onPicked = vi.fn();
-    const session = startPick({
-      onPicked,
-      isExcluded: (el) => el.id === "panel" || el.closest("#panel") !== null,
+    expect(latest).toStrictEqual({ "h1|color": "#000000" });
+    expect(applyWhenReady).toHaveBeenLastCalledWith(palette, {
+      intensity: 60,
+      overrides: { "h1|color": "#000000" },
     });
-    const evt = new MouseEvent("click", { bubbles: true, cancelable: true });
-    q("b").dispatchEvent(evt);
-    // Not swallowed, not reported — the panel's own controls work normally.
+    // RE-ARMS: a second pick on another element keeps recording.
+    document.body.innerHTML += '<button id="b">Go</button>';
+    clickEl(q("b"));
+    expect(latest).toHaveProperty("button|background");
+  });
+
+  it("does NOT register a pick for a non-pickable element (still swallows click)", () => {
+    mountSession();
+    document.body.innerHTML += '<img id="img" />';
+    const evt = clickEl(q("img"));
+    expect(evt.defaultPrevented).toBe(true);
+    expect(latest).toStrictEqual({});
+    expect(applyWhenReady).not.toHaveBeenCalled();
+  });
+
+  it("excluded host elements pass through untouched", () => {
+    mountSession();
+    document.body.innerHTML += `<div id="${PANEL_HOST_ID}"><button id="b">x</button></div>`;
+    const evt = clickEl(q("b"));
+    // Not swallowed, not recorded — the panel's own controls work normally.
     expect(evt.defaultPrevented).toBe(false);
-    expect(onPicked).not.toHaveBeenCalled();
-    session.stop();
+    expect(latest).toStrictEqual({});
   });
 
   it("shows a hover overlay tracking the hovered element", () => {
-    document.body.innerHTML = "<p id='p'>Body</p>";
-    const session = startPick({ onPicked: vi.fn() });
-    q("p").dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    mountSession();
+    document.body.innerHTML += "<p id='p'>Body</p>";
+    act(() =>
+      q("p").dispatchEvent(new MouseEvent("mousemove", { bubbles: true })),
+    );
     const overlay = document.getElementById(OVERLAY_ID);
     expect(overlay).toBeTruthy();
     expect(overlay?.style.pointerEvents).toBe("none");
-    session.stop();
   });
 
-  it("stop() tears down the session + overlay and is idempotent", () => {
-    document.body.innerHTML = "<p id='p'>Body</p>";
-    const session = startPick({ onPicked: vi.fn() });
-    q("p").dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+  it("unmount tears down the listeners + overlay", () => {
+    const { unmount } = mountSession();
+    document.body.innerHTML += "<p id='p'>Body</p>";
+    act(() =>
+      q("p").dispatchEvent(new MouseEvent("mousemove", { bubbles: true })),
+    );
     expect(document.getElementById(OVERLAY_ID)).toBeTruthy();
-    session.stop();
-    expect(session.active).toBe(false);
+    unmount();
     expect(document.getElementById(OVERLAY_ID)).toBeNull();
-    // Idempotent: a second stop is a no-op.
-    session.stop();
-    expect(session.active).toBe(false);
+    // A later click no longer records a pick.
+    applyWhenReady.mockClear();
+    clickEl(q("p"));
+    expect(applyWhenReady).not.toHaveBeenCalled();
   });
 });

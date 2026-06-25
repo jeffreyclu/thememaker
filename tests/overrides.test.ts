@@ -17,23 +17,25 @@
  *   - the sentinel tag `page` → `html, body`.
  * The layer is cleared on reset (`removeSchemeStyle` drops it).
  *
- * This file also covers the picker's PURE per-tag model
- * (`picker-panel-model.ts`): row derivation, label formatting (incl. the `page`
- * sentinel), and the immutable add/edit/remove transitions.
+ * This file also covers the picker's PURE per-tag pieces now living in the React
+ * app: row derivation + label formatting (`app/override-rows.ts`, incl. the
+ * `page` sentinel) and the immutable add/edit/remove transitions (the
+ * `overridesReducer` + `mergeColor` in `app/PickerProvider.tsx`).
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Engine } from "../src/lib/engine";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
+import { FALLBACK_COLOR } from "../src/lib/override-keys";
 import {
-  FALLBACK_COLOR,
   overrideRows,
   roleLabel,
-  withPickedRole,
-  withRoleColor,
-  withoutRole,
-} from "../src/content/picker/picker-panel-model";
+} from "../src/content/picker/app/override-rows";
+import {
+  mergeColor,
+  overridesReducer,
+} from "../src/content/picker/app/PickerProvider";
 
 const OVERRIDES_ID = "themeMakerOverrides";
 const palette = generatePalette("#3a7bd5", "triad");
@@ -174,7 +176,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
   });
 });
 
-describe("picker-panel-model — per-tag rows", () => {
+describe("override-rows — per-tag rows", () => {
   it("roleLabel formats `<tag>|<prop>` (text vs background) and the page sentinel", () => {
     expect(roleLabel("div|background")).toBe("div · background");
     expect(roleLabel("h3|color")).toBe("h3 · text");
@@ -202,44 +204,69 @@ describe("picker-panel-model — per-tag rows", () => {
   });
 });
 
-describe("picker-panel-model — immutable transitions", () => {
-  it("withPickedRole seeds a NEW key with the element's current color", () => {
+describe("overridesReducer / mergeColor — immutable transitions", () => {
+  it("pick seeds a NEW key with the element's current color", () => {
     const base = {};
-    const next = withPickedRole(base, "div|background", "#ABCDEF");
+    const next = overridesReducer(base, {
+      type: "pick",
+      key: "div|background",
+      currentColor: "#ABCDEF",
+    });
     expect(next).toStrictEqual({ "div|background": "#abcdef" });
     // pure — the input is untouched.
     expect(base).toStrictEqual({});
     expect(next).not.toBe(base);
   });
 
-  it("withPickedRole keeps an existing key's value (re-pick is a no-op)", () => {
+  it("pick keeps an existing key's value (re-pick is a no-op)", () => {
     const base = { "div|background": "#111111" };
-    const next = withPickedRole(base, "div|background", "#999999");
+    const next = overridesReducer(base, {
+      type: "pick",
+      key: "div|background",
+      currentColor: "#999999",
+    });
     // Same reference (nothing changed) and the original value is preserved.
     expect(next).toBe(base);
     expect(next["div|background"]).toBe("#111111");
   });
 
-  it("withPickedRole seeds the FALLBACK color when the current color is invalid", () => {
-    const next = withPickedRole({}, "div|background", "nope");
+  it("pick seeds the FALLBACK color when the current color is invalid", () => {
+    const next = overridesReducer(
+      {},
+      { type: "pick", key: "div|background", currentColor: "nope" },
+    );
     expect(next["div|background"]).toBe(FALLBACK_COLOR);
   });
 
-  it("withRoleColor sets an explicit (normalized) color; ignores invalid hex", () => {
+  it("mergeColor sets an explicit (normalized) color; ignores invalid hex", () => {
     const base = { "div|background": "#111111" };
-    expect(withRoleColor(base, "div|background", "#ABC")).toStrictEqual({
+    expect(mergeColor(base, "div|background", "#ABC")).toStrictEqual({
       "div|background": "#aabbcc",
     });
     // Invalid hex → unchanged reference.
-    expect(withRoleColor(base, "div|background", "not-a-color")).toBe(base);
+    expect(mergeColor(base, "div|background", "not-a-color")).toBe(base);
   });
 
-  it("withoutRole removes a key immutably; missing key is a no-op", () => {
+  it("clearRole removes a key immutably; missing key is a no-op", () => {
     const base = { "div|background": "#111111", "h3|color": "#222222" };
-    const next = withoutRole(base, "div|background");
+    const next = overridesReducer(base, {
+      type: "clearRole",
+      key: "div|background",
+    });
     expect(next).toStrictEqual({ "h3|color": "#222222" });
     expect(base).toHaveProperty("div|background"); // input untouched
     // Removing an absent key returns the same reference.
-    expect(withoutRole(base, "nope|background")).toBe(base);
+    expect(
+      overridesReducer(base, { type: "clearRole", key: "nope|background" }),
+    ).toBe(base);
+  });
+
+  it("clearAll empties the map; reseed replaces it wholesale", () => {
+    const base = { "div|background": "#111111" };
+    expect(overridesReducer(base, { type: "clearAll" })).toStrictEqual({});
+    const seed = { "p|color": "#222222" };
+    expect(overridesReducer(base, { type: "reseed", overrides: seed })).toBe(
+      seed,
+    );
   });
 });
