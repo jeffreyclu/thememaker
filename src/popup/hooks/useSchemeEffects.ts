@@ -12,6 +12,8 @@
  * after dispatching it pass an explicit `LiveScheme` SNAPSHOT, since reading
  * `getState()` after `dispatch` would still see the pre-dispatch scheme.
  */
+import { useMemo } from "react";
+
 import { applyPayloadForScheme, schemeWithIntensity } from "../../lib/scheme";
 import { siteStateReducer } from "../../lib/storage/site-state";
 import { sendToContent, sendToContentWithReply } from "../../lib/messaging";
@@ -50,7 +52,7 @@ export interface SchemeEffects {
 }
 
 /** Builds the shared effect primitives over the scheme store + popup actions. */
-export const createSchemeEffects = (
+const createSchemeEffects = (
   store: SchemeStore,
   popup: PopupActions,
 ): SchemeEffects => {
@@ -145,3 +147,13 @@ export const createSchemeEffects = (
     commitCurrent,
   };
 };
+
+/**
+ * The shared scheme effects, memoized over the store + popup so the focused
+ * action hooks compose them as stable, built-once primitives.
+ */
+export const useSchemeEffects = (
+  store: SchemeStore,
+  popup: PopupActions,
+): SchemeEffects =>
+  useMemo(() => createSchemeEffects(store, popup), [store, popup]);

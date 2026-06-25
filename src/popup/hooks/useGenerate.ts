@@ -9,7 +9,7 @@
 import { useMemo } from "react";
 
 import { generateForSelection } from "../../lib/scheme";
-import { createSchemeEffects } from "./scheme-effects";
+import { useSchemeEffects } from "./useSchemeEffects";
 import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { usePersist } from "./usePersist";
@@ -25,12 +25,13 @@ export interface GenerateActions {
 export const useGenerate = (): GenerateActions => {
   const store = useSchemeStore();
   const popup = usePopup();
+  const effects = useSchemeEffects(store, popup);
   const { getState, dispatch } = store;
   // Generate persists the fresh look through the per-site persistence hook.
   const { persist } = usePersist();
 
   return useMemo<GenerateActions>(() => {
-    const { send } = createSchemeEffects(store, popup);
+    const { send } = effects;
     // Session-scoped in-memory palette cache for the API source, reused across
     // Generate clicks so repeated seed+mode lookups skip network + persistent store.
     const paletteMemoryCache = new Map<string, Palette>();
@@ -76,5 +77,5 @@ export const useGenerate = (): GenerateActions => {
       },
     };
     // `store`/`popup`/`persist` are stable → build the actions once.
-  }, [store, popup, persist]);
+  }, [store, popup, persist, effects]);
 };

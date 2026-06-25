@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 
 import { applyPayloadForScheme, invertScheme } from "../../lib/scheme";
-import { createSchemeEffects } from "./scheme-effects";
+import { useSchemeEffects } from "./useSchemeEffects";
 import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { storage } from "../../lib/storage";
@@ -28,6 +28,7 @@ export interface ApplyActions {
 export const useApplyScheme = (): ApplyActions => {
   const store = useSchemeStore();
   const popup = usePopup();
+  const effects = useSchemeEffects(store, popup);
   const { getState, dispatch, activeTabId } = store;
 
   return useMemo<ApplyActions>(() => {
@@ -37,7 +38,7 @@ export const useApplyScheme = (): ApplyActions => {
       applyCurrentScheme,
       persistTheme,
       commitCurrent,
-    } = createSchemeEffects(store, popup);
+    } = effects;
 
     // Debounced commit of the intensity slider: persists the new value and, when
     // a theme is applied, LIVE re-applies the same palette at the new intensity.
@@ -129,5 +130,5 @@ export const useApplyScheme = (): ApplyActions => {
       },
     };
     // `store`/`popup` are stable for the popup's life → build the actions once.
-  }, [store, popup]);
+  }, [store, popup, effects]);
 };

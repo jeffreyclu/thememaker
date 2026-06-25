@@ -9,7 +9,7 @@
  */
 import { useMemo } from "react";
 
-import { createSchemeEffects } from "./scheme-effects";
+import { useSchemeEffects } from "./useSchemeEffects";
 import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { dequeueScheme } from "../../lib/storage/history";
@@ -21,10 +21,11 @@ export interface HistoryActions {
 export const useHistory = (): HistoryActions => {
   const store = useSchemeStore();
   const popup = usePopup();
+  const effects = useSchemeEffects(store, popup);
   const { getState, dispatch } = store;
 
   return useMemo<HistoryActions>(() => {
-    const { commitCurrent } = createSchemeEffects(store, popup);
+    const { commitCurrent } = effects;
 
     return {
       onSelectHistory: async (index: number): Promise<void> => {
@@ -41,5 +42,5 @@ export const useHistory = (): HistoryActions => {
       },
     };
     // `store`/`popup` are stable for the popup's life → build the actions once.
-  }, [store, popup]);
+  }, [store, popup, effects]);
 };
