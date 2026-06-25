@@ -12,40 +12,24 @@
  * bare `html`/`body` rule for the page base) and persists it on the scheme.
  */
 import { isHexColor, normalizeHex } from "../lib/color";
+import {
+  FALLBACK_COLOR,
+  labelForOverrideKey,
+  overrideRows as overrideRowsBase,
+  type OverrideRow,
+} from "../lib/override-grammar";
 import type { RoleOverrides } from "../types";
 
-/** Neutral fallback when a picked element's current color can't be parsed. */
-export const FALLBACK_COLOR = "#808080";
+export { FALLBACK_COLOR };
+export type { OverrideRow };
 
 /** A human label for a `<tag>|<prop>` override key, e.g. "div · background". */
-export const roleLabel = (key: string): string => {
-  const bar = key.indexOf("|");
-  if (bar < 0) {
-    return key;
-  }
-  const tag = key.slice(0, bar);
-  const prop = key.slice(bar + 1);
-  if (tag === "page") {
-    return "Page · background";
-  }
-  return `${tag} · ${prop === "background" ? "background" : "text"}`;
-};
-
-/** A single override row the panel renders: the key, its label, current color. */
-export interface OverrideRow {
-  /** The `<tag>|<prop>` override key (named `role` for the panel's data attrs). */
-  role: string;
-  label: string;
-  color: string;
-}
+export const roleLabel = (key: string): string =>
+  labelForOverrideKey(key, { pageLabel: "Page · background" });
 
 /** Rows to render, one per active override, in insertion order. */
 export const overrideRows = (overrides: RoleOverrides): OverrideRow[] =>
-  Object.entries(overrides).map(([role, color]) => ({
-    role,
-    label: roleLabel(role),
-    color: isHexColor(color) ? normalizeHex(color) : FALLBACK_COLOR,
-  }));
+  overrideRowsBase(overrides, roleLabel, true);
 
 /**
  * Records a pick: ensures `key` (`<tag>|<prop>`) has an override, SEEDING it with

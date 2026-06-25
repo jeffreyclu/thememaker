@@ -1,0 +1,58 @@
+/**
+ * Pure SELECTORS over `PopupState` — the view-model reads the popup state turns
+ * into for rendering (override rows/labels, the seed-metadata accessor, the
+ * base-color seed for a role). Split out of `state.ts` so the reducer/model file
+ * stays focused on transitions; these are read-only derivations.
+ */
+import {
+  labelForOverrideKey,
+  overrideRows as overrideRowsBase,
+} from "../lib/override-grammar";
+import type { PopupState } from "./state";
+import type { SchemeDetails } from "../types";
+
+/** @returns the seed metadata for the current scheme, if any. */
+export const currentSchemeDetails = (state: PopupState): SchemeDetails | null =>
+  state.current?.schemeDetails ?? null;
+
+/** A human label for an override row's role key (e.g. `textPrimary` → "Body text"). */
+const OVERRIDE_ROLE_LABELS: Record<string, string> = {
+  bg: "Page background",
+  surface: "Card surface",
+  surfaceAlt: "Code surface",
+  textPrimary: "Body text",
+  textSecondary: "Muted text",
+  heading: "Headings",
+  link: "Links",
+  primary: "Primary button",
+  secondary: "Secondary button",
+  border: "Borders",
+  accent: "Accents",
+};
+
+export const overrideRoleLabel = (role: string): string =>
+  labelForOverrideKey(role, {
+    roleLabels: OVERRIDE_ROLE_LABELS,
+    pageLabel: "Page background",
+  });
+
+/**
+ * The base (generated) color for an override-key from the current scheme's
+ * palette, used to SEED a color input when the user hasn't overridden it yet.
+ * Falls back to a neutral gray when the scheme/palette is absent.
+ */
+export const baseColorForRole = (state: PopupState, role: string): string => {
+  const roles = state.current?.schemeDetails?.palette?.roles as
+    | Record<string, string>
+    | undefined;
+  return roles?.[role] ?? "#808080";
+};
+
+/**
+ * The override rows to render in the customize panel: each currently-overridden
+ * role with its picked color, in insertion order.
+ */
+export const overrideRows = (
+  state: PopupState,
+): Array<{ role: string; color: string; label: string }> =>
+  overrideRowsBase(state.overrides, overrideRoleLabel);
