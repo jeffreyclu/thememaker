@@ -6,9 +6,11 @@
 import { memo } from "react";
 
 import { Swatch } from "./Swatch";
-import { usePopupActions, usePopupState } from "../hooks/usePopupContext";
-import { overrideRows } from "../state/state-selectors";
-import { schemeDetailRows } from "../state/scheme-view-model";
+import { Disclosure } from "./Disclosure";
+import { useSchemeState } from "../SchemeProvider";
+import { usePopupState } from "../PopupProvider";
+import { usePopup } from "../hooks/usePopup";
+import { overrideRows, schemeDetailRows } from "../../lib/scheme";
 import { describeColor } from "../../lib/color/color-names";
 
 /** A details panel row: swatch + a text label + the hex read-out. */
@@ -29,46 +31,42 @@ const DetailRow = memo(function DetailRow({
 });
 
 export const Details = memo(function Details() {
-  const state = usePopupState();
-  const { onToggleDetails } = usePopupActions();
-  const { current, showDetails: expanded } = state;
-  const overrides = overrideRows(state);
+  const state = useSchemeState();
+  const { showDetails } = usePopupState();
+  const { onToggleDetails } = usePopup();
+  const { current } = state;
+  const overrides = overrideRows(state.overrides);
 
   const seed = current
     ? `${current.schemeDetails.rootColorName ?? describeColor(current.schemeDetails.rootColor)} (${current.schemeDetails.colorMode})`
     : "";
 
   return (
-    <section className="popup__section">
-      <button
-        id="details-toggle"
-        className="disclosure"
-        type="button"
-        aria-expanded={expanded}
-        aria-controls="details"
-        disabled={!current}
-        onClick={onToggleDetails}
-      >
-        Details
-      </button>
-      <div id="details" className="details" hidden={!expanded}>
-        {current && (
-          <>
-            <p className="details__seed">{seed}</p>
-            {schemeDetailRows(current).map(({ tags, color }) => (
-              <DetailRow key={`${tags}-${color}`} text={tags} color={color} />
-            ))}
-            {overrides.length > 0 && (
-              <>
-                <p className="details__seed">Custom overrides</p>
-                {overrides.map(({ role, color, label }) => (
-                  <DetailRow key={role} text={label} color={color} />
-                ))}
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </section>
+    <Disclosure
+      label="Details"
+      id="details"
+      expanded={showDetails}
+      onToggle={onToggleDetails}
+      disabled={!current}
+      panelId="details"
+      panelClassName="details"
+    >
+      {current && (
+        <>
+          <p className="details__seed">{seed}</p>
+          {schemeDetailRows(current).map(({ tags, color }) => (
+            <DetailRow key={`${tags}-${color}`} text={tags} color={color} />
+          ))}
+          {overrides.length > 0 && (
+            <>
+              <p className="details__seed">Custom overrides</p>
+              {overrides.map(({ role, color, label }) => (
+                <DetailRow key={role} text={label} color={color} />
+              ))}
+            </>
+          )}
+        </>
+      )}
+    </Disclosure>
   );
 });

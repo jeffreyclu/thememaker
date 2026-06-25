@@ -6,8 +6,12 @@
  */
 import { memo } from "react";
 
-import { usePopupActions, usePopupState } from "../hooks/usePopupContext";
-import { isCurrentSaved } from "../state/state-selectors";
+import { useSchemeState } from "../SchemeProvider";
+import { useGenerate } from "../hooks/useGenerate";
+import { useApplyScheme } from "../hooks/useApplyScheme";
+import { useFavorites } from "../hooks/useFavorites";
+import { usePopupState } from "../PopupProvider";
+import { isCurrentSaved } from "../../lib/scheme";
 
 interface ButtonSpec {
   id: string;
@@ -38,8 +42,11 @@ const ActionButton = memo(function ActionButton({
 });
 
 export const Actions = memo(function Actions() {
-  const state = usePopupState();
-  const actions = usePopupActions();
+  const state = useSchemeState();
+  const { loading } = usePopupState();
+  const { onGenerate } = useGenerate();
+  const { onReset, onPickElement } = useApplyScheme();
+  const { onSaveFavorite } = useFavorites();
 
   // Save: no scheme, or the current scheme (at this intensity + overrides) is
   // already a favorite (no dupes; re-enables once something changes).
@@ -50,16 +57,16 @@ export const Actions = memo(function Actions() {
     {
       id: "generate",
       className: "btn btn--primary",
-      label: state.loading ? "Generating…" : "Generate",
-      disabled: state.loading,
-      onClick: actions.onGenerate,
+      label: loading ? "Generating…" : "Generate",
+      disabled: loading,
+      onClick: onGenerate,
     },
     {
       id: "favorite-save",
       className: "btn",
       label: "Save",
       disabled: saveDisabled,
-      onClick: actions.onSaveFavorite,
+      onClick: onSaveFavorite,
     },
     {
       id: "reset",
@@ -67,7 +74,7 @@ export const Actions = memo(function Actions() {
       label: "Reset",
       // Reset is available whenever there's something on the page or in the popup.
       disabled: !state.applied && !state.current,
-      onClick: actions.onReset,
+      onClick: onReset,
     },
   ];
 
@@ -85,7 +92,7 @@ export const Actions = memo(function Actions() {
           label="Customize…"
           // Customize layers overrides on the live theme (current OR applied).
           disabled={!(Boolean(state.current) || state.applied)}
-          onClick={actions.onPickElement}
+          onClick={onPickElement}
         />
       </div>
     </>

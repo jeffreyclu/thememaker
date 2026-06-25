@@ -1,14 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  schemeInitialState,
+  schemeReducer,
+  type SchemeState,
+} from "../src/popup/scheme-reducer";
+import {
   currentSchemeDetails,
   defaultFavoriteName,
   historyLabel,
-  initialPopupState,
-  popupReducer,
   schemeDetailRows,
+} from "../src/lib/scheme";
+import {
+  popupInitialState,
+  popupReducer,
   type PopupState,
-} from "../src/popup/state";
+} from "../src/popup/popup-reducer";
 import {
   applyPayloadForScheme,
   generateForSelection,
@@ -16,7 +23,7 @@ import {
   resolveMode,
   resolveSeed,
   schemeFromPalette,
-} from "../src/popup/schemes";
+} from "../src/lib/scheme";
 import { modes } from "../src/config";
 import { clampIntensity, DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";
 import { mockPalette, mockScheme, mockScheme2 } from "./mocks";
@@ -40,9 +47,9 @@ describe("clampIntensity (continuous 10–100; 0 never selectable)", () => {
   });
 });
 
-describe("popupReducer", () => {
+describe("schemeReducer", () => {
   it("hydrate merges a partial state", () => {
-    const next = popupReducer(initialPopupState, {
+    const next = schemeReducer(schemeInitialState, {
       type: "hydrate",
       partial: { mode: "triad", origin: "https://x.com", siteEnabled: true },
     });
@@ -52,100 +59,75 @@ describe("popupReducer", () => {
   });
 
   it("selectMode updates the mode", () => {
-    const next = popupReducer(initialPopupState, {
+    const next = schemeReducer(schemeInitialState, {
       type: "selectMode",
       mode: "complement",
     });
     expect(next.mode).toBe("complement");
   });
 
-  it("generateStart sets loading and clears error", () => {
-    const errored: PopupState = { ...initialPopupState, error: "x" };
-    const next = popupReducer(errored, { type: "generateStart" });
-    expect(next.loading).toBe(true);
-    expect(next.error).toBeNull();
-  });
-
   it("generateSuccess sets current, history, applied", () => {
-    const next = popupReducer(
-      { ...initialPopupState, loading: true },
-      { type: "generateSuccess", scheme: mockScheme, history: [mockScheme] },
-    );
-    expect(next.loading).toBe(false);
+    const next = schemeReducer(schemeInitialState, {
+      type: "generateSuccess",
+      scheme: mockScheme,
+      history: [mockScheme],
+    });
     expect(next.current).toStrictEqual(mockScheme);
     expect(next.history).toStrictEqual([mockScheme]);
     expect(next.applied).toBe(true);
-  });
-
-  it("generateError records the error and stops loading", () => {
-    const next = popupReducer(
-      { ...initialPopupState, loading: true },
-      { type: "generateError", error: "offline" },
-    );
-    expect(next.loading).toBe(false);
-    expect(next.error).toBe("offline");
+    // A fresh palette starts from a clean custom theme.
+    expect(next.overrides).toStrictEqual({});
   });
 
   it("selectHistory picks a scheme by index and marks applied", () => {
-    const state: PopupState = {
-      ...initialPopupState,
+    const state: SchemeState = {
+      ...schemeInitialState,
       history: [mockScheme, mockScheme2],
     };
-    const next = popupReducer(state, { type: "selectHistory", index: 1 });
+    const next = schemeReducer(state, { type: "selectHistory", index: 1 });
     expect(next.current).toStrictEqual(mockScheme2);
     expect(next.applied).toBe(true);
   });
 
   it("selectHistory out of range is a no-op", () => {
-    const state: PopupState = {
-      ...initialPopupState,
+    const state: SchemeState = {
+      ...schemeInitialState,
       history: [mockScheme],
     };
-    const next = popupReducer(state, { type: "selectHistory", index: 9 });
+    const next = schemeReducer(state, { type: "selectHistory", index: 9 });
     expect(next).toBe(state);
   });
 
   it("reset clears current, applied, and siteEnabled", () => {
-    const state: PopupState = {
-      ...initialPopupState,
+    const state: SchemeState = {
+      ...schemeInitialState,
       current: mockScheme,
       applied: true,
       siteEnabled: true,
     };
-    const next = popupReducer(state, { type: "reset" });
+    const next = schemeReducer(state, { type: "reset" });
     expect(next.current).toBeNull();
     expect(next.applied).toBe(false);
     expect(next.siteEnabled).toBe(false);
   });
 
-  it("toggleDetails flips its flag; setSiteEnabled sets siteEnabled", () => {
+  it("setSiteEnabled sets siteEnabled", () => {
     expect(
-      popupReducer(initialPopupState, { type: "toggleDetails" }).showDetails,
+      schemeReducer(schemeInitialState, {
+        type: "setSiteEnabled",
+        enabled: true,
+      }).siteEnabled,
     ).toBe(true);
     expect(
-      popupReducer(initialPopupState, { type: "setSiteEnabled", enabled: true })
-        .siteEnabled,
-    ).toBe(true);
-    expect(
-      popupReducer(
-        { ...initialPopupState, siteEnabled: true },
+      schemeReducer(
+        { ...schemeInitialState, siteEnabled: true },
         { type: "setSiteEnabled", enabled: false },
       ).siteEnabled,
     ).toBe(false);
   });
 
-  it("toggleFavorites and toggleHistory flip their disclosure flags", () => {
-    expect(
-      popupReducer(initialPopupState, { type: "toggleFavorites" })
-        .showFavorites,
-    ).toBe(true);
-    expect(
-      popupReducer(initialPopupState, { type: "toggleHistory" }).showHistory,
-    ).toBe(true);
-  });
-
   it("selectIntensity sets the numeric intensity", () => {
-    const next = popupReducer(initialPopupState, {
+    const next = schemeReducer(schemeInitialState, {
       type: "selectIntensity",
       intensity: 80,
     });
@@ -154,51 +136,31 @@ describe("popupReducer", () => {
 
   it("toggleInvert flips the invert flag (and back)", () => {
     // initial is invert: false
-    const on = popupReducer(initialPopupState, { type: "toggleInvert" });
+    const on = schemeReducer(schemeInitialState, { type: "toggleInvert" });
     expect(on.invert).toBe(true);
-    expect(popupReducer(on, { type: "toggleInvert" }).invert).toBe(false);
+    expect(schemeReducer(on, { type: "toggleInvert" }).invert).toBe(false);
   });
 
   it("setFavorites replaces the favorites list", () => {
     const favorites = [{ id: "a", name: "A", scheme: mockScheme }];
-    const next = popupReducer(initialPopupState, {
+    const next = schemeReducer(schemeInitialState, {
       type: "setFavorites",
       favorites,
     });
     expect(next.favorites).toStrictEqual(favorites);
   });
 
-  it("favoriteSaved sets favorites, opens the panel, and flags the saved id", () => {
-    const favorites = [{ id: "fav-1", name: "A", scheme: mockScheme }];
-    const next = popupReducer(initialPopupState, {
-      type: "favoriteSaved",
-      favorites,
-      id: "fav-1",
-    });
-    expect(next.favorites).toStrictEqual(favorites);
-    expect(next.showFavorites).toBe(true);
-    expect(next.savedFavoriteId).toBe("fav-1");
-  });
-
-  it("clearSaveFeedback clears the saved-favorite flag", () => {
-    const flagged: PopupState = { ...initialPopupState, savedFavoriteId: "x" };
-    expect(
-      popupReducer(flagged, { type: "clearSaveFeedback" }).savedFavoriteId,
-    ).toBeNull();
-  });
-
   it("applyFavorite sets current + applied without touching history", () => {
-    const state: PopupState = {
-      ...initialPopupState,
+    const state: SchemeState = {
+      ...schemeInitialState,
       history: [mockScheme2],
     };
-    const next = popupReducer(state, {
+    const next = schemeReducer(state, {
       type: "applyFavorite",
       scheme: mockScheme,
     });
     expect(next.current).toStrictEqual(mockScheme);
     expect(next.applied).toBe(true);
-    expect(next.error).toBeNull();
     // history is untouched (favorites don't push history)
     expect(next.history).toStrictEqual([mockScheme2]);
   });
@@ -208,17 +170,86 @@ describe("popupReducer", () => {
       ...mockScheme,
       schemeDetails: { ...mockScheme.schemeDetails, intensity: 35 },
     };
-    const next = popupReducer(
-      { ...initialPopupState, intensity: 90 },
+    const next = schemeReducer(
+      { ...schemeInitialState, intensity: 90 },
       { type: "applyFavorite", scheme: fav },
     );
     expect(next.intensity).toBe(35);
   });
 
   it("does not mutate the input state", () => {
-    const before = { ...initialPopupState };
-    popupReducer(initialPopupState, { type: "selectMode", mode: "triad" });
-    expect(initialPopupState).toStrictEqual(before);
+    const before = { ...schemeInitialState };
+    schemeReducer(schemeInitialState, { type: "selectMode", mode: "triad" });
+    expect(schemeInitialState).toStrictEqual(before);
+  });
+});
+
+describe("popupReducer (view state)", () => {
+  it("setLoading sets loading and clears any stale error", () => {
+    const errored: PopupState = { ...popupInitialState, error: "x" };
+    const next = popupReducer(errored, { type: "setLoading", loading: true });
+    expect(next.loading).toBe(true);
+    expect(next.error).toBeNull();
+  });
+
+  it("setLoading(false) stops loading without re-deriving error", () => {
+    const next = popupReducer(
+      { ...popupInitialState, loading: true },
+      { type: "setLoading", loading: false },
+    );
+    expect(next.loading).toBe(false);
+    expect(next.error).toBeNull();
+  });
+
+  it("setError records the error and stops loading", () => {
+    const next = popupReducer(
+      { ...popupInitialState, loading: true },
+      { type: "setError", error: "offline" },
+    );
+    expect(next.loading).toBe(false);
+    expect(next.error).toBe("offline");
+  });
+
+  it("toggleDetails flips its disclosure flag", () => {
+    expect(
+      popupReducer(popupInitialState, { type: "toggleDetails" }).showDetails,
+    ).toBe(true);
+  });
+
+  it("toggleFavorites and toggleHistory flip their disclosure flags", () => {
+    expect(
+      popupReducer(popupInitialState, { type: "toggleFavorites" })
+        .showFavorites,
+    ).toBe(true);
+    expect(
+      popupReducer(popupInitialState, { type: "toggleHistory" }).showHistory,
+    ).toBe(true);
+  });
+
+  it("setSavedFavoriteId opens the panel and flags the saved id", () => {
+    const next = popupReducer(popupInitialState, {
+      type: "setSavedFavoriteId",
+      id: "fav-1",
+    });
+    expect(next.showFavorites).toBe(true);
+    expect(next.savedFavoriteId).toBe("fav-1");
+  });
+
+  it("clearSaveFeedback clears the saved-favorite flag", () => {
+    const flagged: PopupState = {
+      ...popupInitialState,
+      savedFavoriteId: "x",
+    };
+    expect(
+      popupReducer(flagged, { type: "clearSaveFeedback" }).savedFavoriteId,
+    ).toBeNull();
+  });
+
+  it("setPicking toggles pick mode", () => {
+    expect(
+      popupReducer(popupInitialState, { type: "setPicking", picking: true })
+        .picking,
+    ).toBe(true);
   });
 });
 
@@ -239,10 +270,10 @@ describe("popup selectors / helpers", () => {
   });
 
   it("currentSchemeDetails returns details or null", () => {
-    expect(currentSchemeDetails(initialPopupState)).toBeNull();
-    expect(
-      currentSchemeDetails({ ...initialPopupState, current: mockScheme }),
-    ).toStrictEqual(mockScheme.schemeDetails);
+    expect(currentSchemeDetails(null)).toBeNull();
+    expect(currentSchemeDetails(mockScheme)).toStrictEqual(
+      mockScheme.schemeDetails,
+    );
   });
 
   it("defaultFavoriteName uses the color name + mode", () => {

@@ -4,7 +4,7 @@
  */
 import { memo } from "react";
 
-import { usePopupState } from "../hooks/usePopupContext";
+import { usePopupState } from "../PopupProvider";
 
 export const Status = memo(function Status() {
   const { error } = usePopupState();

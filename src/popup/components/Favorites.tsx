@@ -7,8 +7,12 @@
 import { memo } from "react";
 
 import { ApplyButton } from "./ApplyButton";
-import { usePopupActions, usePopupState } from "../hooks/usePopupContext";
-import { schemeSwatches } from "../state/scheme-view-model";
+import { Disclosure } from "./Disclosure";
+import { useSchemeState } from "../SchemeProvider";
+import { useFavorites } from "../hooks/useFavorites";
+import { usePopupState } from "../PopupProvider";
+import { usePopup } from "../hooks/usePopup";
+import { schemeSwatches } from "../../lib/scheme";
 import type { Favorite } from "../../lib/storage";
 
 const FavoriteRow = memo(function FavoriteRow({
@@ -49,47 +53,33 @@ const FavoriteRow = memo(function FavoriteRow({
 });
 
 export const Favorites = memo(function Favorites() {
-  const {
-    favorites,
-    showFavorites: expanded,
-    savedFavoriteId,
-  } = usePopupState();
-  const {
-    onToggleFavorites: onToggle,
-    onSelectFavorite: onApply,
-    onDeleteFavorite: onDelete,
-  } = usePopupActions();
+  const { favorites } = useSchemeState();
+  const { showFavorites, savedFavoriteId } = usePopupState();
+  const { onToggleFavorites } = usePopup();
+  const { onSelectFavorite: onApply, onDeleteFavorite: onDelete } =
+    useFavorites();
   return (
-    <section className="popup__section">
-      <button
-        id="favorites-toggle"
-        className="disclosure"
-        type="button"
-        aria-expanded={expanded}
-        aria-controls="favorites-panel"
-        onClick={onToggle}
-      >
-        Favorites
-      </button>
-      <div id="favorites-panel" className="disclosure-panel" hidden={!expanded}>
-        <ul id="favorites" className="favorites" aria-label="Saved favorites">
-          {favorites.length === 0 ? (
-            <li className="favorites__empty">
-              No favorites yet. Save a scheme.
-            </li>
-          ) : (
-            favorites.map((fav) => (
-              <FavoriteRow
-                key={fav.id}
-                favorite={fav}
-                saved={fav.id === savedFavoriteId}
-                onApply={onApply}
-                onDelete={onDelete}
-              />
-            ))
-          )}
-        </ul>
-      </div>
-    </section>
+    <Disclosure
+      label="Favorites"
+      id="favorites"
+      expanded={showFavorites}
+      onToggle={onToggleFavorites}
+    >
+      <ul id="favorites" className="favorites" aria-label="Saved favorites">
+        {favorites.length === 0 ? (
+          <li className="favorites__empty">No favorites yet. Save a scheme.</li>
+        ) : (
+          favorites.map((fav) => (
+            <FavoriteRow
+              key={fav.id}
+              favorite={fav}
+              saved={fav.id === savedFavoriteId}
+              onApply={onApply}
+              onDelete={onDelete}
+            />
+          ))
+        )}
+      </ul>
+    </Disclosure>
   );
 });

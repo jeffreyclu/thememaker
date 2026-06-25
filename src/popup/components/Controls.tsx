@@ -6,14 +6,17 @@
  */
 import { memo } from "react";
 
-import { usePopupActions, usePopupState } from "../hooks/usePopupContext";
+import { useSchemeState } from "../SchemeProvider";
+import { useGenerate } from "../hooks/useGenerate";
+import { useApplyScheme } from "../hooks/useApplyScheme";
 import { ModeSelect } from "./ModeSelect";
 import { IntensitySlider } from "./IntensitySlider";
 import { InvertToggle } from "./InvertToggle";
 
 export const Controls = memo(function Controls() {
-  const { mode, intensity, invert } = usePopupState();
-  const { onSelectMode, onSelectIntensity, onToggleInvert } = usePopupActions();
+  const { mode, intensity, invert } = useSchemeState();
+  const { onSelectMode } = useGenerate();
+  const { onSelectIntensity, onToggleInvert } = useApplyScheme();
   return (
     <>
       <ModeSelect value={mode} onChange={onSelectMode} />
