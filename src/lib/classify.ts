@@ -2,7 +2,7 @@
  * Shared element classifiers for the theming engine + element picker.
  *
  * These are the small, framework-agnostic DOM predicates both the picker
- * (`content/pick-resolve.ts`) and the in-page engine consume, so "is this
+ * and the in-page engine consume, so "is this
  * button-like?" has one definition instead of a copy in each consumer. They read
  * only an `Element`'s tag/attributes — no `chrome.*`, no computed styles.
  */

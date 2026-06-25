@@ -2,7 +2,7 @@
  * Resolves a generated `Palette` + `ApplyOptions` into the concrete resolved role
  * colors the engine paints from.
  *
- * The palette's `roles` are derived in `palette.ts`; here we:
+ * The palette's `roles` are derived upstream; here we:
  *  - layer the user's role-keyed `overrides` on top (invalid keys / non-hex
  *    values are ignored; each lands through the engine's AA floor downstream);
  *  - fill safe fallbacks so a palette with no `roles` still themes;

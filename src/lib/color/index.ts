@@ -4,7 +4,7 @@
  *
  * Nothing here touches the DOM or `chrome.*`; it is fully unit-testable. The
  * single source of truth for color math across the extension: both the
- * popup/palette path (`palette.ts`, `color-source.ts`) and the in-page adaptive
+ * popup/palette path and the in-page adaptive
  * engine import this core (the engine's tolerant runtime layer,
  * `color-runtime.ts`, wraps it for parsing computed `rgb()`/`rgba()` values).
  */

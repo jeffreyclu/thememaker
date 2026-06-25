@@ -115,20 +115,42 @@ export class Storage {
    * `globalThis.chrome` each `beforeEach`) take effect.
    */
   private static chromeArea(name: "local" | "sync"): StorageArea {
+    // Each call swallows `chrome.runtime.lastError` and resolves (never rejects),
+    // so a torn-down extension context (e.g. an in-page read at document_start)
+    // is a no-op rather than an unhandled rejection.
     return {
       get: <T>(key: string) =>
         new Promise<T | undefined>((done) => {
-          chrome.storage[name].get(key, (items) =>
-            done(items[key] as T | undefined),
-          );
+          try {
+            chrome.storage[name].get(key, (items) => {
+              void chrome.runtime.lastError;
+              done(items?.[key] as T | undefined);
+            });
+          } catch {
+            done(undefined);
+          }
         }),
       set: <T>(key: string, value: T) =>
         new Promise<void>((done) => {
-          chrome.storage[name].set({ [key]: value }, () => done());
+          try {
+            chrome.storage[name].set({ [key]: value }, () => {
+              void chrome.runtime.lastError;
+              done();
+            });
+          } catch {
+            done();
+          }
         }),
       remove: (key: string) =>
         new Promise<void>((done) => {
-          chrome.storage[name].remove(key, () => done());
+          try {
+            chrome.storage[name].remove(key, () => {
+              void chrome.runtime.lastError;
+              done();
+            });
+          } catch {
+            done();
+          }
         }),
     };
   }

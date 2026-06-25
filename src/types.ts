@@ -58,8 +58,7 @@ export const clampIntensity = (n: number): Intensity =>
  * `div|background`, `p|color`, or the special `page|background`. The part before
  * `|` is a lowercase HTML tag name (or `page`/`html`/`body`); the part after is
  * the CSS aspect being overridden. This is the single override grammar the live
- * engine speaks — `inject.ts`'s override layer parses exactly these keys into a
- * CSS rule.
+ * engine speaks; it parses these keys into a CSS rule.
  */
 export type TagPropKey = `${string}|background` | `${string}|color`;
 
@@ -67,13 +66,13 @@ export type TagPropKey = `${string}|background` | `${string}|color`;
  * A custom-theme override map: `<tag>|<prop>` key → exact hex color. Keys are
  * {@link TagPropKey}s emitted by the in-page element picker (e.g.
  * `div|background`, `p|color`, `page|background`). An override paints that exact
- * color as a CSS layer on top of the generated theme (see the override block in
- * `inject.ts`); tags/props absent from the map keep their generated colors.
+ * color as a CSS layer on top of the generated theme; tags/props absent from the
+ * map keep their generated colors.
  *
  * The key type is widened to `string` (not the strict `TagPropKey` template
  * literal) because the keys are produced at runtime from arbitrary clicked DOM
  * elements and flow through `Object.entries`/storage as plain string keys; the
- * `inject.ts` parser validates the tag name and prop defensively.
+ * engine validates the tag name and prop defensively.
  */
 export type RoleOverrides = Record<string, string>;
 

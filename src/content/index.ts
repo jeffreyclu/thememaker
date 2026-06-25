@@ -8,7 +8,7 @@
 import { engine } from "../lib/engine";
 import { STYLE_ELEMENT_ID } from "../lib/engine/theme-dom-constants";
 import { loadDecision } from "../lib/storage/site-state";
-import { readSiteState } from "./site-storage";
+import { storage } from "../lib/storage";
 import { installMessageRouter } from "./message-router";
 
 /** Restores this origin's saved theme on load (auto-reapply). Exported for tests. */
@@ -22,7 +22,7 @@ export const runContentScript = async (): Promise<void> => {
   // first frame is already themed (no flash). No-op if this origin was never themed.
   engine.preventReloadFlash();
 
-  const decision = loadDecision(await readSiteState(origin));
+  const decision = loadDecision(await storage.getSiteState(origin));
   if (!decision.apply) {
     // Not themed (disabled/cleared) — undo the flash placeholder.
     engine.cancelReloadFlash();

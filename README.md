@@ -88,11 +88,10 @@ new headless), resolves the extension id from the service worker, and serves
 local HTML fixtures (`e2e/fixtures/`) over `http://127.0.0.1` (a real origin, so
 the per-site content script runs). Specs live in `e2e/specs/`.
 
-> The extension ships only `activeTab` + `scripting` (no host permissions), so a
-> headless popup can't `executeScript` into a tab without an action-button
-> gesture. The specs therefore drive theming through the production **content
-> script auto-reapply** path (seed `chrome.storage.local`, load the page, assert
-> the real engine's output) — the same path that powers per-site persistence.
+> The specs drive theming through the production **content-script auto-reapply**
+> path (seed `chrome.storage.local`, load the page, assert the real engine's
+> output) — the same path that powers per-site persistence — rather than
+> scripting a popup in a headless browser.
 
 ### Lint & format
 
@@ -112,56 +111,58 @@ Thememaker has no in-page controls. Everything lives in the toolbar **popup**:
    theme from the tab. Open **Details** to inspect the palette, and click any
    **History** entry to re-apply it.
 4. The **Apply on this site** toggle records a per-site preference (consumed by
-   Phase 3's auto-reapply).
+   the auto-reapply on the next load).
 
-### Architecture (Phase 1)
+### Architecture
 
-The control surface is the popup; the page is touched only on demand via
-`chrome.scripting` (granted by `activeTab` on a user gesture). There is **no
-content script** and **no blanket host access** — permissions are just
-`activeTab`, `scripting`, and `storage`.
+Two React UI surfaces — the toolbar **popup** and the in-page **picker** — drive a
+single in-page theming **engine**. A content script runs at `document_start` and
+hosts the engine; the popup sends messages straight to the active tab's content
+script. Declared permissions are `activeTab` and `storage`.
 
 ```
 src/
-  manifest.config.ts     # MV3 manifest (source of truth, consumed by CRXJS)
-  background/index.ts     # service worker: message hub + scripting injection
-  popup/
-    index.html            # popup markup (control surface)
-    index.ts              # popup controller / composition root (only chrome.* here)
-    view.ts               # pure popup renderer (DOM, no business logic)
-    state.ts              # pure popup state model + reducer
-    engine-bridge.ts      # glue from popup to the palette engine (seed/mode → palette)
-    popup.css             # self-contained popup styling (design tokens)
-  content/
-    index.ts              # content script: per-site auto-reapply + picker host
-    pick.ts               # in-page element picker (per-tag override picks)
-    picker-panel.ts       # in-page floating picker control (Shadow DOM)
-  lib/
-    palette.ts            # PURE HSL-harmony palette generation (the v2 engine core)
-    color.ts              # PURE color math (hex/hsl, WCAG contrast, AA enforcement)
-    color-source.ts       # palette source: local generator or thecolorapi.com (cached)
-    inject.ts             # self-contained in-page adaptive theming engine (injected)
-    random.ts             # tiny RNG helpers (random seed color + mode)
-    history.ts            # pure bounded scheme-history queue helpers
-    storage.ts            # typed chrome.storage adapter (behind an interface)
-    site-state.ts         # pure per-site state reducer
-    messages.ts           # typed popup ⇄ background message contract
-    router.ts             # background message router + chrome.scripting injector
-  config.ts               # modes + history bound
-  types.ts                # shared domain types
-public/                   # static icons copied into dist/
-tests/                    # Vitest specs (+ chrome-mock.ts, setup.ts)
+  manifest.config.ts        # MV3 manifest (source of truth, consumed by CRXJS)
+  config.ts, types.ts       # modes/bounds + shared domain types
+  background/index.ts        # no-op service worker (MV3 requires one; no logic)
+  popup/                     # the toolbar popup (React)
+    main.tsx, App.tsx, index.html, popup.css
+    state/                  # PopupProvider + SchemeProvider (context + reducers)
+    hooks/                  # action hooks (generate / apply / favorites / history / persist)
+    components/             # presentational + connected components
+    client/                # scheme-client: apply/persist I/O to the content script
+  picker/                    # the in-page Customize panel (React, lazy-loaded)
+    session.ts              # eager shim: dynamic-imports + mounts the React app
+    main.tsx, App.tsx
+    state/ hooks/ components/ client/   # same shape as popup
+  content/                   # page-side glue (content script)
+    index.ts                # entry: auto-reapply on load + install the message router
+    message-router.ts       # routes popup → content messages
+    apply-handlers.ts       # APPLY / RESET / QUERY → the engine
+  lib/                       # framework-free domains, each with one entry
+    engine/                 # the Engine class + internals (in-page adaptive theming)
+    color/                  # pure color math (hex/hsl, WCAG contrast, AA)
+    palette/                # palette generation (paletteGenerator)
+    scheme/                 # scheme building (palette → scheme → apply payload)
+    storage/                # the Storage class + singleton (history, settings, per-site, favorites)
+    messaging.ts            # typed popup ⇄ content message contract
+    override-keys.ts        # the <tag>|<prop> override grammar
+    classify.ts             # shared element classifiers
+public/                      # static icons copied into dist/
+tests/                       # Vitest specs (+ chrome-mock.ts, setup.ts)
+e2e/                         # Playwright specs (real Chromium)
 ```
 
-Message contract (popup → background → active tab):
+Message contract (popup → the active tab's content script):
 
-- `APPLY_SCHEME { palette, options, scheme }` → the in-page adaptive engine maps
-  the palette onto the page and injects a `<style id="themeMaker">`.
+- `APPLY_SCHEME { palette, options, scheme }` → the engine maps the palette onto
+  the page via a `<style id="themeMaker">`.
 - `RESET_SCHEME` → removes that `<style>`.
 - `QUERY_STATE` → reports whether a theme is applied.
+- `SHOW_PICKER` / `HIDE_PICKER` / `APPLY_LIVE` → the in-page Customize picker.
 
 Storage schema:
 
 - `chrome.storage.local`: `history` (bounded scheme queue),
   `site:<origin>` (per-site `{ enabled, savedScheme? }`).
-- `chrome.storage.sync`: `settings` (`{ mode }`), `favorites` (scaffolding).
+- `chrome.storage.sync`: `settings` (`{ mode, intensity, invert }`), `favorites`.

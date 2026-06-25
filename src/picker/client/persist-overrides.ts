@@ -13,7 +13,7 @@
  * A plain module-level queue (not React state): it is process-wide IO ordering,
  * decoupled from any component lifecycle.
  */
-import { readSiteState, writeSiteState } from "../../content/site-storage";
+import { storage } from "../../lib/storage";
 import type { Palette } from "../../lib/palette";
 import type { RoleOverrides, Scheme } from "../../types";
 
@@ -27,7 +27,7 @@ export interface PersistInput {
 /** Read-modify-write of this origin's saved scheme from the live theme. */
 const persistOnce = async (input: PersistInput): Promise<void> => {
   const origin = location.origin;
-  const site = (await readSiteState(origin)) ?? { enabled: false };
+  const site = await storage.getSiteState(origin);
   // Drop any previously-saved `overrides` here so it can't linger: "no
   // overrides" is the absence of the key, re-added below only when there are some.
   const { overrides: _prevOverrides, ...prevDetails } =
@@ -51,7 +51,7 @@ const persistOnce = async (input: PersistInput): Promise<void> => {
       ...(hasOverrides ? { overrides: input.overrides } : {}),
     },
   };
-  await writeSiteState(origin, { ...site, enabled: true, savedScheme });
+  await storage.setSiteState(origin, { enabled: true, savedScheme });
 };
 
 let persistQueue: Promise<void> = Promise.resolve();
