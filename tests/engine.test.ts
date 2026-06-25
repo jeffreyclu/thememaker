@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Engine } from "../src/lib/engine";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
-import { contrastRatio, hexToHsl } from "../src/lib/color/color";
+import { contrastRatio, hexToHsl } from "../src/lib/color";
 import type { ApplyOptions } from "../src/types";
 
 // The Engine runs in the page world; jsdom provides document.

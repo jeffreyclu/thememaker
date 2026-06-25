@@ -12,7 +12,7 @@
  * first themed load): for the common default-white body it equals what the engine
  * paints, so the early paint matches the final paint. No `chrome.*` here.
  */
-import { isHexColor, normalizeHex } from "../color/color";
+import { isHexColor, normalizeHex } from "../color";
 import { BASE_CACHE_KEY } from "./theme-dom-constants";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";

@@ -33,7 +33,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { isHexColor, normalizeHex } from "../../lib/color/color";
+import { isHexColor, normalizeHex } from "../../lib/color";
 import { FALLBACK_COLOR } from "../../lib/override-keys";
 import type { Palette } from "../../lib/palette";
 import type { RoleOverrides } from "../../types";

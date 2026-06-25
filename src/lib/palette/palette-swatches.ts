@@ -4,7 +4,7 @@
  * (same hue family, or both near-neutral) so the count reflects the theme's real
  * number of distinct colors. Pure HSL math, no DOM.
  */
-import { hexToHsl } from "../color/color";
+import { hexToHsl } from "../color";
 import type { PaletteRoles } from "./palette-roles";
 
 /** A labeled theme color: the pairing of a semantic role and its hex. */

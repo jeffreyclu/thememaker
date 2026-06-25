@@ -27,8 +27,8 @@
  * "paper"; links / buttons / headings carry the saturated accent hues. The
  * in-page engine then enforces AA on every pair.
  */
-import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "../color/color";
-import type { HSL } from "../color/color";
+import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "../color";
+import type { HSL } from "../color";
 import { deriveRoles, wrapHue, type PaletteRoles } from "./palette-roles";
 import { themeSwatches, type ThemeColor } from "./palette-swatches";
 import type { ColorMode } from "../../types";

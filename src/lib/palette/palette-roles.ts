@@ -4,8 +4,8 @@
  * element roles (heading / link / body / buttons / surfaces / …). Pure HSL math,
  * no DOM.
  */
-import { hslToHex, luminanceOf } from "../color/color";
-import type { HSL } from "../color/color";
+import { hslToHex, luminanceOf } from "../color";
+import type { HSL } from "../color";
 
 /**
  * The concrete, named color slots the in-page engine paints onto semantic

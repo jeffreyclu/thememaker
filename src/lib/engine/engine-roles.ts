@@ -13,7 +13,7 @@
  * role-rule / walk modules, so each is a pure function of resolved colors rather
  * than re-reading the palette. Pure derivation, no DOM.
  */
-import { luminanceBucket, nudgeToAA } from "../color/color";
+import { luminanceBucket, nudgeToAA } from "../color";
 import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";

@@ -6,7 +6,7 @@
  * optional chosen seed — into a concrete `{ seed, mode }` for a generate request.
  */
 import { modes } from "../../config";
-import { isHexColor, normalizeHex } from "../color/color";
+import { isHexColor, normalizeHex } from "../color";
 import { paletteGenerator } from "../palette";
 import type { ColorMode } from "../../types";
 

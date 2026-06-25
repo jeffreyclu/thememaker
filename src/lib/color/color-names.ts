@@ -5,7 +5,7 @@
  * lightness/saturation modifier), so every locally-generated scheme is labeled
  * without a network request or a big name table.
  */
-import { hexToHsl, normalizeHex } from "./color";
+import { hexToHsl, normalizeHex } from ".";
 
 /** Maps a hue angle (0–360) to a base color-family name. */
 const hueFamily = (h: number): string => {

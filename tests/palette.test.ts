@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { generatePalette, invertPalette } from "../src/lib/palette";
-import { hexToHsl, isHexColor, luminanceOf } from "../src/lib/color/color";
+import { hexToHsl, isHexColor, luminanceOf } from "../src/lib/color";
 import { modes } from "../src/config";
 
 const SEED = "#3a7bd5";

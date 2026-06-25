@@ -15,8 +15,8 @@
  *
  * No DOM, no `chrome.*` — pure string parsing.
  */
-import { hexToRgb, normalizeHex, rgbToHex } from "./color";
-import type { RGB } from "./color";
+import { hexToRgb, normalizeHex, rgbToHex } from ".";
+import type { RGB } from ".";
 
 /**
  * Parses any computed CSS color the page-side code encounters — `#hex`,
