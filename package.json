@@ -1,11 +1,12 @@
 {
   "name": "thememaker",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Apply a new color scheme to any website.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "package": "npm run build && cd dist && zip -qr \"../thememaker-v$npm_package_version.zip\" . && cd .. && echo \"Packaged dist/ → thememaker-v$npm_package_version.zip (upload to the Chrome Web Store)\"",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
