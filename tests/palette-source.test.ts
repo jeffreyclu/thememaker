@@ -7,7 +7,7 @@ import {
   paletteCacheKey,
   paletteFromApiResponse,
   type PaletteCacheStore,
-} from "../src/lib/palette/color-source";
+} from "../src/lib/palette/palette-source";
 import { isHexColor } from "../src/lib/color/color";
 import type { Palette } from "../src/lib/palette/palette";
 

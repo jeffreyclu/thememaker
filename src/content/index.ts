@@ -36,12 +36,12 @@ import { loadDecision } from "../lib/storage/site-state";
 import { engine } from "./engine-instance";
 import { readSiteState } from "./site-storage";
 import { applyLive, hidePicker, showPicker } from "./picker/picker-session";
-import { runApply, runQuery, runReset } from "./message-apply";
+import { runApply, runQuery, runReset } from "./apply-handlers";
 import type {
   ContentMessage,
   ContentReplyMessage,
   MessageResponse,
-} from "../lib/storage/messages";
+} from "../lib/messaging";
 
 /** The content-script entry point. Exported for unit testing. */
 export const runContentScript = async (): Promise<void> => {

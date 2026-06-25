@@ -24,7 +24,7 @@ import type { Palette } from "../src/lib/palette/palette";
 
 import { loadDecision } from "../src/lib/storage/site-state";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
-import { schemeFromPalette } from "../src/popup/engine-bridge";
+import { schemeFromPalette } from "../src/popup/schemes";
 import { KEYS, type SiteState } from "../src/lib/storage/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockPalette } from "./mocks";

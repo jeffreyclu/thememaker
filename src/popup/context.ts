@@ -13,7 +13,7 @@ import type {
   ContentMessage,
   ContentReplyMessage,
   ResponseFor,
-} from "../lib/storage/messages";
+} from "../lib/messaging";
 import type { createChromeStorage } from "../lib/storage/storage";
 
 export type PopupStorage = ReturnType<typeof createChromeStorage>;

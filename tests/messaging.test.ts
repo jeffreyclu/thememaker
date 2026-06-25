@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sendToContentWithReply } from "../src/lib/storage/messages";
+import { sendToContentWithReply } from "../src/lib/messaging";
 import { getChromeMock } from "./chrome-mock";
 import { mockOptions, mockPalette, mockScheme } from "./mocks";
 

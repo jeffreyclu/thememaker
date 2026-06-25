@@ -15,7 +15,7 @@
  * Uses `override-grammar.ts` (D4) to parse the `<tag>|<prop>` key, so the picker,
  * popup, and this emitter all speak ONE grammar.
  */
-import { parseOverrideKey } from "../override-grammar";
+import { parseOverrideKey } from "../override-keys";
 import { OVERRIDE_STYLE_ID, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
 import type { RoleOverrides } from "../../types";
 

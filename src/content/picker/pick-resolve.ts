@@ -10,7 +10,7 @@
  */
 import { isButtonLike } from "../../lib/classify";
 import { cssColorToHex } from "../../lib/color/color-runtime";
-import { makeOverrideKey } from "../../lib/override-grammar";
+import { makeOverrideKey } from "../../lib/override-keys";
 
 /**
  * True when the element renders its OWN non-transparent background.

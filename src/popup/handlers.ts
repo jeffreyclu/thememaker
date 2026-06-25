@@ -12,7 +12,7 @@ import {
   invertScheme,
   applyPayloadForScheme,
   schemeWithIntensity,
-} from "./engine-bridge";
+} from "./schemes";
 import { defaultFavoriteName, type ModeSelection } from "./state/state";
 import type { PopupHandlers } from "./view/view";
 import type { Controller } from "./controller";

@@ -28,7 +28,7 @@ import { bindEvents, populateModes, queryRefs, render } from "./view/view";
 import { makeController } from "./controller";
 import { makeHandlers } from "./handlers";
 import type { PopupContext } from "./context";
-import { sendToContent, sendToContentWithReply } from "../lib/storage/messages";
+import { sendToContent, sendToContentWithReply } from "../lib/messaging";
 import {
   createChromeStorage,
   originFromUrl,

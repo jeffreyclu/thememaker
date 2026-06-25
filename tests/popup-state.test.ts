@@ -16,7 +16,7 @@ import {
   resolveMode,
   resolveSeed,
   schemeFromPalette,
-} from "../src/popup/engine-bridge";
+} from "../src/popup/schemes";
 import { modes } from "../src/config";
 import { clampIntensity, DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";
 import { mockPalette, mockScheme, mockScheme2 } from "./mocks";

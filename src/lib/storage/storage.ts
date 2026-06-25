@@ -13,7 +13,7 @@
  */
 import { MAX_HISTORY } from "../../config";
 import { enqueueScheme } from "./history";
-import type { PaletteCacheStore } from "../palette/color-source";
+import type { PaletteCacheStore } from "../palette/palette-source";
 import type { Palette } from "../palette/palette";
 import { DEFAULT_INTENSITY } from "../../types";
 import type { ColorMode, Intensity, Scheme } from "../../types";

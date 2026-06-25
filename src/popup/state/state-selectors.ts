@@ -7,7 +7,7 @@
 import {
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
-} from "../../lib/override-grammar";
+} from "../../lib/override-keys";
 import type { PopupState } from "./state";
 import type { SchemeDetails } from "../../types";
 
