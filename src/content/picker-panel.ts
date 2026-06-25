@@ -91,29 +91,48 @@ export const mountPickerPanel = (handlers: PanelHandlers): PanelHandle => {
   const style = document.createElement("style");
   style.textContent = PANEL_STYLES;
 
-  const panel = document.createElement("div");
-  panel.className = "panel";
-  panel.innerHTML = `
-    <div class="header">
-      <span class="title">Pick a color</span>
-    </div>
-    <p class="hint">Click any element on the page to recolor every element of its tag.</p>
-    <ul class="rows" aria-label="Custom color overrides"></ul>
-    <div class="actions">
-      <button type="button" class="btn" data-clear-all>Clear all</button>
-      <button type="button" class="btn btn--primary" data-done>Done</button>
-    </div>
-  `;
+  // Build the shell with `createElement` (same style as `renderRow` below), so
+  // every element is a typed reference — no `innerHTML` + re-query + non-null
+  // cast, which would silently break if a class/attr were renamed.
+  const el = <K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className: string,
+  ): HTMLElementTagNameMap[K] => {
+    const node = document.createElement(tag);
+    node.className = className;
+    return node;
+  };
+
+  const title = el("span", "title");
+  title.textContent = "Pick a color";
+  const header = el("div", "header");
+  header.append(title);
+
+  const hint = el("p", "hint");
+  hint.textContent =
+    "Click any element on the page to recolor every element of its tag.";
+
+  const rowsEl = el("ul", "rows");
+  rowsEl.setAttribute("aria-label", "Custom color overrides");
+
+  const clearAllBtn = el("button", "btn");
+  clearAllBtn.type = "button";
+  clearAllBtn.textContent = "Clear all";
+
+  const doneBtn = el("button", "btn btn--primary");
+  doneBtn.type = "button";
+  doneBtn.textContent = "Done";
+
+  const actions = el("div", "actions");
+  actions.append(clearAllBtn, doneBtn);
+
+  const panel = el("div", "panel");
+  panel.append(header, hint, rowsEl, actions);
+
   shadow.append(style, panel);
   // Mount on the documentElement, OUTSIDE <body>, so the engine's body-walk
   // never reaches the host and the page theme can't cascade in.
   document.documentElement.appendChild(host);
-
-  const rowsEl = panel.querySelector(".rows") as HTMLUListElement;
-  const clearAllBtn = panel.querySelector(
-    "[data-clear-all]",
-  ) as HTMLButtonElement;
-  const doneBtn = panel.querySelector("[data-done]") as HTMLButtonElement;
 
   const renderRow = (row: OverrideRow): HTMLLIElement => {
     const li = document.createElement("li");

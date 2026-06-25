@@ -11,25 +11,18 @@ The picker session machinery (overlay, capture-phase listeners, re-arm, teardown
 
 - [x] FIXED (cross-cutting — item 3): The module docstring lied — it claimed the picker "resolves the clicked element's semantic role via the shared `roleOfElement` core (from `mapping.ts`)" while the file has ZERO imports and emits a `<tag>|<prop>` grammar. VERIFIED real. Chose option (b) — it matches reality and aligns with deleting `mapping.ts`: rewrote the docstring to describe what the code ACTUALLY does (a self-contained `<tag>|<prop>` picker that speaks the override grammar `inject.ts`'s `themeMakerOverrides` layer consumes, with its own small inline classifiers and NO shared engine import). Removed every `roleOfElement`/`mapping.ts`/`RoleClassifierInput`/"semantic role"/"shared … core" claim. The docstring now matches the code exactly.
 
-### [DEFERRED — local pick.ts item, owned by per-file agent] Third inline re-port of `isButtonLike` / `hasOwnBackground` / `rgbToHex`
-`isButtonLike` (29–45) is byte-near-identical to `inject.ts`'s `isButtonLike` (825–841). `rgbToHex` (146–162) re-derives the same rgb-parse-to-hex that `inject.ts`'s `parseColor`+`toHex` and `color.ts` already do. `hasOwnBackground` (48–69) re-implements transparency detection a fourth time.
+- [x] PARTLY FIXED (in-file DRY) / cross-module extraction VERIFIED-INVALID for this pass. Verdict by helper:
+  - `isButtonLike`: the would-be shared copy in `inject.ts` lives INSIDE the serialized `executeScript` payload (`applyAdaptiveScheme`'s body) and is NOT exported — there is nothing to import. `mapping.ts` (the other "canonical" copy the finding cites) has been DELETED. So the only way to DRY this is to create a NEW `src/lib/dom-roles.ts` shared module — out of scope for this per-file pass (I may only edit the four content files), and explicitly counter to the picker's stated design ("deliberately self-contained — don't add cross-module imports just to DRY"). Left inline by design.
+  - `rgbToHex`: `color.ts` exposes `rgbToHex({r,g,b}: RGB)` — it FORMATS an RGB object to hex; it does NOT parse a CSS `rgb()`/`rgba()` STRING, and has no transparency→null behavior. The picker's `rgbToHex(value: string)` is a different function (string-parse + transparent/alpha-0 → null). No shared parser exists to import; this is not a true duplicate.
+  - `hasOwnBackground`: FIXED the real, in-file duplication — it had its OWN ad-hoc rgba-alpha string surgery that re-derived the exact "is this a real, non-transparent color?" test the local `rgbToHex` already encodes. Rewrote it to `rgbToHex(getComputedStyle(el).backgroundColor) !== null` (computed `backgroundColor` is always `rgb()/rgba()/transparent`, never hex, so the old dead `#`-prefix branch is gone). Net: ~12 lines → 1 expression, one source of transparency truth, behavior preserved (pick tests green).
 
-**Why it matters:** DRY at codebase scale. This is now the THIRD copy of the color-parse + button-detect logic (canonical `color.ts`/`mapping.ts`, inline `inject.ts`, inline here). The content-script boundary is real, but `pick.ts` is a NORMAL bundled module (it CAN import) — unlike the `executeScript` payload, there is no serialization excuse here. It simply chose not to import.
-
-**Concrete fix:** `pick.ts` is bundled like any content script, so it can `import { isHexColor, ... }` and reuse the shared button/background detection. Extract `isButtonLike`/`hasOwnBackground` into a small shared `dom-roles.ts` that the picker imports (the inject.ts payload still needs its own inline copy, but the picker has no reason to).
-
-### [DEFERRED — local pick.ts item, owned by per-file agent] `currentColorFor` falls back to `"#ffffff"`/`"#808080"` magic colors silently
-Lines 184, 186, 189. Background fallback assumes white page; color fallback is mid-gray; catch returns gray. These are reasonable but undocumented-as-arbitrary, and the white-page assumption can seed a visibly wrong starting swatch on dark sites.
-
-**Concrete fix:** Minor — name them (`ASSUMED_PAGE_BG = "#ffffff"`) and note the dark-site caveat.
+- [x] FIXED: named the two magic seeds as `ASSUMED_PAGE_BG = "#ffffff"` and `NEUTRAL_TEXT = "#808080"`, used at all three sites (background fallback, text fallback, catch). Documented `ASSUMED_PAGE_BG` with the dark-site caveat (and why we never seed black). Values unchanged → behavior preserved.
 
 - [x] VERIFIED-INVALID (resolved by the blocker fix): `propForElement` vs `mapping.ts`'s `roleOfElement` "can DISAGREE". The premise was that the docstring CLAIMED they were the same core. With `mapping.ts` deleted and the docstring now stating the picker is self-contained, there is no longer a claim of equivalence to violate — the picker's `<tag>|<prop>` decision is the picker's own, by design. Nothing to reconcile.
 
-### [DEFERRED — local pick.ts item, owned by per-file agent] `removeOverlay` removes the overlay twice (defensive double-remove)
-Lines 263–267: `overlay?.remove()` then also `document.getElementById(OVERLAY_ID)?.remove()`. Belt-and-suspenders against a stale duplicate; harmless but signals uncertainty about overlay lifecycle ownership.
+- [x] FIXED: the `overlay` variable is the sole handle to the only `#themeMakerPickOverlay` we ever create (always via `ensureOverlay`), so the extra `document.getElementById(OVERLAY_ID)?.remove()` could never match anything `overlay?.remove()` hadn't already removed — dead defensive code. Removed it; `removeOverlay` is now just `overlay?.remove(); overlay = null;` with a one-line note on why that's sufficient. (15 pick tests still green.)
 
-### [DEFERRED — local pick.ts item, owned by per-file agent] `onClick` is a hoisted `function` while siblings are `const` arrows
-Line 303 vs the arrow handlers around it. It's `function` specifically so `teardown` (292) can reference it before definition — a legitimate hoisting use, but the inconsistency reads oddly; a forward `let onClick` or reordering would be uniform.
+- [x] FIXED: converted `onClick` to a `const` arrow and moved its definition ABOVE `teardown`, so `teardown` references it normally (no hoisting reliance). All three event handlers (`onMove`/`onScroll`/`onClick`) are now uniform `const` arrows defined before the teardown that unregisters them. Pure reorder/style — behavior preserved.
 
 ## What's GOOD
 - **The session lifecycle is genuinely clean**: capture-phase listeners, idempotent `teardown` guarded by `active`, overlay re-drawn on move and dropped on scroll (with a clear WHY comment about fixed-position stranding). This is the strong part.

@@ -137,6 +137,29 @@ export const generateForSelection = async (
 };
 
 /**
+ * Resolves the palette to (re)apply for a scheme: the one stored on it, or — for
+ * legacy entries that predate Phase 2 — a fresh local palette regenerated from
+ * its seed + mode. One place owns the legacy-fallback rule so every apply path
+ * resolves palettes identically.
+ */
+const resolvePalette = (details: SchemeDetails): Palette =>
+  details.palette ?? localPalette(details.rootColor, details.colorMode);
+
+/**
+ * Resolves the overrides to bake onto an apply payload: explicitly-passed
+ * overrides (the popup's live editor state) win, falling back to whatever the
+ * scheme persisted. Returns `undefined` for an absent OR empty map so callers
+ * can drop the key — ONE place owns the "empty → no overrides" convention.
+ */
+const resolveOverrides = (
+  details: SchemeDetails,
+  overrides?: RoleOverrides,
+): RoleOverrides | undefined => {
+  const resolved = overrides ?? details.overrides;
+  return resolved && Object.keys(resolved).length > 0 ? resolved : undefined;
+};
+
+/**
  * Inverts an existing scheme's palette (light↔dark) for the live Invert toggle,
  * preserving its intensity + overrides and flipping the stored `invert` flag.
  * Returns the scheme unchanged when it carries no palette.
@@ -169,12 +192,8 @@ export const applyPayloadForScheme = (
   overrides?: RoleOverrides,
 ): { palette: Palette; options: ApplyOptions } => {
   const details = scheme.schemeDetails;
-  const palette =
-    details.palette ?? localPalette(details.rootColor, details.colorMode);
-  // Prefer explicitly-passed overrides (the popup's live editor state); fall
-  // back to whatever the scheme persisted, so re-applying a saved scheme keeps
-  // its custom theme.
-  const resolved = overrides ?? details.overrides;
+  const palette = resolvePalette(details);
+  const resolved = resolveOverrides(details, overrides);
   return {
     palette,
     options: resolved ? { intensity, overrides: resolved } : { intensity },
@@ -194,22 +213,20 @@ export const schemeWithIntensity = (
   overrides?: RoleOverrides,
 ): Scheme => {
   const details = scheme.schemeDetails;
-  const palette =
-    details.palette ?? localPalette(details.rootColor, details.colorMode);
+  const palette = resolvePalette(details);
   // Bake the live overrides (the custom-theme editor's picks) onto the saved
   // scheme so favorites + per-site reapply carry the custom theme. An explicit
   // (possibly empty) overrides arg replaces the stored one; omitting it keeps
-  // whatever the scheme already had. An empty map is dropped to keep schemes
+  // whatever the scheme already had. An empty map drops the key to keep schemes
   // clean (no overrides → no key).
-  const resolved = overrides ?? details.overrides;
-  const hasOverrides = resolved && Object.keys(resolved).length > 0;
+  const resolved = resolveOverrides(details, overrides);
   return {
     ...scheme,
     schemeDetails: {
       ...details,
       palette,
       intensity,
-      ...(hasOverrides ? { overrides: resolved } : { overrides: undefined }),
+      overrides: resolved,
     },
   };
 };

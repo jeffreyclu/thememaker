@@ -9,45 +9,17 @@ A capable composition root that correctly imports the shared engine (no logic du
 
 ## Findings
 
-### [high] Single file owns two unrelated responsibilities (auto-reapply load path + picker session lifecycle)
-Lines 36–152 are the load/auto-reapply concern; lines 154–324 are the picker-session concern (mount/show/hide/apply-persist/message-handling). They share only `applyWhenReady` and the storage wrappers. These are two features with separate lifecycles bolted into one file.
+- [x] VERIFIED (real) but DEFERRED — the fix is out of this pass's scope. The finding is legitimate SRP: the file holds two concerns (auto-reapply load path + picker-session lifecycle). The reviewer's fix is to create `content/picker-session.ts` (+ a shared content-storage helper) — i.e. NEW modules. This per-file cleanup pass is scoped to editing ONLY the four existing content files; introducing new modules and re-wiring the test seam / message listener across them is a structural refactor beyond "minimal, principled cleanup" and risks the runtime entry. Mitigation kept in-file: the two concerns are already separated by an explicit section banner (the `---- in-page floating picker control ----` comment) and each half is self-contained, so a reader is not lost. Recommend the module split as its own follow-up slice (it touches file structure + the entry wiring, which deserves a dedicated change + e2e run), not a line-level cleanup.
 
-**Why it matters:** SRP. The file's purpose statement is entirely about auto-reapply ("Always-on content script — per-site AUTO-REAPPLY"); the picker half is undocumented at the top and roughly doubles the file. A reader expecting the auto-reapply module finds a second feature.
+- [x] FIXED: removed BOTH `undefined as unknown as` casts. Restructured `showPicker` to build `panel` and `pick` FIRST (with honest types) — their handlers close over a `session` binding declared in the same block scope — then assemble `const session: PickerSession = { palette, intensity, overrides, panel, pick }` ONCE, fully populated, with no placeholder fields. The handlers only read `session` on later user interaction (after the assignment runs, past the TDZ), so there is no real window where `panel`/`pick` are `undefined` despite their types. Net: the chicken-and-egg is broken with zero casts; `tsc` and `eslint` (incl. `prefer-const`) both pass.
 
-**Concrete fix:** Split the picker session into `content/picker-session.ts` (owns `showPicker`/`hidePicker`/`applyAndPersist`/`handleContentMessage`), leaving `index.ts` as the thin entry that wires `runContentScript()` + the message listener. The storage wrappers (`readSiteState`/`writeSiteState`) move to a shared content-storage helper both import.
+- [x] VERIFIED (real, but NOT a code change in this file's scope — flagged for the docs owner). The behavior is real and the reviewer itself states it is "Not a code-quality bug." The cache only exists for the documented flash-elimination trade-off; moving it to extension storage would forfeit the synchronous same-origin read that kills the flash (a design reversal, not a cleanup). Note for the docs/decision-log owner: `PRIVACY.md` currently does NOT mention the per-origin `localStorage` `__thememaker_base__` cache — that disclosure should be added, but `PRIVACY.md` is outside this content-file pass's edit scope. No code change here.
 
-### [high] `undefined as unknown as PanelHandle` two-phase session construction
-Lines 248–249: the session object is built with `panel`/`pick` lied-about as their real types, then assigned on the next lines (252, 274). This is a double-cast through `unknown` to defeat the type system precisely so the object can be constructed before its fields exist — an honest-types violation that also creates a real window where `session.panel`/`session.pick` are `undefined` despite their types.
+- [x] VERIFIED-INVALID as an actionable item (the reviewer's own verdict is "None required; this is the documented design"). It is the PLAN's explicitly-accepted always-on trade-off; the suggested "is this origin themed" short-circuit flag would add a SECOND cache to keep coherent — net complexity, not cleanup. No change.
 
-**Why it matters:** Honest types + the same `as unknown as` anti-pattern seen in mapping.ts/palette.ts (a codebase theme). If any code ran between construction and assignment that touched `session.panel`, it would NPE with no type warning.
+- [x] FIXED: serialized the persistence. Split `applyAndPersist` into an immediate live-apply (unchanged) plus `persistSession` (the read-modify-write), and chained every persist onto a module-level tail promise `persistQueue` (`persistQueue = persistQueue.then(() => persistSession(s)).catch(() => {})`). Now overlapping edits (fast color-drag + a pick) run their read→merge→write cycles SEQUENTIALLY — each persist reads AFTER the previous one's write committed, closing the last-writer-wins-on-stale-read window. Chose serialize over debounce deliberately: it preserves the existing "every edit is durably saved" semantics (debounce would drop intermediate writes and change timing the e2e relies on) while still eliminating the race. A failed persist `.catch`es so it can't break the chain for the next edit. (261 unit tests green.)
 
-**Concrete fix:** The handlers passed to `mountPickerPanel`/`startPick` close over `session`, hence the chicken-and-egg. Break it by constructing the handles FIRST with handlers that reference a `let session` declared above (handlers fire only after user interaction, so `session` is assigned by then), or model the mutable parts (`overrides`/`intensity`) as a separate `let` state object the handlers read, and build the immutable `panel`/`pick` directly into the session with no placeholder. Either removes the cast.
-
-### [medium] Writes `__thememaker_base__` to `localStorage` on EVERY origin the user visits (privacy surface)
-Via the engine's `writeBaseCache` (called from `applyAdaptiveScheme`) and `paintEarlyBaseColor`/`readBaseCache` here. This is functionally justified (flash elimination) and documented, but for a `<all_urls>` extension that PRIVACY.md must cover, writing a key into every themed origin's `localStorage` is a real, observable footprint. A page's own scripts can read `__thememaker_base__` and infer the extension is installed + that the user themed this site.
-
-**Why it matters:** Not a code-quality bug, but a defensibility point for a public extension. The audit brief is "withstand public scrutiny"; an extension-detection vector via `localStorage` is the kind of thing a reviewer or security-minded user will raise.
-
-**Concrete fix:** Confirm PRIVACY.md discloses the per-origin `localStorage` cache. Consider whether the early-paint cache could live in extension storage keyed by origin instead (loses the synchronous same-origin read that kills the flash — a real trade-off worth recording as a decision). At minimum, document it.
-
-### [medium] `runContentScript` runs on `<all_urls>` and reads storage on every single page load
-Lines 118–152. Every http(s) navigation triggers a `chrome.storage.local.get`. For unthemed sites (the vast majority for most users) this is wasted async work on every page. Functionally fine, but it's the cost of the always-on design the PLAN explicitly accepted.
-
-**Why it matters:** The PLAN's accepted trade-off, so not a new finding — but worth noting that the early `readBaseCache()` (synchronous, line 129) already gives a fast no-op for unthemed origins (no cache → no paint), and only the storage read is unavoidable. Acceptable.
-
-**Concrete fix:** None required; this is the documented design. If perf mattered, a synchronous `localStorage` "is this origin themed" flag could short-circuit the storage read, but that adds a second cache to keep coherent — not worth it.
-
-### [low] `applyAndPersist` does a read-modify-write of site state with no concurrency guard
-Lines 198–219: reads site state, merges, writes back. If two override edits fire in quick succession (fast color-drag + a pick), two interleaved read-modify-writes could lose an update. The `onColorChange` comment says it deliberately doesn't re-render to avoid interrupting the color drag, and each change calls `applyAndPersist` — so rapid drags DO issue overlapping RMW cycles.
-
-**Why it matters:** Last-writer-wins data loss on the saved scheme under rapid interaction. Low severity (overrides are small and the final write usually wins) but it's a real race in a persistence path.
-
-**Concrete fix:** Serialize writes (a tiny promise queue / "latest wins by version") or debounce `applyAndPersist`'s persist half (apply live immediately, persist on a trailing debounce). The latter also reduces storage churn during a drag.
-
-### [low] `optionsFor` conditionally includes `overrides` to avoid an empty map, while `applyAndPersist` sets `overrides: undefined` to clear
-Lines 188–191 vs 215. Two different conventions for "no overrides": omit the key (`optionsFor`) vs set it to `undefined` (the saved scheme). Minor inconsistency in how absence is represented.
-
-**Concrete fix:** Pick one representation of "no overrides" and use it both places.
+- [x] FIXED: unified on ABSENCE of the key as the single "no overrides" representation (matching `SchemeDetails.overrides?`'s documented "Absent → no overrides"). `persistSession` no longer writes `overrides: undefined`; it destructures any stale `overrides` OFF `prevDetails` and re-adds the key only when `hasOverrides` (`...(hasOverrides ? { overrides } : {})`) — the exact same omit-when-empty convention `optionsFor` already uses. One representation in both places.
 
 ## What's GOOD
 - **Honest reuse of the shared engine.** Unlike `pick.ts`, this module genuinely imports `applyAdaptiveScheme`/`loadDecision`/`baseBackgroundFor` — no logic duplication, and the docstring's claim matches the code. This is the integration point the whole architecture hinges on, and it's wired correctly.

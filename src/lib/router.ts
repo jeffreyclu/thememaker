@@ -49,8 +49,9 @@ export const routeMessage = async (
         return { ok: true, origin, applied, scheme: message.scheme };
       }
       case "RESET_SCHEME": {
-        const { origin, removed } = await injector.reset();
-        return { ok: true, origin, applied: !removed && false };
+        const { origin } = await injector.reset();
+        // A reset removes the scheme, so nothing is applied afterwards.
+        return { ok: true, origin, applied: false };
       }
       case "QUERY_STATE": {
         const { origin, applied } = await injector.query();
@@ -76,7 +77,8 @@ export const routeMessage = async (
  * current user gesture from the popup).
  */
 export const createChromeInjector = (): Injector => {
-  const activeTab = async (): Promise<chrome.tabs.Tab> => {
+  // Refined to guarantee `id` so call sites need no `tab.id as number` cast.
+  const activeTab = async (): Promise<chrome.tabs.Tab & { id: number }> => {
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
@@ -84,7 +86,7 @@ export const createChromeInjector = (): Injector => {
     if (!tab || tab.id == null) {
       throw new Error("no active tab");
     }
-    return tab;
+    return tab as chrome.tabs.Tab & { id: number };
   };
 
   const run = async <T>(
@@ -92,6 +94,9 @@ export const createChromeInjector = (): Injector => {
     func: (...args: never[]) => T,
     args: unknown[] = [],
   ): Promise<T> => {
+    // `executeScript` types `func` and `result.result` loosely (the serialized-
+    // function boundary is `any`-ish), so these casts are the irreducible
+    // `chrome.scripting` typing gap. The `Injector` return types constrain T.
     const [result] = await chrome.scripting.executeScript({
       target: { tabId },
       func: func as (...a: unknown[]) => T,
@@ -103,21 +108,20 @@ export const createChromeInjector = (): Injector => {
   return {
     async apply(palette: Palette, options: ApplyOptions) {
       const tab = await activeTab();
-      const applied = await run<boolean>(
-        tab.id as number,
-        applyAdaptiveScheme,
-        [palette, options],
-      );
+      const applied = await run<boolean>(tab.id, applyAdaptiveScheme, [
+        palette,
+        options,
+      ]);
       return { origin: originFromUrl(tab.url), applied };
     },
     async reset() {
       const tab = await activeTab();
-      const removed = await run<boolean>(tab.id as number, removeSchemeStyle);
+      const removed = await run<boolean>(tab.id, removeSchemeStyle);
       return { origin: originFromUrl(tab.url), removed };
     },
     async query() {
       const tab = await activeTab();
-      const applied = await run<boolean>(tab.id as number, isSchemeApplied);
+      const applied = await run<boolean>(tab.id, isSchemeApplied);
       return { origin: originFromUrl(tab.url), applied };
     },
   };

@@ -9,6 +9,8 @@ Clean dependency inversion: routing logic depends only on the `Injector` interfa
 
 ## Findings
 
+- [x] FIXED: `RESET_SCHEME` returned `applied: !removed && false` — an obfuscated constant `false`. Replaced with a plain `applied: false` + a one-line comment; dropped the now-unused `removed` from the destructure.
+
 ### [medium] `RESET_SCHEME` returns `applied: !removed && false` — always `false`, written obscurely
 Line 53: `return { ok: true, origin, applied: !removed && false };`. `X && false` is `false` for all `X`, so this is unconditionally `applied: false` dressed up to look conditional. A reader will stop to work out whether it depends on `removed` — it doesn't.
 
@@ -16,12 +18,16 @@ Line 53: `return { ok: true, origin, applied: !removed && false };`. `X && false
 
 **Concrete fix:** `applied: false, // reset leaves nothing applied`. If the intent was ever "applied is false unless removal failed," that's a different expression (`!removed`) and should be written as such with a test — but as-is it's just `false`.
 
+- [x] FIXED: added a one-line comment at `run` explaining the two `executeScript` casts are the irreducible `chrome.scripting` typing gap (the serialized-function boundary is `any`-ish) and that the `Injector` return types constrain `T`. Casts kept (correctly), now documented.
+
 ### [low] `createChromeInjector.run` casts `func as (...a: unknown[]) => T` and `result.result as T`
 Lines 97, 100. The `executeScript` typing forces casts to bridge the serialized-function signature. Unavoidable at the `chrome.scripting` boundary (the API's types are weak), but they're unchecked assertions: if `applyAdaptiveScheme` returned something other than `boolean`, `result.result as T` wouldn't catch it.
 
 **Why it matters:** Honest types at the boundary. Acceptable here (it's the irreducible `chrome.scripting` seam) but worth a one-line comment acknowledging the casts are the API's fault.
 
 **Concrete fix:** Keep, but comment why the casts exist (executeScript's `result` is `any`-ish). The `Injector` interface already constrains the return types upstream, so the blast radius is contained.
+
+- [x] FIXED: refined `activeTab`'s return type to `chrome.tabs.Tab & { id: number }` (one `as` at the guard's return), so all three `tab.id as number` call-site casts are gone.
 
 ### [low] `tab.id as number` after an `activeTab` that already guarantees `tab.id != null`
 Lines 106, 115, 120. `activeTab` throws if `tab.id == null` (84), so by the call sites `tab.id` IS a number — but TS doesn't narrow across the function boundary, forcing `as number`. Minor.

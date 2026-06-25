@@ -12,10 +12,6 @@ import type { ThememakerMessage } from "../lib/messages";
 
 const injector = createChromeInjector();
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("[Thememaker] service worker installed");
-});
-
 chrome.runtime.onMessage.addListener(
   (message: ThememakerMessage, _sender, sendResponse) => {
     routeMessage(message, injector)

@@ -69,11 +69,9 @@ export interface PopupHandlers {
 }
 
 /** Resolves the typed element refs from the popup document. */
-export const queryRefs = (root: Document | HTMLElement): PopupRefs => {
+export const queryRefs = (root: Document): PopupRefs => {
   const byId = <T extends HTMLElement>(id: string): T => {
-    const el = (root as Document).getElementById
-      ? (root as Document).getElementById(id)
-      : (root as HTMLElement).querySelector(`#${id}`);
+    const el = root.getElementById(id);
     if (!el) {
       throw new Error(`missing popup element: #${id}`);
     }
@@ -162,64 +160,71 @@ export const bindEvents = (refs: PopupRefs, handlers: PopupHandlers): void => {
   });
 };
 
+/** A single colored swatch `<span>` (the small color chip used everywhere). */
+const makeSwatch = (className: string, color: string): HTMLSpanElement => {
+  const swatch = document.createElement("span");
+  swatch.className = className;
+  swatch.style.backgroundColor = color;
+  return swatch;
+};
+
+/** A strip of swatches (one chip per color), used by history + favorites rows. */
+const makeSwatchStrip = (
+  stripClass: string,
+  swatchClass: string,
+  colors: string[],
+): HTMLSpanElement => {
+  const strip = document.createElement("span");
+  strip.className = stripClass;
+  for (const color of colors) {
+    strip.appendChild(makeSwatch(swatchClass, color));
+  }
+  return strip;
+};
+
+/** A details panel row: swatch + a text label + the hex read-out. */
+const makeDetailRow = (text: string, color: string): HTMLDivElement => {
+  const row = document.createElement("div");
+  row.className = "details__row";
+
+  const label = document.createElement("span");
+  label.className = "details__tags";
+  label.textContent = text;
+
+  const hex = document.createElement("span");
+  hex.className = "details__hex";
+  hex.textContent = color;
+
+  row.append(makeSwatch("details__swatch", color), label, hex);
+  return row;
+};
+
+const makeDetailsSeed = (text: string): HTMLParagraphElement => {
+  const seed = document.createElement("p");
+  seed.className = "details__seed";
+  seed.textContent = text;
+  return seed;
+};
+
 const renderDetails = (state: PopupState, container: HTMLElement): void => {
   container.innerHTML = "";
   if (!state.current) {
     return;
   }
   const { rootColorName, rootColor, colorMode } = state.current.schemeDetails;
-  const seed = document.createElement("p");
-  seed.className = "details__seed";
   const name = rootColorName ?? describeColor(rootColor);
-  seed.textContent = `${name} (${colorMode})`;
-  container.appendChild(seed);
+  container.appendChild(makeDetailsSeed(`${name} (${colorMode})`));
 
   for (const { tags, color } of schemeDetailRows(state.current)) {
-    const row = document.createElement("div");
-    row.className = "details__row";
-
-    const swatch = document.createElement("span");
-    swatch.className = "details__swatch";
-    swatch.style.backgroundColor = color;
-
-    const tagsEl = document.createElement("span");
-    tagsEl.className = "details__tags";
-    tagsEl.textContent = tags;
-
-    const hex = document.createElement("span");
-    hex.className = "details__hex";
-    hex.textContent = color;
-
-    row.append(swatch, tagsEl, hex);
-    container.appendChild(row);
+    container.appendChild(makeDetailRow(tags, color));
   }
 
   // Custom overrides (the picker's per-tag picks), if any.
   const overrides = overrideRows(state);
   if (overrides.length > 0) {
-    const heading = document.createElement("p");
-    heading.className = "details__seed";
-    heading.textContent = "Custom overrides";
-    container.appendChild(heading);
-
+    container.appendChild(makeDetailsSeed("Custom overrides"));
     for (const { color, label } of overrides) {
-      const row = document.createElement("div");
-      row.className = "details__row";
-
-      const swatch = document.createElement("span");
-      swatch.className = "details__swatch";
-      swatch.style.backgroundColor = color;
-
-      const labelEl = document.createElement("span");
-      labelEl.className = "details__tags";
-      labelEl.textContent = label;
-
-      const hex = document.createElement("span");
-      hex.className = "details__hex";
-      hex.textContent = color;
-
-      row.append(swatch, labelEl, hex);
-      container.appendChild(row);
+      container.appendChild(makeDetailRow(label, color));
     }
   }
 };
@@ -257,21 +262,19 @@ const renderHistory = (state: PopupState, list: HTMLElement): void => {
       btn.className = "history__item";
       btn.dataset.historyIndex = String(index);
 
-      const swatches = document.createElement("span");
-      swatches.className = "history__swatches";
-      for (const color of schemeSwatches(scheme)) {
-        const s = document.createElement("span");
-        s.className = "history__swatch";
-        s.style.backgroundColor = color;
-        swatches.appendChild(s);
-      }
-
       const label = document.createElement("span");
       label.className = "history__label";
       label.textContent = historyLabel(scheme, index);
 
       // Number + name on the left, swatches right-aligned (CSS pushes them).
-      btn.append(label, swatches);
+      btn.append(
+        label,
+        makeSwatchStrip(
+          "history__swatches",
+          "history__swatch",
+          schemeSwatches(scheme),
+        ),
+      );
       li.appendChild(btn);
       list.appendChild(li);
     });
@@ -296,20 +299,18 @@ const renderFavorites = (favorites: Favorite[], list: HTMLElement): void => {
     apply.className = "favorites__apply";
     apply.dataset.favoriteId = fav.id;
 
-    const swatches = document.createElement("span");
-    swatches.className = "favorites__swatches";
-    for (const color of schemeSwatches(fav.scheme)) {
-      const s = document.createElement("span");
-      s.className = "favorites__swatch";
-      s.style.backgroundColor = color;
-      swatches.appendChild(s);
-    }
-
     const label = document.createElement("span");
     label.className = "favorites__label";
     label.textContent = fav.name;
 
-    apply.append(label, swatches);
+    apply.append(
+      label,
+      makeSwatchStrip(
+        "favorites__swatches",
+        "favorites__swatch",
+        schemeSwatches(fav.scheme),
+      ),
+    );
 
     const del = document.createElement("button");
     del.type = "button";
@@ -324,6 +325,23 @@ const renderFavorites = (favorites: Favorite[], list: HTMLElement): void => {
   }
 };
 
+/**
+ * The slices that drive each expensive sub-render. The reducer replaces these
+ * immutably, so a cheap reference check tells us when a rebuild is actually
+ * needed — letting us SKIP tearing down + rebuilding the details/history/
+ * favorites DOM on unrelated changes (e.g. an intensity-slider drag), which
+ * would otherwise destroy focus/scroll inside those lists.
+ */
+interface RenderedSlices {
+  current: PopupState["current"];
+  overrides: PopupState["overrides"];
+  history: PopupState["history"];
+  favorites: PopupState["favorites"];
+}
+
+/** Per-`refs` memo of the last slices rendered, so gating is keyed to a DOM. */
+const lastRendered = new WeakMap<PopupRefs, RenderedSlices>();
+
 /** Renders the full popup from `state`. Idempotent. */
 export const render = (state: PopupState, refs: PopupRefs): void => {
   refs.mode.value = state.mode;
@@ -334,6 +352,7 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
 
   refs.generate.disabled = state.loading;
   refs.generate.textContent = state.loading ? "Generating…" : "Generate";
+  // Can only save a favorite when there's a current scheme to save.
   refs.favoriteSave.disabled = !state.current;
   refs.reset.disabled = !state.applied && !state.current;
 
@@ -346,25 +365,43 @@ export const render = (state: PopupState, refs: PopupRefs): void => {
     refs.status.textContent = "";
   }
 
-  refs.detailsToggle.disabled = !state.current;
-  refs.detailsToggle.setAttribute("aria-expanded", String(state.showDetails));
-  refs.details.hidden = !state.showDetails;
-  renderDetails(state, refs.details);
-
   // Customize is a button that opens the IN-PAGE floating control; available
   // whenever there's a theme to layer overrides on (current OR applied).
   refs.customize.disabled = !(Boolean(state.current) || state.applied);
 
+  // Cheap, always-applied attribute/visibility updates for the disclosures.
+  refs.detailsToggle.disabled = !state.current;
+  refs.detailsToggle.setAttribute("aria-expanded", String(state.showDetails));
+  refs.details.hidden = !state.showDetails;
   refs.favoritesToggle.setAttribute(
     "aria-expanded",
     String(state.showFavorites),
   );
   refs.favoritesPanel.hidden = !state.showFavorites;
-  // Can only save a favorite when there's a current scheme to save.
-  refs.favoriteSave.disabled = !state.current;
-  renderFavorites(state.favorites, refs.favorites);
-
   refs.historyToggle.setAttribute("aria-expanded", String(state.showHistory));
   refs.historyPanel.hidden = !state.showHistory;
-  renderHistory(state, refs.history);
+
+  // Expensive list rebuilds: only when the slice that drives each one actually
+  // changed (the reducer swaps these references on real updates). This keeps an
+  // intensity drag or a disclosure toggle from blowing away list DOM + focus.
+  const prev = lastRendered.get(refs);
+  if (
+    !prev ||
+    prev.current !== state.current ||
+    prev.overrides !== state.overrides
+  ) {
+    renderDetails(state, refs.details);
+  }
+  if (!prev || prev.favorites !== state.favorites) {
+    renderFavorites(state.favorites, refs.favorites);
+  }
+  if (!prev || prev.history !== state.history) {
+    renderHistory(state, refs.history);
+  }
+  lastRendered.set(refs, {
+    current: state.current,
+    overrides: state.overrides,
+    history: state.history,
+    favorites: state.favorites,
+  });
 };

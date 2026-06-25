@@ -176,6 +176,10 @@ const deriveRoles = (
   const headingHue = hueSlot(1);
   const linkHue = hueSlot(2);
   const accentHue = hueSlot(3); // inline emphasis / subheading
+  // On low-harmony modes (complement = 2 hues, monochrome = 1) slots 4 and 5
+  // wrap back onto earlier hues, so `altHue`/`secondaryHue` can equal an earlier
+  // role's hue. Distinctness there comes from the LIGHTNESS/SATURATION steps set
+  // below, not hue — same mechanism monochrome uses to separate same-hue roles.
   const altHue = hueSlot(4); // surfaceAlt / code containers
   const secondaryHue = hueSlot(5); // secondary button / secondary text
 
@@ -300,6 +304,11 @@ export interface ThemeColor {
  * neutral (surface). Backgrounds/ink are near-neutral tints that read as "the
  * neutral", so they fold into that one swatch instead of inflating the count.
  */
+/** Below this HSL saturation a color reads as "neutral" (folds with other neutrals). */
+const NEUTRAL_SAT = 18;
+/** Two saturated colors within this many hue degrees fold to one swatch. */
+const HUE_FOLD_DEG = 22;
+
 export const themeSwatches = (roles: PaletteRoles): ThemeColor[] => {
   // Ordered by visual prominence: the root color leads, then the other accents.
   const ordered: ThemeColor[] = [
@@ -317,18 +326,18 @@ export const themeSwatches = (roles: PaletteRoles): ThemeColor[] => {
   const sameSwatch = (a: string, b: string): boolean => {
     const x = hexToHsl(a);
     const y = hexToHsl(b);
-    const xNeutral = x.s < 18;
-    const yNeutral = y.s < 18;
+    const xNeutral = x.s < NEUTRAL_SAT;
+    const yNeutral = y.s < NEUTRAL_SAT;
     if (xNeutral && yNeutral) {
       return true; // all near-neutrals read as one "neutral" swatch
     }
     if (xNeutral !== yNeutral) {
       return false;
     }
-    // both saturated: fold when within ~22° hue.
+    // both saturated: fold when within the hue-fold window.
     const dh = Math.abs(x.h - y.h) % 360;
     const hueDist = dh > 180 ? 360 - dh : dh;
-    return hueDist < 22;
+    return hueDist < HUE_FOLD_DEG;
   };
   const kept: ThemeColor[] = [];
   for (const tc of ordered) {

@@ -36,10 +36,15 @@ import {
   type Favorite,
 } from "../lib/storage";
 import { siteStateReducer } from "../lib/site-state";
+import type { Palette } from "../lib/palette";
 import { clampIntensity } from "../types";
 import type { Intensity } from "../types";
 
 const storage = createChromeStorage();
+// Session-scoped in-memory palette cache for the API source. Owned here (not a
+// module global in color-source) and reused across Generate clicks so repeated
+// seed+mode lookups skip both the network and the persistent store.
+const paletteMemoryCache = new Map<string, Palette>();
 const refs = queryRefs(document);
 populateModes(refs.mode);
 
@@ -151,6 +156,26 @@ const persistTheme = async (): Promise<void> => {
 };
 
 /**
+ * Commits the CURRENT scheme: applies it live to the page, then persists it for
+ * this origin. The single "apply-live + persist" path shared by the history /
+ * favorite / invert / intensity handlers — each only has to dispatch its unique
+ * action, then call this. Any throw (messaging/storage failure) is caught and
+ * surfaced as an error so the popup can never strand in a disabled/"Generating…"
+ * state with `loading` stuck on.
+ */
+const commitCurrent = async (): Promise<void> => {
+  try {
+    await applyCurrentScheme();
+    await persistTheme();
+  } catch (e) {
+    dispatch({
+      type: "generateError",
+      error: e instanceof Error ? e.message : "apply failed",
+    });
+  }
+};
+
+/**
  * Debounced commit of the intensity slider: persists the new value and, when a
  * theme is currently applied, LIVE re-applies the same palette at the new
  * intensity. Debounced so dragging the slider doesn't flood the page with
@@ -166,11 +191,21 @@ const scheduleIntensityCommit = (): void => {
   intensityTimer = setTimeout(() => {
     intensityTimer = null;
     void (async () => {
-      await storage.setSettings({ intensity: state.intensity });
-      if (state.current && state.applied) {
-        await applyCurrentScheme();
+      try {
+        await storage.setSettings({ intensity: state.intensity });
+        // Only LIVE re-apply when a theme is already on the tab; otherwise just
+        // persist the new value. `commitCurrent` would always apply, so the
+        // apply step stays inline here behind the `applied` guard.
+        if (state.current && state.applied) {
+          await applyCurrentScheme();
+        }
+        await persistTheme();
+      } catch (e) {
+        dispatch({
+          type: "generateError",
+          error: e instanceof Error ? e.message : "apply failed",
+        });
       }
-      await persistTheme();
     })();
   }, INTENSITY_DEBOUNCE_MS);
 };
@@ -184,31 +219,49 @@ const newFavoriteId = (): string =>
 const handlers = {
   onGenerate: async (): Promise<void> => {
     dispatch({ type: "generateStart" });
-    // Always use the online color source for new requests; the API path falls
-    // back to local generation on any failure, and we skip the network entirely
-    // when the browser reports it's offline. Either way generation never throws.
-    const result = await generateForSelection({
-      selection: state.mode,
-      intensity: state.intensity,
-      online: typeof navigator === "undefined" || navigator.onLine !== false,
-      invert: state.invert,
-      deps: { fetchImpl: fetch, cache: storage.paletteCacheStore() },
-    });
-    const resp = await sendMessage({
-      type: "APPLY_SCHEME",
-      palette: result.palette,
-      options: result.options,
-      scheme: result.scheme,
-    });
-    if (!resp.ok) {
-      dispatch({ type: "generateError", error: resp.error ?? "apply failed" });
-      return;
+    // Wrap the whole flow: generation never throws, but sendMessage / pushHistory
+    // / persistTheme can reject, and an uncaught reject after `generateStart`
+    // would strand the popup in a disabled "Generating…" state (only
+    // generateSuccess/generateError clear `loading`).
+    try {
+      // Always use the online color source for new requests; the API path falls
+      // back to local generation on any failure, and we skip the network
+      // entirely when the browser reports it's offline.
+      const result = await generateForSelection({
+        selection: state.mode,
+        intensity: state.intensity,
+        online: navigator?.onLine ?? true,
+        invert: state.invert,
+        deps: {
+          fetchImpl: fetch,
+          cache: storage.paletteCacheStore(),
+          memoryCache: paletteMemoryCache,
+        },
+      });
+      const resp = await sendMessage({
+        type: "APPLY_SCHEME",
+        palette: result.palette,
+        options: result.options,
+        scheme: result.scheme,
+      });
+      if (!resp.ok) {
+        dispatch({
+          type: "generateError",
+          error: resp.error ?? "apply failed",
+        });
+        return;
+      }
+      const history = await storage.pushHistory(result.scheme);
+      dispatch({ type: "generateSuccess", scheme: result.scheme, history });
+      // AUTO: a generated scheme is immediately applied (above) AND persisted +
+      // enabled for this origin, so it sticks across reloads with no extra click.
+      await persistTheme();
+    } catch (e) {
+      dispatch({
+        type: "generateError",
+        error: e instanceof Error ? e.message : "generate failed",
+      });
     }
-    const history = await storage.pushHistory(result.scheme);
-    dispatch({ type: "generateSuccess", scheme: result.scheme, history });
-    // AUTO: a generated scheme is immediately applied (above) AND persisted +
-    // enabled for this origin, so it sticks across reloads with no extra click.
-    await persistTheme();
   },
 
   onReset: async (): Promise<void> => {
@@ -252,8 +305,7 @@ const handlers = {
     // current scheme's palette and re-applying — no color regeneration.
     if (state.current) {
       dispatch({ type: "applyFavorite", scheme: invertScheme(state.current) });
-      await applyCurrentScheme();
-      await persistTheme();
+      await commitCurrent();
     }
   },
 
@@ -274,13 +326,14 @@ const handlers = {
       state.intensity,
       state.overrides,
     );
+    // Await the send so the SHOW_PICKER message is flushed before the popup
+    // closes — no timing guess needed.
     await sendToContent(activeTabId, {
       type: "SHOW_PICKER",
       palette,
       options,
     });
-    // A tiny delay lets the SHOW_PICKER message flush before the popup closes.
-    setTimeout(() => window.close(), 50);
+    window.close();
   },
 
   onToggleFavorites: (): void => {
@@ -292,10 +345,9 @@ const handlers = {
   },
 
   onSelectHistory: async (index: number): Promise<void> => {
+    // Apply the picked entry live and auto-persist it as this origin's theme.
     dispatch({ type: "selectHistory", index });
-    await applyCurrentScheme();
-    // Re-applying a history entry auto-persists it as this origin's theme.
-    await persistTheme();
+    await commitCurrent();
   },
 
   // ONE-CLICK favorite: no name field, no extra step. The current scheme (with
@@ -325,8 +377,7 @@ const handlers = {
     }
     // Selecting a favorite applies it live AND auto-persists it for this origin.
     dispatch({ type: "applyFavorite", scheme: favorite.scheme });
-    await applyCurrentScheme();
-    await persistTheme();
+    await commitCurrent();
   },
 
   onDeleteFavorite: async (id: string): Promise<void> => {

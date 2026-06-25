@@ -1,9 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   apiPalette,
   apiSchemeUrl,
-  clearMemoryCache,
   localPalette,
   paletteCacheKey,
   paletteFromApiResponse,
@@ -84,8 +83,12 @@ describe("localPalette", () => {
 });
 
 describe("apiPalette (cache hit/miss + fallback)", () => {
-  beforeEach(() => clearMemoryCache());
-  afterEach(() => clearMemoryCache());
+  // The in-memory tier is now an injected dependency, so each test gets its own
+  // fresh `Map` for isolation (no shared module global / `clearMemoryCache`).
+  let mem: Map<string, Palette>;
+  beforeEach(() => {
+    mem = new Map<string, Palette>();
+  });
 
   it("MISS: fetches, parses, and warms both caches", async () => {
     const cache = memoryCacheStore();
@@ -93,7 +96,10 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
     const p = await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
+      memoryCache: mem,
     });
+    // The memory tier was warmed too.
+    expect(mem.size).toBe(1);
     // The API's first color drives the palette (becomes the seed/root color).
     expect(p.seed).toBe("#112233");
     expect(p.roles.primary).toBe("#112233");
@@ -105,11 +111,24 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
     const fetchImpl = vi.fn(async () => okResponse(["#112233"]));
     await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
+      memoryCache: mem,
+    });
+    await apiPalette("#6f928b", "triad", {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      memoryCache: mem,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("no memory cache injected: each call hits the network (memory tier skipped)", async () => {
+    const fetchImpl = vi.fn(async () => okResponse(["#112233"]));
+    await apiPalette("#6f928b", "triad", {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
     });
     await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it("HIT (persistent): warms memory from the store without fetching", async () => {
@@ -120,9 +139,12 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
     const p = await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
+      memoryCache: mem,
     });
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(p).toStrictEqual(seeded);
+    // The persistent hit warmed the memory tier.
+    expect(mem.size).toBe(1);
   });
 
   it("FALLBACK: network rejection → local generation (no crash, no undefined)", async () => {
@@ -151,16 +173,19 @@ describe("apiPalette (cache hit/miss + fallback)", () => {
       .fn()
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValueOnce(okResponse(["#abcdef"]));
-    // first call: offline → local fallback, nothing cached
+    // first call: offline → local fallback, nothing cached (neither tier)
     await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
+      memoryCache: mem,
     });
     expect(cache.store.size).toBe(0);
+    expect(mem.size).toBe(0);
     // second call: API now reachable → real palette, cached
     const p = await apiPalette("#6f928b", "triad", {
       fetchImpl: fetchImpl as unknown as typeof fetch,
       cache,
+      memoryCache: mem,
     });
     expect(p.seed).toBe("#abcdef"); // API color became the seed
     expect(cache.store.size).toBe(1);

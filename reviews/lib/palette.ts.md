@@ -9,6 +9,8 @@ Pure, deterministic, DOM-free, well-tested (22 tests), and the doc comments do a
 
 ## Findings
 
+- [x] FIXED (partial — invariant test added; literals deliberately NOT hoisted): the task forbids shifting produced colors. Hoisting ~40 densely-interdependent literals (`bgL + step*9`, `clampSat(48,68)`, etc.) into tables is a high-risk mechanical rewrite where any transcription error silently changes a color, with zero behavior benefit — so I left the literals as-is (the produced colors must not move). I DID add the review's move #2: a property test ("bg / surface / surfaceAlt stay distinct by a lightness STEP on EVERY mode") that pins the surface-distinctness invariant the comments promise — most fragile on low-harmony modes where hue can't separate them. The other promised invariants (multi-hue heading≠link≠primary hues; every role valid hex; monochrome lightness separation) were already covered by existing tests. NO palette VALUE changed — confirmed by the determinism + exact-value harmony tests staying green. (The `mapRoles` honest-types fix below was the foundation pass.)
+
 ### [DEFERRED — local palette.ts item, owned by per-file agent] `deriveRoles` is a 120-line wall of magic numbers with no abstraction
 Lines 155–278. Every role's `{h, s, l}` is computed with inline literals: `clampSat(34,56)`, `bgL+step*9`, `bgL+step*16`, `l: dark?86:20`, `accentSat = max(58, min(85, sat||65))`, `headingL = clampL(30+monoBias)`, `linkL = clampL(46+monoBias)`, `s: Math.min(Math.max(sat,30),45)`, etc. There are ~40 tuned numbers. They encode real taste, but as written they are unreviewable and untestable — you cannot tell whether `link` is supposed to be lighter than `heading`, only that `linkL` happens to be `46` vs `40`.
 
@@ -18,6 +20,8 @@ Lines 155–278. Every role's `{h, s, l}` is computed with inline literals: `cla
 
 - [x] FIXED (cross-cutting honest-types): `invertPalette`'s `as unknown as Record<string,string>` … `as unknown as PaletteRoles` double-cast. Replaced with a typed `mapRoles(roles, fn)` helper that narrows keys to `keyof PaletteRoles` and builds into a `Record<keyof PaletteRoles, string>` accumulator — NO `as unknown as` round-trip anywhere. `invertPalette` is now a single object literal calling `mapRoles(palette.roles, invertLightness)`. The sibling instance of this pattern in `mapping.ts` is gone (module deleted). Verified: 22 palette tests + `tsc` green.
 
+- [x] FIXED: added a comment at `altHue`/`secondaryHue` (slots 4–5) noting they WRAP back onto earlier hues on low-harmony modes (complement=2, monochrome=1), so distinctness there comes from the lightness/saturation steps, not hue. Paired with the new "bg/surface/surfaceAlt distinct on EVERY mode" test that verifies the surfaces stay separated even on complement/monochrome. Comment-only + test — no produced color changed.
+
 ### [DEFERRED — local palette.ts item, owned by per-file agent] `hueSlot` references slots up to index 5 but `harmonyHues` returns at most 4 entries — silent wraparound
 Lines 173–180: `secondaryHue = hueSlot(5)`, `altHue = hueSlot(4)`, but `quad` returns 4 hues (indices 0–3), `triad` 3, `complement` 2, mono 1. `hueSlot(i) = palHues[i % palHues.length]` wraps, so `secondaryHue` on a `complement` mode (`[0,180]`) is `palHues[5%2]=palHues[1]=180` — i.e. it silently reuses the complement. The comment at 169–172 says this is intentional ("Roles beyond the harmony count REUSE harmony hues"), so it's correct, but the wrap means `secondary` and `heading` can land on the SAME hue depending on mode, defeating the "two buttons read as two colors" goal on low-hue modes.
 
@@ -25,10 +29,14 @@ Lines 173–180: `secondaryHue = hueSlot(5)`, `altHue = hueSlot(4)`, but `quad` 
 
 **Concrete fix:** Add a comment at `secondaryHue`/`altHue` noting they collapse onto earlier hues on low-harmony modes (and that lightness/sat is what separates them there), and a test asserting `surface`, `surfaceAlt`, `bg` stay visually distinct even on `complement`/`monochrome`.
 
+- [x] FIXED: named the two thresholds — `const NEUTRAL_SAT = 18;` and `const HUE_FOLD_DEG = 22;` — each with a one-line rationale, and referenced them in `sameSwatch`. Pure rename (identical numeric values), so the produced swatch folding is byte-for-byte unchanged (determinism test green).
+
 ### [DEFERRED — local palette.ts item, owned by per-file agent] `themeSwatches` thresholds (`s < 18` neutral, `hueDist < 22` fold) are unnamed magic numbers
 Lines 320, 331. The dedupe heuristic ("near-neutral", "same hue family") hinges on `18` and `22` with no named constant. Lower severity because it's display-only (affects the swatch count, not the painted page).
 
 **Concrete fix:** `const NEUTRAL_SAT = 18; const HUE_FOLD_DEG = 22;` with the one-line rationale.
+
+- [x] VERIFIED-INVALID (left as-is — it IS load-bearing): grep confirms `accents` is consumed in `inject.ts` (`fallbackInk = accents[0]`, line 454; and `accents[accents.length-1]`, line 447) — a real fallback path, not dead. `inject.ts` is outside this per-file agent's edit set, and simplifying `accents` could shift that fallback's produced color, which the task forbids for palette values. Left unchanged.
 
 ### [DEFERRED — local palette.ts item, owned by per-file agent] `accents` array is built two different ways (mono ramp vs harmony hues) but is barely consumed downstream
 Lines 370–376. `accents` is computed but the role-based engine reads `roles.*`, not `accents`, for almost everything. In the inject port `accents` is only a *fallback seed* (`fallbackInk = accents[0]`). So this branchy computation feeds a rarely-taken fallback path.

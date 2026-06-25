@@ -55,13 +55,17 @@ describe("per-site persistence wiring", () => {
     return current;
   };
 
-  /** Replays "while enabled, a new apply updates the saved scheme". */
+  /**
+   * Replays "while enabled, a new apply updates the saved scheme". The popup
+   * commits every change through `persistTheme`, i.e. an `enable` action with
+   * the live scheme (which replaces `savedScheme`).
+   */
   const updateWhileEnabled = async (
     scheme: ReturnType<typeof schemeFromPalette>,
     intensity: number,
   ) => {
     const next = siteStateReducer(await storage.getSiteState(ORIGIN), {
-      type: "rememberScheme",
+      type: "enable",
       scheme: schemeWithIntensity(scheme, intensity),
     });
     await storage.setSiteState(ORIGIN, next);
@@ -124,35 +128,30 @@ describe("per-site persistence wiring", () => {
     );
   });
 
-  it("disabling stops auto-apply but KEEPS the saved scheme", async () => {
+  it("resetting stops auto-apply and forgets the saved scheme", async () => {
     await enable(mockPalette, 70);
-    // Popup's toggle-off path.
-    const off = siteStateReducer(await storage.getSiteState(ORIGIN), {
-      type: "disable",
+    // Mirror the popup's `onReset`: a full forget written straight to storage.
+    await storage.setSiteState(ORIGIN, {
+      enabled: false,
+      savedScheme: undefined,
     });
-    await storage.setSiteState(ORIGIN, off);
 
     const state = await storage.getSiteState(ORIGIN);
     expect(state.enabled).toBe(false);
-    // The content script no longer auto-applies on the next load...
+    // The content script no longer auto-applies on the next load.
     expect(loadDecision(state)).toEqual({ apply: false });
-    // ...but the scheme is retained so re-enabling restores it.
-    expect(state.savedScheme?.schemeDetails.palette).toStrictEqual(mockPalette);
+    expect(state.savedScheme).toBeUndefined();
   });
 
-  it("re-enabling after disable restores the previously-saved look", async () => {
+  it("re-enabling after a reset stores the freshly-applied scheme again", async () => {
     await enable(mockPalette, 45);
-    const off = siteStateReducer(await storage.getSiteState(ORIGIN), {
-      type: "disable",
+    await storage.setSiteState(ORIGIN, {
+      enabled: false,
+      savedScheme: undefined,
     });
-    await storage.setSiteState(ORIGIN, off);
 
-    // Re-enable WITHOUT supplying a scheme (e.g. nothing currently applied) →
-    // the kept scheme is reused.
-    const on = siteStateReducer(await storage.getSiteState(ORIGIN), {
-      type: "enable",
-    });
-    await storage.setSiteState(ORIGIN, on);
+    // Re-enable by applying a scheme again (the only way the popup enables).
+    await enable(mockPalette, 45);
 
     const decision = loadDecision(await storage.getSiteState(ORIGIN));
     expect(decision.apply).toBe(true);

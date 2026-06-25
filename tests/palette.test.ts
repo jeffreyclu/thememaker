@@ -234,6 +234,30 @@ describe("generatePalette", () => {
       const light = generatePalette(SEED, "monochrome-light").roles;
       expect(luminanceOf(dark.bg)).toBeLessThan(luminanceOf(light.bg));
     });
+
+    it("bg / surface / surfaceAlt stay distinct by a lightness STEP on EVERY mode", () => {
+      // The promise the comments make: page vs card vs code read as different
+      // surfaces. On low-harmony modes (complement/monochrome) hue can't separate
+      // them (slots wrap), so the lightness step is the only thing keeping them
+      // apart — this pins that invariant where it's most fragile.
+      for (const mode of modes) {
+        const { roles } = generatePalette(SEED, mode);
+        const l = {
+          bg: hexToHsl(roles.bg).l,
+          surface: hexToHsl(roles.surface).l,
+          surfaceAlt: hexToHsl(roles.surfaceAlt).l,
+        };
+        // Three distinct lightness values, each at least ~4% L apart from bg.
+        expect(Math.abs(l.surface - l.bg)).toBeGreaterThanOrEqual(4);
+        expect(Math.abs(l.surfaceAlt - l.bg)).toBeGreaterThanOrEqual(4);
+        expect(Math.abs(l.surfaceAlt - l.surface)).toBeGreaterThanOrEqual(4);
+        // The three surfaces are never the same hex.
+        const hexes = [roles.bg, roles.surface, roles.surfaceAlt].map((h) =>
+          h.toLowerCase(),
+        );
+        expect(new Set(hexes).size).toBe(3);
+      }
+    });
   });
 });
 

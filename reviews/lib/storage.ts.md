@@ -9,6 +9,8 @@ The best-architected file in the codebase. Dependency inversion done correctly: 
 
 ## Findings
 
+- [x] FIXED: `getSettings`/`getSiteState` merge `...stored` over defaults — a partial/corrupt stored object could shadow a default with `undefined`. Added a `definedOnly(stored)` helper that strips `undefined`-valued keys before the spread; both getters now do `{ ...DEFAULT, ...definedOnly(stored) }`. Build/test/lint green.
+
 ### [low] `getSettings`/`getSiteState` merge `...stored` over defaults — a partial/corrupt stored object can shadow a default with `undefined`
 Lines 160, 173: `{ ...DEFAULT_SETTINGS, ...stored }`. If `stored` is `{ intensity: undefined }` (e.g. a partial write or migration), the spread overwrites the default `intensity` with `undefined`. In practice writes are whole objects so this is unlikely, but the merge trusts stored shape.
 
@@ -16,12 +18,16 @@ Lines 160, 173: `{ ...DEFAULT_SETTINGS, ...stored }`. If `stored` is `{ intensit
 
 **Concrete fix:** Either validate/clamp on read (e.g. `intensity: clampIntensity(stored?.intensity ?? DEFAULT.intensity)`) or filter `undefined` values out of `stored` before the spread. Low priority given current write discipline.
 
+- [x] VERIFIED-INVALID (left as-is): unifying `saveFavorite`/`pushHistory` bounded-append would add a parameterized helper (favorites need id-replace, history doesn't) for a "mild DRY" low — speculative abstraction over two ~3-line bodies. Biasing to simplicity, not worth the seam. No behavior issue.
+
 ### [low] `saveFavorite` and `pushHistory` both implement "append + drop oldest over max" with slightly different code
 `saveFavorite` uses a `while (next.length > max) next.shift()` loop (204–206); `pushHistory` delegates to `enqueueScheme` (theme-engine) which does the same `while/shift`. Two implementations of bounded-append.
 
 **Why it matters:** Mild DRY. The favorites bound is inlined while history's is a shared helper.
 
 **Concrete fix:** Reuse one `boundedAppend(list, item, max, idKey?)` helper for both (favorites needs the id-replace step, history doesn't — parameterize it). Minor.
+
+- [x] VERIFIED-INVALID (left as-is): the `cache:` + `palette:` double prefix is cosmetic and the review confirms it's "not a bug" (consistent read/write). Changing the prefix would alter the persisted `chrome.storage.local` key namespace, silently invalidating every existing user's cached palettes — a behavior/migration change, not a cleanup. Left unchanged to preserve behavior.
 
 ### [low] `paletteCacheStore` uses `PALETTE_CACHE_PREFIX = "cache:"` but `color-source.ts:paletteCacheKey` produces keys already prefixed `palette:...`
 Line 71 + 227–229: stored key becomes `cache:palette:<hex>:<mode>` (double-namespaced). Not a bug (it's consistent on read and write), but the double prefix is redundant — `cache:` then `palette:`.

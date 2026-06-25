@@ -50,8 +50,6 @@ export interface PopupState {
   picking: boolean;
   /** Whether the details disclosure is open. */
   showDetails: boolean;
-  /** Whether the customize (element-picker) disclosure is open. */
-  showCustomize: boolean;
   /** Whether the favorites disclosure is open. */
   showFavorites: boolean;
   /** Whether the history disclosure is open. */
@@ -75,7 +73,6 @@ export const initialPopupState: PopupState = {
   overrides: {},
   picking: false,
   showDetails: false,
-  showCustomize: false,
   showFavorites: false,
   showHistory: false,
   loading: false,
@@ -104,14 +101,14 @@ export interface HydrateInputs {
  */
 export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
   const savedScheme = inputs.site.savedScheme ?? null;
-  const savedIntensity = savedScheme?.schemeDetails?.intensity;
+  // Read the saved scheme's metadata once instead of chaining into it repeatedly.
+  const saved = savedScheme?.schemeDetails;
   return {
     mode: inputs.settings.mode,
     // Prefer the saved scheme's intensity so the dial matches what is on the
     // page; clamp to the selectable range (migrates old/out-of-range values).
-    intensity: clampIntensity(savedIntensity ?? inputs.settings.intensity),
-    invert:
-      savedScheme?.schemeDetails?.invert ?? inputs.settings.invert ?? false,
+    intensity: clampIntensity(saved?.intensity ?? inputs.settings.intensity),
+    invert: saved?.invert ?? inputs.settings.invert ?? false,
     favorites: inputs.favorites,
     history: inputs.history,
     origin: inputs.origin,
@@ -120,7 +117,7 @@ export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
     current: savedScheme,
     // Restore the saved custom-theme overrides so reopening the popup on a
     // persisted site shows (and keeps re-applying) the user's picks.
-    overrides: savedScheme?.schemeDetails?.overrides ?? {},
+    overrides: saved?.overrides ?? {},
   };
 };
 
@@ -142,7 +139,6 @@ export type PopupAction =
   | { type: "clearOverrides" }
   | { type: "setPicking"; picking: boolean }
   | { type: "toggleDetails" }
-  | { type: "toggleCustomize" }
   | { type: "toggleFavorites" }
   | { type: "toggleHistory" }
   | { type: "setSiteEnabled"; enabled: boolean };
@@ -231,8 +227,6 @@ export const popupReducer = (
       return { ...state, picking: action.picking };
     case "toggleDetails":
       return { ...state, showDetails: !state.showDetails };
-    case "toggleCustomize":
-      return { ...state, showCustomize: !state.showCustomize };
     case "toggleFavorites":
       return { ...state, showFavorites: !state.showFavorites };
     case "toggleHistory":

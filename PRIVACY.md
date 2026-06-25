@@ -20,6 +20,10 @@ This data is stored using the browser's own storage:
 - **`chrome.storage.sync`** — synced across your own signed-in browsers by the
   browser vendor (e.g. your Google account). It is **never** sent to us; we do
   not operate any server that receives it.
+- **A site's own `localStorage`** — on a themed page we cache a single value, the
+  last applied base background color (key `__thememaker_base__`), so the page can
+  be tinted instantly on the next load without a flash of the original colors.
+  It stays on that site, on this device, and contains no personal data.
 
 You can clear all of it at any time by removing the extension or using your
 browser's "clear data" controls.

@@ -104,6 +104,19 @@ export const chromeArea = (area: chrome.storage.StorageArea): StorageArea => ({
     }),
 });
 
+/**
+ * Drops keys whose value is `undefined` so a partial/legacy stored object can't
+ * shadow a default when spread over it (`{ ...DEFAULT, ...definedOnly(stored) }`).
+ */
+const definedOnly = <T extends object>(stored: T | undefined): Partial<T> => {
+  if (!stored) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(stored).filter(([, v]) => v !== undefined),
+  ) as Partial<T>;
+};
+
 /** Normalizes a tab URL to an origin used as the per-site storage key. */
 export const originFromUrl = (url: string | undefined): string | null => {
   if (!url) {
@@ -157,7 +170,7 @@ export class ThememakerStorage {
   /** @returns persisted settings merged over defaults. */
   async getSettings(): Promise<Settings> {
     const stored = await this.sync.get<Partial<Settings>>(KEYS.settings);
-    return { ...DEFAULT_SETTINGS, ...stored };
+    return { ...DEFAULT_SETTINGS, ...definedOnly(stored) };
   }
 
   /** Merges `patch` into settings and persists the result. */
@@ -170,7 +183,7 @@ export class ThememakerStorage {
   /** @returns per-site state for `origin`, defaulted when absent. */
   async getSiteState(origin: string): Promise<SiteState> {
     const stored = await this.local.get<SiteState>(KEYS.sitePrefix + origin);
-    return { ...DEFAULT_SITE_STATE, ...stored };
+    return { ...DEFAULT_SITE_STATE, ...definedOnly(stored) };
   }
 
   /** Merges `patch` into the per-site state for `origin` and persists it. */

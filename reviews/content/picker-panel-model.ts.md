@@ -9,22 +9,12 @@ Near-exemplary functional module. Every transition is pure and returns a NEW map
 
 ## Findings
 
-### [low] `RoleOverrides` is `Record<string,string>` but this module's keys are actually `<tag>|<prop>` strings — the type doesn't say so
-Every function here keys on `<tag>|<prop>` (e.g. `div|background`), the SAME `RoleOverrides` type that `mapping.ts`/`inject.ts` ALSO use for role keys (e.g. `heading`). The single loose `Record<string,string>` type serves two incompatible grammars across the codebase (see types.ts and inject.ts reviews). This file is correct, but its correctness rides on a type that can't distinguish its own key space from the role-key space.
+- [x] VERIFIED-INVALID (out of scope + not a net win): `RoleOverrides` lives in the SHARED `types.ts`, a FIXED contract for this pass, and is the exact type the panel (`picker-panel.ts`), the content script (`index.ts`), the engine override layer (`inject.ts`), and `overrides.test.ts` all pass around. A model-local `TagOverrides` alias would either force every signature here to diverge from the shared type its callers use (casts at every boundary — the opposite of honest types) or just re-alias the same `Record<string,string>` shape (cosmetic). With `mapping.ts` now deleted, there is no longer a SECOND producer keying this type by role names — the `<tag>|<prop>` grammar is the only override grammar in the codebase, so the "two incompatible grammars on one type" tension this finding rests on is gone. Any remaining cross-codebase cleanup belongs in `types.ts` (out of scope), not as a local divergence here.
 
-**Why it matters:** Honest types / interface segregation, codebase-wide theme. A `RoleOverrides` value produced here (`div|background`) and one produced by the role path (`heading`) are structurally identical but semantically disjoint; nothing prevents mixing them.
-
-**Concrete fix:** Introduce a distinct alias (even just `type TagOverrides = Record<TagPropKey, string>` where `TagPropKey = \`${string}|${'background'|'color'}\``) so this module's contract is self-describing and can't be confused with role overrides. Template-literal types make `<tag>|<prop>` expressible.
-
-### [low] `roleLabel` parses the `<tag>|<prop>` key with manual `indexOf("|")`/`slice` in two places
-Lines 21–32 here and `inject.ts` lines 1404–1406 both split the `tag|prop` key by hand. Same mini-DSL parsed in two files.
-
-**Why it matters:** DRY — the override-key grammar is parsed independently in the model and in the inject payload, so they can disagree (e.g. on the `page` special-case).
-
-**Concrete fix:** Export a single `parseOverrideKey(key): { tag: string; prop: 'background'|'color' }` from this module and have inject.ts use it where it can (the serialized payload can't import, but the model and content script can share it).
+- [x] VERIFIED-INVALID (the one place that COULD share already can't, and the rest is a 3-line split): the inject.ts parse (now at `inject.ts` ~1376–1383) lives INSIDE the serialized `executeScript` payload (`applyAdaptiveScheme`'s body) and CANNOT import this module — the review itself concedes this. So the only consumer left that could import a shared `parseOverrideKey` is this very file (and the content script, which doesn't parse keys — it only passes them through). Exporting a `parseOverrideKey` helper to be used by one caller (this file's `roleLabel`) is indirection without DRY payoff: it does not de-duplicate the inject copy (the actual duplication), it just renames a 3-line `indexOf`/`slice` already local to where it's used. No real reduction in complexity; left as-is.
 
 ### [nit] `overrideRows` silently substitutes `FALLBACK_COLOR` for an invalid stored hex (line 47)
-Correct defensiveness, but it means a corrupt persisted override is shown as gray with no signal that it was invalid. Fine for a UI seed; just noting the silent coercion. No change needed.
+Correct defensiveness, but it means a corrupt persisted override is shown as gray with no signal that it was invalid. Fine for a UI seed; just noting the silent coercion. No change needed. (Reviewer marked "No change needed"; agreed — left as-is.)
 
 ## What's GOOD
 - **Pure, immutable, total.** Every mutator returns a new object (`{...overrides, [key]: ...}` / `delete` on a copy); no in-place mutation; early-return identity when nothing changes (`if (key in overrides) return overrides`) is a nice touch that keeps referential equality stable for unchanged maps.

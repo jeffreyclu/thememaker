@@ -77,6 +77,14 @@ export interface PaletteSourceDeps {
   fetchImpl?: typeof fetch;
   /** Optional persistent cache (e.g. chrome.storage-backed). */
   cache?: PaletteCacheStore;
+  /**
+   * Optional in-memory (session) cache tier, injected so it is scoped to the
+   * owner rather than a module global. The caller passes one long-lived `Map`
+   * across requests (e.g. the popup) to get the fast in-memory tier; tests pass
+   * a fresh `Map` per case for isolation. When absent, the memory tier is
+   * skipped (the persistent cache + fallback still apply).
+   */
+  memoryCache?: Map<string, Palette>;
 }
 
 /**
@@ -84,12 +92,6 @@ export interface PaletteSourceDeps {
  */
 export const localPalette = (seed: string, mode: ColorMode): Palette =>
   generatePalette(seed, mode);
-
-// Module-level in-memory cache shared across calls within a session.
-const memoryCache = new Map<string, Palette>();
-
-/** Test/diagnostic helper: clears the in-memory cache. */
-export const clearMemoryCache = (): void => memoryCache.clear();
 
 /**
  * Resolves a palette from the API source with full resilience:
@@ -107,9 +109,10 @@ export const apiPalette = async (
   deps: PaletteSourceDeps = {},
 ): Promise<Palette> => {
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const memoryCache = deps.memoryCache;
   const key = paletteCacheKey(seed, mode);
 
-  const cached = memoryCache.get(key);
+  const cached = memoryCache?.get(key);
   if (cached) {
     return cached;
   }
@@ -118,7 +121,7 @@ export const apiPalette = async (
     try {
       const persisted = await deps.cache.get(key);
       if (persisted) {
-        memoryCache.set(key, persisted);
+        memoryCache?.set(key, persisted);
         return persisted;
       }
     } catch {
@@ -133,7 +136,7 @@ export const apiPalette = async (
     if (!palette) {
       throw new Error("malformed color api response");
     }
-    memoryCache.set(key, palette);
+    memoryCache?.set(key, palette);
     if (deps.cache) {
       try {
         await deps.cache.set(key, palette);

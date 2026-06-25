@@ -15,12 +15,11 @@ import { clampIntensity, DEFAULT_INTENSITY } from "../types";
 import type { Palette } from "./palette";
 import type { SiteState } from "./storage";
 
-export type SiteAction =
-  | { type: "enable"; scheme?: Scheme }
-  | { type: "disable" }
-  | { type: "toggle"; scheme?: Scheme }
-  | { type: "rememberScheme"; scheme: Scheme }
-  | { type: "forgetScheme" };
+// `enable` is the only transition the app dispatches. The popup owns the "full
+// reset" (off + forget) and writes that state directly (see popup `onReset`), so
+// no `disable`/`forget` reducer action is needed. Add variants here when a real
+// caller dispatches them — not before.
+export type SiteAction = { type: "enable"; scheme?: Scheme };
 
 /** Pure reducer: given current per-site state and an action, return the next. */
 export const siteStateReducer = (
@@ -38,20 +37,6 @@ export const siteStateReducer = (
         ? { ...state, enabled: true }
         : { ...state, enabled: true, savedScheme };
     }
-    case "disable":
-      // "Off means off" only for AUTO-APPLY: we flip `enabled` but KEEP
-      // `savedScheme`, so re-enabling restores the last look without the user
-      // re-saving. The content script gates on `enabled`, so a disabled site
-      // never auto-applies even though the scheme is still remembered.
-      return { ...state, enabled: false };
-    case "toggle":
-      return state.enabled
-        ? siteStateReducer(state, { type: "disable" })
-        : siteStateReducer(state, { type: "enable", scheme: action.scheme });
-    case "rememberScheme":
-      return { ...state, savedScheme: action.scheme };
-    case "forgetScheme":
-      return { ...state, savedScheme: undefined };
     default:
       return state;
   }

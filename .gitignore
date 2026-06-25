@@ -10,3 +10,6 @@ playwright-report/
 
 # Private interview-prep notes (not for the public repo)
 ELI5.md
+
+# Claude Code worktrees/config
+.claude/

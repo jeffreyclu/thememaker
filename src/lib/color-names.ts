@@ -30,6 +30,8 @@ const hueFamily = (h: number): string => {
 /**
  * @returns a short, readable name for a hex color, e.g. "Vivid Blue",
  * "Dark Teal", "Pale Pink", "Gray", "Black". Deterministic and offline.
+ * @throws if `hex` is not a valid color (via `normalizeHex`). Callers pass
+ * palette seeds, which are always valid hex.
  */
 export const describeColor = (hex: string): string => {
   const { h, s, l } = hexToHsl(normalizeHex(hex));

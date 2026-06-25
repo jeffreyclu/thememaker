@@ -47,25 +47,17 @@ const isButtonLike = (el: Element): boolean => {
   return /(^|[-_ ])(btn|button)([-_ ]|$)/.test(cls);
 };
 
-/** True when the element renders its OWN non-transparent background. */
+/**
+ * True when the element renders its OWN non-transparent background.
+ *
+ * `getComputedStyle().backgroundColor` is always an `rgb()`/`rgba()` value (or
+ * `"transparent"`), and {@link rgbToHex} already encodes exactly "is this a real,
+ * non-transparent color?" — it returns null for `transparent` and for alpha 0.
+ * So "has own background" is precisely "that value parses to a color".
+ */
 const hasOwnBackground = (el: Element): boolean => {
   try {
-    const bg = getComputedStyle(el).backgroundColor;
-    if (!bg) {
-      return false;
-    }
-    const s = bg.trim().toLowerCase();
-    if (s === "transparent") {
-      return false;
-    }
-    const m = s.match(/rgba?\([^)]*\)/);
-    if (m) {
-      // Fully-transparent alpha → no own background.
-      const parts = s.replace(/rgba?\(|\)/g, "").split(",");
-      const a = parts.length === 4 ? parseFloat(parts[3]) : 1;
-      return a > 0;
-    }
-    return s.startsWith("#");
+    return rgbToHex(getComputedStyle(el).backgroundColor) !== null;
   } catch {
     return false;
   }
@@ -165,6 +157,18 @@ const rgbToHex = (value: string): string | null => {
 };
 
 /**
+ * Seed when NOTHING opaque is found walking up the ancestor chain for a
+ * background pick. We assume a default white page — the common case. CAVEAT: on a
+ * page whose base is dark via some mechanism we can't read (e.g. a body bg the
+ * walk missed), this seeds a too-light starting swatch; the user simply re-picks
+ * the color. Never seed black here (a transparent element must not paint a tag
+ * black). See {@link rgbToHex}.
+ */
+const ASSUMED_PAGE_BG = "#ffffff";
+/** Seed for an unparseable text color or any thrown lookup — a neutral mid-gray. */
+const NEUTRAL_TEXT = "#808080";
+
+/**
  * The element's CURRENT color for `prop`, as `#rrggbb`, to pre-fill the input.
  * For a BACKGROUND on a transparent element we walk UP to the first ancestor
  * with a real (opaque) background, so the picker seeds with what is actually
@@ -184,11 +188,11 @@ export const currentColorFor = (
         }
         node = node.parentElement;
       }
-      return "#ffffff"; // nothing opaque up the tree → assume a white page
+      return ASSUMED_PAGE_BG; // nothing opaque up the tree → assume a white page
     }
-    return rgbToHex(getComputedStyle(el).color) ?? "#808080";
+    return rgbToHex(getComputedStyle(el).color) ?? NEUTRAL_TEXT;
   } catch {
-    return "#808080";
+    return NEUTRAL_TEXT;
   }
 };
 
@@ -264,9 +268,10 @@ export const startPick = (handlers: PickHandlers): PickSession => {
   };
 
   const removeOverlay = (): void => {
+    // `overlay` is the only handle to the only `#OVERLAY_ID` we ever create
+    // (always via `ensureOverlay`), so removing it is sufficient.
     overlay?.remove();
     overlay = null;
-    document.getElementById(OVERLAY_ID)?.remove();
   };
 
   const onMove = (e: MouseEvent): void => {
@@ -292,18 +297,7 @@ export const startPick = (handlers: PickHandlers): PickSession => {
     removeOverlay();
   };
 
-  const teardown = (): void => {
-    if (!active) {
-      return;
-    }
-    active = false;
-    document.removeEventListener("mousemove", onMove, true);
-    document.removeEventListener("click", onClick, true);
-    document.removeEventListener("scroll", onScroll, true);
-    removeOverlay();
-  };
-
-  function onClick(e: MouseEvent): void {
+  const onClick = (e: MouseEvent): void => {
     const target = e.target as Element | null;
     // Clicks on the floating control itself pass through untouched, so its own
     // buttons/inputs work normally.
@@ -321,7 +315,18 @@ export const startPick = (handlers: PickHandlers): PickSession => {
     // live so the user can pick several elements in a row (panel owns stop).
     const prop = propForElement(target);
     handlers.onPicked(pickKeyFor(target), currentColorFor(target, prop));
-  }
+  };
+
+  const teardown = (): void => {
+    if (!active) {
+      return;
+    }
+    active = false;
+    document.removeEventListener("mousemove", onMove, true);
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("scroll", onScroll, true);
+    removeOverlay();
+  };
 
   document.addEventListener("mousemove", onMove, true);
   document.addEventListener("click", onClick, true);

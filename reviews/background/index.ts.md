@@ -9,12 +9,16 @@ A correctly-thin service worker. All real logic is delegated to the (tested) `ro
 
 ## Findings
 
+- [x] FIXED: removed the no-op `onInstalled` breadcrumb (`console.log("[Thememaker] service worker installed")`) entirely. There's no migration to run, so an empty install listener is pure noise; dropped the whole listener rather than keep a hollow handler. Build/test/lint green.
+
 ### [low] The install `console.log` is a leftover dev breadcrumb
 Lines 15–17: `onInstalled` logs "service worker installed". Harmless, but it's a noise log that ships to users' service-worker console with no diagnostic value (no version, no migration). Either make it useful (log version / run a migration hook) or drop it.
 
 **Why it matters:** Minor — production log hygiene for a public extension.
 
 **Concrete fix:** Remove it, or upgrade to a real install/upgrade handler (e.g. log `chrome.runtime.getManifest().version` and run any storage migration). Right now it's a no-op breadcrumb.
+
+- [x] VERIFIED-INVALID (left as-is): the review itself says "None strictly required given the threat model… Don't inflate this — it's low-risk here." The routed actions (apply/reset/query a style on the active tab) are not sensitive and `routeMessage` is total/safe. Adding a `sender.id` check would be speculative hardening; left unchanged per the reviewer's own guidance.
 
 ### [low] `onMessage` listener has no `sender` validation
 Lines 19–32. Any context that can `chrome.runtime.sendMessage` to this extension reaches `routeMessage`. For an extension with `activeTab`+`scripting`, the messages are gesture-bound and low-risk, and `routeMessage` is total/safe — but a defensible public extension typically checks `sender` for sensitive actions.

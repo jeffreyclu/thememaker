@@ -9,6 +9,8 @@ A small, pure, well-tested reducer with a clean discriminated-union action type 
 
 ## Findings
 
+- [x] FIXED: grep confirmed the ONLY production dispatch is `{ type: "enable" }` (popup `persistTheme`); `disable`/`toggle`/`rememberScheme`/`forgetScheme` had no production caller (only tests dispatched them — the false-coverage pattern). Collapsed `SiteAction` to the single `enable` variant and removed the dead reducer branches + default-passthrough recursion. Updated `tests/site-state.test.ts` and `tests/site-persistence.test.ts` to exercise the REAL transitions (`enable`, and the popup's raw `setSiteState` reset) instead of the dead actions. Build/test/lint green.
+
 ### [low] `SiteAction` has five variants but only `enable`/`disable` appear used; `toggle`/`rememberScheme`/`forgetScheme` may be speculative
 The reducer handles `enable`, `disable`, `toggle`, `rememberScheme`, `forgetScheme`. The popup uses `enable` (via `persistTheme`) and writes `{enabled:false, savedScheme:undefined}` directly on reset (NOT via the `disable` action). Worth confirming `toggle`/`rememberScheme`/`forgetScheme` have real callers — if not, they're speculative generality (open/closed over-design).
 
@@ -16,12 +18,16 @@ The reducer handles `enable`, `disable`, `toggle`, `rememberScheme`, `forgetSche
 
 **Concrete fix:** Grep for each action's dispatch; delete any with no production caller. `toggle` recursing into `enable`/`disable` is elegant but pointless if nothing dispatches `toggle`. (Tests may dispatch them — but tests covering unused actions is exactly the false-coverage pattern seen in theme-engine.ts.)
 
+- [x] VERIFIED-INVALID (resolved by the removal above): "route reset through the reducer" would mean re-adding the `disable`/`forgetScheme` actions I just deleted as dead surface — contradictory. The popup OWNS the full-reset (off + forget) as a recorded behavior and writes it directly; with only `enable` left, the reducer is no longer the place for it. Documented the popup's ownership in a code comment on `SiteAction`.
+
 ### [low] `onReset` in popup bypasses the `disable`/`forgetScheme` actions and writes raw state
 Observed in popup/index.ts (222–225): reset writes `{ enabled:false, savedScheme:undefined }` directly via `storage.setSiteState`, NOT through `siteStateReducer`. So the reducer's careful "disable keeps savedScheme" semantics are deliberately circumvented by the one place that wants a full forget. That's correct behavior, but it means the reducer and the popup disagree on what "off" means, and the reducer's `disable` action is arguably unused.
 
 **Why it matters:** The reducer exists to centralize site-state transitions, but a key transition (reset = disable + forget) is done outside it. Either route reset through `siteStateReducer(state, {type:'disable'})` + `{type:'forgetScheme'}`, or acknowledge the popup owns the "full reset" case.
 
 **Concrete fix:** Express reset as a reducer action (`{type:'reset'}` or compose `disable`+`forgetScheme`) so ALL site-state transitions go through the pure reducer — single source of truth.
+
+- [x] VERIFIED-INVALID (out of leaf scope): the shared `applyOptions(intensity, overrides)` builder is a cross-file nit spanning content/index.ts + engine-bridge.ts (not in this per-file agent's edit set); extracting it here would only touch one of the four sites. A nit, deferred to whoever owns the cross-cutting options seam. No defect in site-state.ts itself.
 
 ### [nit] `loadDecision` and the popup's `optionsFor`/engine-bridge build `options` with the same "empty overrides → omit" logic
 Lines 96–99 repeat the `overrides && Object.keys(overrides).length > 0 ? {intensity, overrides} : {intensity}` shape seen in content/index.ts and engine-bridge.ts. Same absence-representation logic in a fourth place.

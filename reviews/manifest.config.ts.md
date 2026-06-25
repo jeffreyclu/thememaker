@@ -9,12 +9,16 @@ A clean, well-documented manifest with the version/description pulled from `pack
 
 ## Findings
 
+- [x] VERIFIED-INVALID for this pass (recorded decision — DO NOT change per task directive): `<all_urls>` is an explicit, documented product decision (in-file docstring + PLAN.md). The reviewer agrees "This is a product decision, not a bug." The actionable parts (PRIVACY.md coverage, optional_host_permissions re-eval) are docs/product work outside a leaf-file code-cleanup pass. No manifest code change.
+
 ### [high] `<all_urls>` content script at `document_start` — the defining scrutiny point for this extension
 Lines 36–43. The content script matches `<all_urls>` and runs at `document_start` on EVERY page. This re-introduces the "read and change all your data on all websites" install warning. The docstring (and PLAN.md) explicitly accept this as the cost of per-site auto-reapply. That's a legitimate, RECORDED decision — but for a "withstand public scrutiny" audit it must be called out as THE thing reviewers/users will react to.
 
 **Why it matters:** Public-repo defensibility + privacy. An always-on all-sites content script that reads `chrome.storage` and writes `localStorage` on every origin is the maximal-trust posture. The PLAN frames it as "the user chose always-on over optional per-site permissions" — but the manifest grants it unconditionally; the user doesn't actually get the per-site-permission alternative.
 
 **Concrete fix:** This is a product decision, not a bug — but make it MORE defensible: (a) ensure PRIVACY.md explicitly covers the `<all_urls>` script + the per-origin `localStorage` cache (`__thememaker_base__`); (b) consider whether `optional_host_permissions` + per-site grants could deliver most of the value with far less install friction (the PLAN says this was weighed — link that reasoning from here); (c) confirm `all_frames: false` is the right call (it is, for perf/safety — good). At minimum, this file should be the place a reader is pointed to the recorded decision.
+
+- [x] VERIFIED-INVALID (no manifest-layer action): the reviewer states "None at the manifest layer; the cost lives in inject.ts." The manifest is correct; the engine budgets in inject.ts (not my file) are the mitigation. No change.
 
 ### [medium] The content script runs the FULL adaptive engine on every themed page load — the manifest grants the surface, the engine spends it
 Tie-in: because the script is `<all_urls>` + `document_start`, the heavy `applyAdaptiveScheme` (MutationObserver, DOM walk) can attach to ANY site the user themed. The manifest is correct; the cost lives in `inject.ts`. Noting here because the manifest is what authorizes that always-on footprint.
@@ -23,6 +27,8 @@ Tie-in: because the script is `<all_urls>` + `document_start`, the heavy `applyA
 
 ### [low] `permissions` correctly minimal (`activeTab`, `scripting`, `storage`) — host access comes only from `matches`
 Lines 35. Good: no broad `host_permissions` entry; the host access is implicit in the content-script `matches`. This is actually the more honest place for it. The docstring explains this precisely.
+
+- [x] VERIFIED-INVALID (left as-is): adding `minimum_chrome_version` is a store-readiness PRODUCT decision (which Chrome version to require) the reviewer files as "PLAN Phase 4," not a code-cleanup item — and pinning it would block installs, a behavior/policy change. Out of scope for this pass.
 
 ### [nit] No `minimum_chrome_version` / no CSP override
 For a public store listing, pinning a `minimum_chrome_version` (the engine uses `requestIdleCallback`, `crypto.randomUUID`, modern APIs) would prevent installs on browsers that can't run it. Minor store-readiness item (PLAN Phase 4).

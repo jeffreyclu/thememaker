@@ -9,6 +9,8 @@
 
 ## Findings
 
+- [x] VERIFIED (per-file pass): nothing dead remains after the foundation removed `htmlElements`. Grep confirms both surviving exports are live — `modes` (popup view/select + engine-bridge), `MAX_HISTORY` (history.ts + storage.ts) — and there are ZERO lingering references to `htmlElements`/`clearContainer`/`HtmlElements` anywhere in `src/` or `tests/`. No change needed.
+
 - [x] FIXED: `htmlElements` was dead v1-engine config (only the dead `theme-engine.ts` consumed it). Deleted all seven buckets (incl. the doubly-dead `clearContainer`) and the `HtmlElements` import. `config.ts` now shrinks to `modes` + `MAX_HISTORY`.
 
 - [x] FIXED: `modes: ColorMode[]` had no compile-time validity check. `ColorMode` is now a union (in types.ts), so `modes` (and `harmonyHues` and the popup select) are validated against one source of truth at compile time.

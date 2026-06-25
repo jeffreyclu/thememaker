@@ -9,27 +9,13 @@ A genuinely clean view component: Shadow DOM isolation, callback-based intents (
 
 ## Findings
 
-### [medium] `panel.innerHTML = \`...\`` for the static shell, then `querySelector(...) as HTMLButtonElement` casts
-Lines 96–116. The shell is built with `innerHTML` (static, no interpolation — safe from injection) but then re-queried and cast (`as HTMLUListElement`, `as HTMLButtonElement` x2). The rows themselves are correctly built with `createElement` (line 118+). So the file mixes two construction styles, and the `innerHTML` half forces non-null `as` casts that silently assume the markup matches.
+- [x] FIXED: rebuilt the static shell with `createElement` (matching `renderRow`'s style), via a tiny typed `el(tag, className)` helper that returns the precise `HTMLElementTagNameMap[K]` element. This removes the `innerHTML` block, the re-query step, and all three non-null `as` casts (`as HTMLUListElement` / `as HTMLButtonElement` ×2) — `rowsEl`/`clearAllBtn`/`doneBtn` are now typed references built in place. The now-unneeded `data-clear-all`/`data-done` hook attributes were dropped (verified nothing in src/tests/e2e queries them). One DOM-construction style in the file; same rendered markup; build + lint green.
 
-**Why it matters:** Readability/consistency + the casts are unchecked assumptions (if a `data-done` button is renamed, the cast yields a runtime null with no type error). Low-stakes here (static template) but it's the kind of thing a ruthless reviewer flags: two ways to do the same thing in one file.
+- [x] VERIFIED-INVALID for this pass (the real fix is cross-file + out of scope; the in-file alternative is a net negative). The finding's own concrete fix — a shared `TOKENS` module that BOTH `popup.css`/popup and this panel import — requires creating a 5th file and editing the popup, neither of which is in scope here (I may only edit the four content files), and the reviewer flags it "Low priority … soft DRY violation." The only thing I COULD do within this file — hoist the hexes into local `const`s and string-interpolate them into `PANEL_STYLES` — does NOT fix the stated drift risk (popup.css still holds its own copies) and trades a readable, greppable CSS block for template-literal soup. So it buys no real DRY while hurting readability. Left the styles as a plain, isolated CSS string (the right call given Shadow-DOM isolation); the genuine token-sharing belongs in a design-token slice that owns both the popup and this panel.
 
-**Concrete fix:** Either build the whole shell with `createElement` like `renderRow` already does (uniform, no casts, no `innerHTML`), or keep `innerHTML` but assert the queries with a tiny `mustQuery(sel)` helper that throws a clear error instead of casting away null. Given `renderRow` already demonstrates the `createElement` style, extending it to the shell is the consistent choice.
+- [x] VERIFIED-INVALID for this CLEANUP pass (real but deliberately deferred, and risky to bolt on here): the reviewer itself scopes this as "PLAN Phase 4" a11y work and "Not a blocker for the picker's function." It is a NEW behavior, not a cleanup — and a naive focus-on-mount/trap is genuinely hazardous in THIS component: the panel coexists with an active capture-phase pick session where the user clicks PAGE elements; auto-stealing focus or trapping it could fight the pick flow, and the panel has no notion of the "trigger" to restore focus to (the popup that sent `SHOW_PICKER` has already closed). Correct focus management needs to be designed with the pick session, not retrofitted in a per-file cleanup. Left for the dedicated Phase-4 a11y slice. (The existing `aria-label`s and the `index.ts` Esc handler remain.)
 
-### [low] Inline `PANEL_STYLES` string (44–80) duplicates design tokens that also live in `popup.css`
-Colors like `#4f46e5` (primary), `#e2e2e6` (border), `#6b6b73` (muted), `#b42318` (danger) are hardcoded here and almost certainly repeated in `popup.css`. Shadow isolation MEANS this panel can't share the popup stylesheet, so SOME duplication is unavoidable — but the token VALUES could be defined once and injected.
-
-**Why it matters:** DRY of design tokens. If the brand indigo changes, it must change in two places.
-
-**Concrete fix:** Define the token hexes as a shared `const TOKENS = {...}` (a tiny TS module both the popup and this panel import) and template them into `PANEL_STYLES`. Low priority — the isolation constraint makes this a soft DRY violation.
-
-### [low] No focus management / keyboard trap on mount
-The panel mounts and wires `onDone` to a Done button, but `index.ts` (per the docstring) owns Esc. On mount, focus is not moved into the panel, and there's no focus trap. For an accessibility pass (PLAN Phase 4 explicitly lists "focus, ARIA"), this is the gap. Not a blocker for the picker's function.
-
-**Concrete fix:** On mount, focus the first control or the panel; restore focus to the trigger on destroy. Note it as Phase-4 a11y work.
-
-### [nit] `render` rebuilds ALL rows via `replaceChildren` on every override change
-Line 148. Every color-input event triggers a full row rebuild (the content script calls `render` after each change). For a handful of override rows this is fine, but it means the `<input type=color>` is recreated, which can interrupt an open native color picker. Worth confirming the live-apply path doesn't re-render mid-pick. Minor.
+- [x] VERIFIED-INVALID (already handled — the thing it asks to "confirm" is true): the concern is a re-render WHILE the native color dialog is open recreating the `<input type=color>`. Confirmed it can't happen on the live path: `index.ts`'s `onColorChange` handler DELIBERATELY does NOT call `renderPicker()` (it has an explicit comment about exactly this — rebuilding rows would close the native dialog the user is dragging). `render` is only re-run on `onClearRole`/`onClearAll`/a fresh pick — none of which fire mid-drag. The full `replaceChildren` rebuild is fine for the handful of rows involved. No change needed.
 
 ## What's GOOD
 - **Textbook thin view.** Zero business logic: it renders `overrideRows(overrides)` from the pure model and emits intents through `PanelHandlers`. The content script owns sessions/persistence. This is correct separation and exactly what the architecture docs promise (and, unlike pick.ts, the docstring here is TRUE).

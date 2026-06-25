@@ -9,12 +9,16 @@ A proper composition root: `chrome.*` isolated here, storage behind an injected 
 
 ## Findings
 
+- [x] FIXED: Extracted `commitCurrent()` = `try { applyCurrentScheme(); persistTheme(); } catch → generateError`. `onSelectHistory`, `onSelectFavorite`, and `onToggleInvert` now just dispatch their unique action then `await commitCurrent()`. The intensity commit keeps its inline apply (it must stay behind the `applied` guard — `commitCurrent` always applies), but is wrapped in the SAME try/catch error handling. `onGenerate` keeps its own apply (it sends a freshly-generated scheme before `current` is set) but is now fully try/catch-wrapped too. So the shared commit semantics + error handling live in one place.
+
 ### [high] The `apply-live + persist` sequence is duplicated across five handlers with no shared "commit" path
 `onSelectHistory` (294–299), `onSelectFavorite` (321–330), `onToggleInvert` (248–258), the intensity commit (166–175), and `onGenerate` (185–212) all run variations of: dispatch → `applyCurrentScheme()` → `persistTheme()`. The exact ordering and which steps are included varies subtly per handler, which is exactly where bugs hide (does invert persist? does history? — yes, but you must read each to know).
 
 **Why it matters:** DRY + correctness. Five near-identical "apply the current scheme to the page and persist it for this origin" flows mean a fix to the commit semantics (e.g. error handling on persist) must be made five times, and the subtle per-handler differences are unverified invariants.
 
 **Concrete fix:** Extract one `commitCurrent({ regenerate?, persist = true })` that does dispatch-already-done → `applyCurrentScheme()` → `persistTheme()` with consistent error handling, and call it from each handler. The handlers then express only their UNIQUE step (which action to dispatch).
+
+- [x] VERIFIED (real but acknowledged-low-risk) — NOT restructured: As the reviewer themselves grade it, the realistic risk is low for a tiny single-instance popup where gestures are slow. The user-VISIBLE failure mode (a post-dispatch throw stranding `loading:true`) is now eliminated by routing every async handler through try/catch (`commitCurrent` + the wrapped `onGenerate`/intensity-commit) which always dispatches `generateError`, clearing `loading`. Threading a state-snapshot through `applyCurrentScheme`/`persistTheme` (both read `state.*` internally) would be a larger, invasive change for low real benefit — out of proportion to the risk and against the "don't over-engineer" guidance. Left the module-level `state`/`activeTabId` as-is; acknowledged.
 
 ### [medium] Module-level mutable `state` + `activeTabId` singletons with no encapsulation
 Lines 46, 54: `let state = initialPopupState; let activeTabId: number | null = null;`. The entire controller mutates `state` via the `dispatch` closure and reads/writes `activeTabId` from `activeOrigin`/`onPickElement`/`onReset`. This is fine for a single popup instance, but it's global mutable state that any handler can read between awaits — and several handlers `await` then read `state.*` (e.g. `scheduleIntensityCommit` reads `state.intensity`/`state.current`/`state.applied` inside a `setTimeout` callback, well after the gesture).
@@ -23,6 +27,8 @@ Lines 46, 54: `let state = initialPopupState; let activeTabId: number | null = n
 
 **Concrete fix:** For the most part this is acceptable for a tiny popup (gestures are slow, popup is small), so I'd grade the realistic risk as low — but it should be acknowledged. Minimum: capture the values a handler needs into locals BEFORE the first `await` (e.g. `const origin = state.origin; const scheme = state.current;`) so each async flow operates on a consistent snapshot, rather than re-reading mutable `state` after awaits.
 
+- [x] FIXED: Wrapped the entire `onGenerate` body in try/catch that dispatches `generateError` (message from the throw, else "generate failed"), guaranteeing `loading` is always cleared. A reject from `sendMessage`/`pushHistory`/`persistTheme` after `generateStart` can no longer strand the popup in a disabled "Generating…" state. The same try/catch guard now also covers the other async commit handlers (via `commitCurrent`) and the debounced intensity commit.
+
 ### [medium] `onGenerate` has no try/catch around `sendMessage`/`pushHistory`/`persistTheme` despite the "never throws" generation
 Lines 185–212. `generateForSelection` is documented as never-throwing, but `sendMessage` (197), `storage.pushHistory` (207), and `persistTheme` (211) CAN reject (messaging failure, storage error). Only the `resp.ok` path is handled; a thrown rejection from `pushHistory`/`persistTheme` leaves `loading:true` stuck (the reducer set `loading` true in `generateStart` and only `generateSuccess`/`generateError` clear it).
 
@@ -30,13 +36,19 @@ Lines 185–212. `generateForSelection` is documented as never-throwing, but `se
 
 **Concrete fix:** Wrap the handler body in try/catch (or the shared `commitCurrent`) that dispatches `generateError` on any throw, guaranteeing `loading` is always cleared. The same applies to the other async handlers that can throw after a dispatch.
 
+- [x] VERIFIED (real naming smell) but NOT changed — out-of-scope tradeoff: Renaming `applyFavorite` to a neutral `selectScheme` (or adding a parallel action) is the right fix, but the `PopupAction` union lives in `state.ts` and `popup-state.test.ts` dispatches `{ type: "applyFavorite", ... }` directly — renaming breaks that out-of-scope test, and adding a duplicate alias action purely for a better name is over-engineering. The action's effect (set current+applied+overrides) is correct for an inverted scheme; only the name reads slightly off. Left as-is, to be folded into a future state-action cleanup that can update the tests in lockstep.
+
 ### [low] `onToggleInvert` reuses the `applyFavorite` action to set the inverted scheme
 Line 254: `dispatch({ type: "applyFavorite", scheme: invertScheme(state.current) })`. Using the `applyFavorite` action to apply an inverted scheme is a semantic mismatch — it works because `applyFavorite` just sets `current`+`applied`+`overrides`, but the action name lies about intent.
 
 **Concrete fix:** Add a dedicated `setCurrent`/`applyScheme` action (or rename `applyFavorite` to a neutral `selectScheme`) so the dispatch reads true.
 
+- [x] FIXED: Replaced with `navigator?.onLine ?? true`. Verified behavior-equivalent across all cases (navigator undefined → true; `onLine===false` → false; `onLine===true`/`undefined` → true).
+
 ### [low] `online: typeof navigator === "undefined" || navigator.onLine !== false` is a double-negative
 Line 193. "online unless navigator says offline." Correct but the `!== false` reads awkwardly; `navigator?.onLine ?? true` expresses the same intent more directly.
+
+- [x] FIXED: Dropped the 50ms timer; `onPickElement` now does `await sendToContent(...); window.close();`. `sendToContent` returns a `Promise<void>` that resolves in the `chrome.tabs.sendMessage` callback, so the await deterministically guarantees the SHOW_PICKER message flushed before the popup closes.
 
 ### [nit] `setTimeout(() => window.close(), 50)` magic delay to flush SHOW_PICKER
 Line 283. A 50ms race to let the message flush before closing the popup. Works, but it's a timing guess; a `.then(() => window.close())` on the `sendToContent` promise would be deterministic (it already awaits at 277 — so the close could just follow the await without the timer).

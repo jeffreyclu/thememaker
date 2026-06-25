@@ -9,6 +9,8 @@ A tiny, pure, single-purpose function done right. Deterministic, offline, no DOM
 
 ## Findings
 
+- [x] VERIFIED-INVALID (left as-is): the review explicitly says "None recommended" and that naming these shallow, self-labeled thresholds "would arguably hurt readability." Each branch already reads as the spec of its return value. No change.
+
 ### [low] Hue-family and modifier thresholds are magic numbers (acceptable here, but unnamed)
 `hueFamily` (14–28) and the modifier ladder (51–55) are walls of bare numeric boundaries (`h < 15`, `l < 22`, `s > 85`). Unlike `deriveRoles` in palette.ts, these are SHALLOW (one comparison each, clearly labeled by their return value) so they're readable as-is. Naming them would arguably hurt readability.
 
@@ -16,8 +18,12 @@ A tiny, pure, single-purpose function done right. Deterministic, offline, no DOM
 
 **Concrete fix:** None recommended. If anything, a single comment that the boundaries are perceptual/taste choices.
 
+- [x] VERIFIED-INVALID (left as-is): the review notes "the explicit form is arguably clearer than `(h < 15 || h >= 345)`." Collapsing it has no real benefit. No change.
+
 ### [nit] `hueFamily` returns "Red" for both `h < 15` and `h >= 345` with two separate branches
 Lines 15 and 27. The red wrap-around is handled by two returns rather than normalizing the hue. Minor; the explicit form is arguably clearer than `(h < 15 || h >= 345)`.
+
+- [x] FIXED (doc only): documented the throwing contract on `describeColor`'s JSDoc (`@throws if hex is not valid via normalizeHex`; callers pass always-valid palette seeds). No behavior change — guarding with a "Unknown" sentinel was the other option but the throwing contract is fine for the actual callers, so I just made it honest.
 
 ### [nit] No guard for invalid hex — relies on `normalizeHex` throwing
 Line 35: `hexToHsl(normalizeHex(hex))`. If `hex` is invalid, `normalizeHex` throws and `describeColor` throws. Callers (state.ts `historyLabel`, engine-bridge) pass palette seeds which are always valid, so this is fine — but the throwing contract isn't documented. Trivial.

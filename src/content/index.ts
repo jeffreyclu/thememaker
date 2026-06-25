@@ -191,15 +191,27 @@ const optionsFor = (s: PickerSession): ApplyOptions =>
     : { intensity: s.intensity };
 
 /**
- * Applies the session's overrides LIVE (in-page engine, no executeScript) AND
- * persists them into this origin's saved scheme, ENABLING auto-reapply so a
- * reload restores them. Storage is the single source of truth the popup reads.
+ * SERIALIZES persistence: a tail promise that each persist chains onto, so the
+ * read-modify-write cycles never interleave. Without this, a fast color-drag
+ * (each `input` event → a persist) could fire overlapping read→merge→write
+ * cycles and lose an update (last-writer-wins on a STALE read). Chaining makes
+ * each persist read AFTER the previous one's write committed.
  */
-const applyAndPersist = async (s: PickerSession): Promise<void> => {
-  applyWhenReady(s.palette, optionsFor(s));
+let persistQueue: Promise<void> = Promise.resolve();
+
+/** Read-modify-write of this origin's saved scheme from the session's state. */
+const persistSession = async (s: PickerSession): Promise<void> => {
   const origin = location.origin;
   const site = (await readSiteState(origin)) ?? { enabled: false };
-  const prevDetails = site.savedScheme?.schemeDetails;
+  // Drop any previously-saved `overrides` here so it can't linger: "no
+  // overrides" is the ABSENCE of the key (same convention as `optionsFor`),
+  // re-added below only when there are some.
+  const { overrides: _prevOverrides, ...prevDetails } =
+    site.savedScheme?.schemeDetails ??
+    ({
+      rootColor: s.palette.seed,
+      colorMode: s.palette.mode,
+    } as Scheme["schemeDetails"]);
   const hasOverrides = Object.keys(s.overrides).length > 0;
   // Build/refresh the saved scheme: carry the live palette + intensity +
   // overrides so `loadDecision` reapplies the exact custom theme next load.
@@ -209,16 +221,27 @@ const applyAndPersist = async (s: PickerSession): Promise<void> => {
       schemeDetails: {} as Scheme["schemeDetails"],
     }),
     schemeDetails: {
-      ...(prevDetails ?? {
-        rootColor: s.palette.seed,
-        colorMode: s.palette.mode,
-      }),
+      ...prevDetails,
       palette: s.palette,
       intensity: s.intensity,
-      ...(hasOverrides ? { overrides: s.overrides } : { overrides: undefined }),
+      ...(hasOverrides ? { overrides: s.overrides } : {}),
     },
   };
   await writeSiteState(origin, { ...site, enabled: true, savedScheme });
+};
+
+/**
+ * Applies the session's overrides LIVE (in-page engine, no executeScript) AND
+ * persists them into this origin's saved scheme, ENABLING auto-reapply so a
+ * reload restores them. Storage is the single source of truth the popup reads.
+ * The live apply is immediate; the persist is SERIALIZED via {@link persistQueue}
+ * so overlapping edits can't lose an update.
+ */
+const applyAndPersist = (s: PickerSession): Promise<void> => {
+  applyWhenReady(s.palette, optionsFor(s));
+  // Chain onto the queue; a failed persist must not break the chain for the next.
+  persistQueue = persistQueue.then(() => persistSession(s)).catch(() => {});
+  return persistQueue;
 };
 
 /** Re-renders the panel rows from the current overrides (if the panel is open). */
@@ -244,15 +267,14 @@ const onPickerKey = (e: KeyboardEvent): void => {
 export const showPicker = (palette: Palette, options: ApplyOptions): void => {
   hidePicker();
 
-  const session: PickerSession = {
-    palette,
-    intensity: options.intensity,
-    overrides: { ...(options.overrides ?? {}) },
-    panel: undefined as unknown as PanelHandle,
-    pick: undefined as unknown as PickSession,
-  };
-
-  session.panel = mountPickerPanel({
+  // The panel/pick handlers need to read + mutate the LIVE session state, but the
+  // panel/pick handles don't exist until we build them — a chicken-and-egg. We
+  // break it WITHOUT a placeholder cast: the handlers close over `session` (the
+  // `const` declared below), which is assigned BEFORE any handler can fire
+  // (handlers only run on later user interaction — past the TDZ). So `panel`/
+  // `pick` are built with honest types and the session is assembled once,
+  // complete.
+  const panel = mountPickerPanel({
     onColorChange: (role, color) => {
       // Do NOT re-render here: rebuilding the rows would replace the
       // <input type="color"> the user is actively dragging, which closes the
@@ -274,7 +296,7 @@ export const showPicker = (palette: Palette, options: ApplyOptions): void => {
     onDone: () => hidePicker(),
   });
 
-  session.pick = startPick({
+  const pick = startPick({
     onPicked: (key, currentColor) => {
       session.overrides = withPickedRole(session.overrides, key, currentColor);
       renderPicker();
@@ -285,8 +307,16 @@ export const showPicker = (palette: Palette, options: ApplyOptions): void => {
     isExcluded: (el) => el.closest(`#${PANEL_HOST_ID}`) !== null,
   });
 
+  const session: PickerSession = {
+    palette,
+    intensity: options.intensity,
+    overrides: { ...(options.overrides ?? {}) },
+    panel,
+    pick,
+  };
+
   picker = session;
-  session.panel.render(session.overrides);
+  panel.render(session.overrides);
   document.addEventListener("keydown", onPickerKey, true);
 };
 
