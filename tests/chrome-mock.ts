@@ -49,7 +49,7 @@ export interface ChromeMock {
     onMessage: { addListener: Mock };
   };
   scripting: { executeScript: Mock };
-  tabs: { query: Mock };
+  tabs: { query: Mock; sendMessage: Mock };
 }
 
 export const createChromeMock = (): ChromeMock => ({
@@ -61,7 +61,7 @@ export const createChromeMock = (): ChromeMock => ({
     onMessage: { addListener: vi.fn() },
   },
   scripting: { executeScript: vi.fn() },
-  tabs: { query: vi.fn() },
+  tabs: { query: vi.fn(), sendMessage: vi.fn() },
 });
 
 let current: ChromeMock = createChromeMock();

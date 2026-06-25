@@ -1,6 +1,5 @@
 import { test, expect } from "../support/fixtures";
 import type { Page } from "@playwright/test";
-import { removeSchemeStyle } from "../../src/lib/inject";
 import {
   makePalette,
   enableSite,
@@ -12,33 +11,50 @@ import { themeStyleCount } from "../support/page-helpers";
 /**
  * RESET: removing the theme deletes the `<style id="themeMaker">`.
  *
- * The production reset is `removeSchemeStyle` — a SELF-CONTAINED page function the
- * background ships to the tab via `chrome.scripting.executeScript` on RESET_SCHEME
- * (no imports, no `chrome.*`; verified in `src/lib/inject.ts`). Headless MV3 can't
- * drive that executeScript seam against an arbitrary tab (no host grant without an
- * action-button gesture), and a regular http page can't import the extension's
- * bundle. So we run the EXACT production function source — imported here from
- * `src/` and serialized the SAME WAY executeScript serializes it (`func.toString()`)
- * — directly in the themed fixture page. The reset logic under test is genuine and
- * unmodified; only the delivery seam differs.
+ * The production reset is now a CONTENT-MESSAGE: the popup sends `RESET_SCHEME`
+ * to the ACTIVE tab's always-on content script (`chrome.tabs.sendMessage`),
+ * which calls the real `removeSchemeStyle` in the page (no more background
+ * `executeScript`). This spec drives that EXACT channel and the SAME active-tab
+ * resolution the popup uses (`{ active: true, lastFocusedWindow: true }`): it
+ * brings the themed fixture tab to front, sends `RESET_SCHEME` from an
+ * extension-origin page, and asserts the style is gone + a second reset is
+ * idempotent — the same outcomes as before, now through the real transport.
  */
 
-/** Serializes the real `removeSchemeStyle` and runs it in `page` (as executeScript would). */
-const runRealReset = (page: Page): Promise<boolean> =>
-  page.evaluate((source: string) => {
-    // Reconstruct the function from its source (exactly how Chrome reconstructs
-    // an executeScript `func`) and invoke it against this page's DOM.
-    // eslint-disable-next-line no-new-func
-    const fn = new Function(`return (${source})`)() as () => boolean;
-    return fn();
-  }, removeSchemeStyle.toString());
+/**
+ * Sends `RESET_SCHEME` to the ACTIVE tab's content script (the popup's exact
+ * resolution), returning the handler's `applied` flag (false on success).
+ */
+const resetActiveTab = (extPage: Page): Promise<boolean | undefined> =>
+  extPage.evaluate(async (): Promise<boolean | undefined> => {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      lastFocusedWindow: true,
+    });
+    if (!tab || tab.id == null) {
+      throw new Error("no active tab for RESET_SCHEME");
+    }
+    const resp = await new Promise<{ ok?: boolean; applied?: boolean }>(
+      (resolve) => {
+        chrome.tabs.sendMessage(
+          tab.id as number,
+          { type: "RESET_SCHEME" },
+          (r) => {
+            void chrome.runtime.lastError;
+            resolve(r ?? {});
+          },
+        );
+      },
+    );
+    return resp.applied;
+  });
 
-test("reset removes the themeMaker style element", async ({
+test("reset removes the themeMaker style element (via the content channel)", async ({
   context,
   extensionId,
   server,
 }) => {
-  // Theme the page first via the real content-script path.
+  // Theme the page first via the real content-script auto-reapply path.
   const ext = await openExtensionPage(context, extensionId);
   await enableSite(ext, server.origin, makePalette(), 80);
 
@@ -47,13 +63,17 @@ test("reset removes the themeMaker style element", async ({
   await waitForThemeApplied(page);
   expect(await themeStyleCount(page)).toBe(1);
 
-  // Run the REAL production reset function against the themed DOM.
-  const removed = await runRealReset(page);
-
-  // It reported a removal, and the style is gone.
-  expect(removed).toBe(true);
+  // Make the themed fixture the active tab (as it is when the popup opens over
+  // it), then drive the REAL reset: RESET_SCHEME → content script →
+  // removeSchemeStyle. A reset leaves nothing applied (`applied: false`).
+  await page.bringToFront();
+  const applied = await resetActiveTab(ext);
+  expect(applied).toBe(false);
   expect(await themeStyleCount(page)).toBe(0);
 
-  // Re-running reset on a clean page reports "nothing removed" (idempotent).
-  expect(await runRealReset(page)).toBe(false);
+  // Re-running reset on a clean page is idempotent (still nothing applied).
+  await page.bringToFront();
+  const appliedAgain = await resetActiveTab(ext);
+  expect(appliedAgain).toBe(false);
+  expect(await themeStyleCount(page)).toBe(0);
 });

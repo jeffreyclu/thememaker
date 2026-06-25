@@ -1,85 +1,86 @@
 import { describe, expect, it } from "vitest";
 
-import { sendMessage } from "../src/lib/messages";
-import { createChromeInjector } from "../src/lib/router";
+import { sendToContentWithReply } from "../src/lib/messages";
 import { getChromeMock } from "./chrome-mock";
 import { mockOptions, mockPalette, mockScheme } from "./mocks";
 
-describe("sendMessage (typed runtime wrapper)", () => {
-  it("resolves with the callback response", async () => {
+/**
+ * `sendToContentWithReply` is the single apply transport: a typed
+ * `chrome.tabs.sendMessage` request/response to the active tab's content script.
+ * It REPLACES the old popup→background `sendMessage` + `createChromeInjector`
+ * seam (the executeScript path); the routing logic those tested now lives in the
+ * content script (`tests/content.test.ts`).
+ */
+describe("sendToContentWithReply (popup → content reply channel)", () => {
+  it("resolves with the content script's reply for APPLY_SCHEME", async () => {
     const chrome = getChromeMock();
-    chrome.runtime.sendMessage.mockImplementation(
-      (_msg: unknown, cb: (r: unknown) => void) =>
-        cb({ ok: true, applied: true }),
+    chrome.tabs.sendMessage.mockImplementation(
+      (_tabId: number, _msg: unknown, cb: (r: unknown) => void) =>
+        cb({ ok: true, applied: true, scheme: mockScheme }),
     );
-    const resp = await sendMessage({ type: "QUERY_STATE" });
-    expect(resp).toStrictEqual({ ok: true, applied: true });
+
+    const resp = await sendToContentWithReply(7, {
+      type: "APPLY_SCHEME",
+      palette: mockPalette,
+      options: mockOptions,
+      scheme: mockScheme,
+    });
+
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({ type: "APPLY_SCHEME", palette: mockPalette }),
+      expect.any(Function),
+    );
+    expect(resp).toStrictEqual({
+      ok: true,
+      applied: true,
+      scheme: mockScheme,
+    });
   });
 
-  it("rejects when chrome.runtime.lastError is set", async () => {
+  it("resolves with the reply for QUERY_STATE", async () => {
     const chrome = getChromeMock();
-    chrome.runtime.lastError = { message: "boom" };
-    chrome.runtime.sendMessage.mockImplementation(
-      (_msg: unknown, cb: (r: unknown) => void) => cb(undefined),
+    chrome.tabs.sendMessage.mockImplementation(
+      (_tabId: number, _msg: unknown, cb: (r: unknown) => void) =>
+        cb({ ok: true, applied: false }),
     );
-    await expect(sendMessage({ type: "RESET_SCHEME" })).rejects.toThrow("boom");
-  });
-});
-
-describe("createChromeInjector (against chrome.tabs + chrome.scripting)", () => {
-  const stubActiveTab = (tab: Partial<chrome.tabs.Tab> | null) => {
-    getChromeMock().tabs.query.mockImplementation(
-      (_q: unknown, cb?: (tabs: unknown[]) => void) => {
-        const result = tab ? [tab] : [];
-        if (cb) {
-          cb(result);
-          return undefined;
-        }
-        return Promise.resolve(result);
-      },
-    );
-  };
-
-  it("apply resolves the active tab, executes the func, returns origin+result", async () => {
-    const chrome = getChromeMock();
-    stubActiveTab({ id: 7, url: "https://example.com/x" });
-    chrome.scripting.executeScript.mockResolvedValue([{ result: true }]);
-
-    const injector = createChromeInjector();
-    const out = await injector.apply(mockPalette, mockOptions);
-
-    expect(chrome.scripting.executeScript).toHaveBeenCalledWith(
-      expect.objectContaining({
-        target: { tabId: 7 },
-        args: [mockPalette, mockOptions],
-      }),
-    );
-    expect(out).toStrictEqual({ origin: "https://example.com", applied: true });
+    const resp = await sendToContentWithReply(3, { type: "QUERY_STATE" });
+    expect(resp).toStrictEqual({ ok: true, applied: false });
   });
 
-  it("reset runs removeSchemeStyle and maps removed flag", async () => {
+  it("degrades to { ok:false, applied:false } on a non-injectable tab (lastError)", async () => {
     const chrome = getChromeMock();
-    stubActiveTab({ id: 9, url: "https://site.test/" });
-    chrome.scripting.executeScript.mockResolvedValue([{ result: true }]);
-
-    const out = await createChromeInjector().reset();
-    expect(out).toStrictEqual({ origin: "https://site.test", removed: true });
-  });
-
-  it("throws when there is no active tab", async () => {
-    stubActiveTab(null);
-    await expect(createChromeInjector().query()).rejects.toThrow(
-      "no active tab",
+    chrome.runtime.lastError = { message: "no receiving end" };
+    chrome.tabs.sendMessage.mockImplementation(
+      (_tabId: number, _msg: unknown, cb: (r: unknown) => void) =>
+        cb(undefined),
     );
+    // No reject — the popup degrades gracefully on chrome:// / web store tabs.
+    const resp = await sendToContentWithReply(9, { type: "RESET_SCHEME" });
+    expect(resp).toStrictEqual({ ok: false, applied: false });
   });
 
-  it("query maps the applied result", async () => {
+  it("degrades when the reply is null (no listener) even without lastError", async () => {
     const chrome = getChromeMock();
-    stubActiveTab({ id: 3, url: "https://q.test/" });
-    chrome.scripting.executeScript.mockResolvedValue([{ result: false }]);
-    const out = await createChromeInjector().query();
-    expect(out).toStrictEqual({ origin: "https://q.test", applied: false });
-    // echo the scheme through apply too, for completeness
-    expect(mockScheme.schemeDetails).toBeTruthy();
+    chrome.tabs.sendMessage.mockImplementation(
+      (_tabId: number, _msg: unknown, cb: (r: unknown) => void) =>
+        cb(undefined),
+    );
+    const resp = await sendToContentWithReply(2, { type: "QUERY_STATE" });
+    expect(resp).toStrictEqual({ ok: false, applied: false });
+  });
+
+  it("degrades (no throw) when chrome.tabs.sendMessage itself throws", async () => {
+    const chrome = getChromeMock();
+    chrome.tabs.sendMessage.mockImplementation(() => {
+      throw new Error("context invalidated");
+    });
+    const resp = await sendToContentWithReply(1, {
+      type: "APPLY_SCHEME",
+      palette: mockPalette,
+      options: mockOptions,
+      scheme: mockScheme,
+    });
+    expect(resp).toStrictEqual({ ok: false, applied: false });
   });
 });

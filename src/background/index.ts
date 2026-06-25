@@ -1,30 +1,14 @@
 /**
- * MV3 service worker — the message-passing hub.
+ * MV3 service worker — intentionally a no-op stub.
  *
- * The popup sends typed messages (`APPLY_SCHEME` / `RESET_SCHEME` /
- * `QUERY_STATE`); the worker routes them through `routeMessage`, which uses a
- * `chrome.scripting`-backed injector to act on the active tab. Centralizing
- * injection here (rather than in the popup) keeps active-tab resolution and the
- * injection seam in one place for Phase 3's command routing / cross-tab work.
+ * Apply / reset / query / pick are no longer routed through the worker: the
+ * popup sends them DIRECTLY to the active tab's always-on content script
+ * (`chrome.tabs.sendMessage`), which owns all page-side effects. There is no
+ * `chrome.scripting.executeScript` injector anymore, so the worker has nothing
+ * to route.
+ *
+ * We keep a trivial worker because CRXJS wires the `background.service_worker`
+ * manifest entry and some MV3 setups expect one to exist. If a future feature
+ * needs background work (alarms, cross-tab coordination), it grows here.
  */
-import { createChromeInjector, routeMessage } from "../lib/router";
-import type { ThememakerMessage } from "../lib/messages";
-
-const injector = createChromeInjector();
-
-chrome.runtime.onMessage.addListener(
-  (message: ThememakerMessage, _sender, sendResponse) => {
-    routeMessage(message, injector)
-      .then(sendResponse)
-      .catch((e: unknown) => {
-        sendResponse({
-          ok: false,
-          error: e instanceof Error ? e.message : String(e),
-        });
-      });
-    // Returning true keeps the message channel open for the async response.
-    return true;
-  },
-);
-
 export {};

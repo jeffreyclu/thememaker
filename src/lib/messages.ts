@@ -1,15 +1,16 @@
 /**
- * Typed message contract for popup ⇄ background.
+ * Typed message contract for the popup → content-script channel.
  *
- * The popup is the control surface; the background service worker is the hub
- * that performs the privileged `chrome.scripting` injection into the active
- * tab. Centralizing injection in the background (rather than calling
- * `chrome.scripting` from the popup directly) keeps active-tab resolution and
- * the injection seam in one place — and is where Phase 3's command routing and
- * cross-tab logic will grow.
+ * The popup is the control surface; the ALWAYS-ON content script (`<all_urls>`
+ * @ `document_start`) owns ALL page-side effects — it already imports the engine
+ * (`applyAdaptiveScheme` et al.) and runs it in the page's isolated world.
+ * Apply / reset / query / pick are therefore delivered DIRECTLY to the active
+ * tab's content script via `chrome.tabs.sendMessage` (no background hub, no
+ * `chrome.scripting.executeScript`). This is why the engine can be ordinary
+ * bundled code that `import`s shared modules.
  *
- * Every message is discriminated by `type`; `sendMessage<T>` ties each request
- * type to its response type so callers stay end-to-end typed.
+ * Every message is discriminated by `type`. `sendToContentWithReply<M>` ties
+ * each request type to its response type so callers stay end-to-end typed.
  */
 import type { ApplyOptions, Scheme } from "../types";
 import type { Palette } from "./palette";
@@ -17,9 +18,9 @@ import type { Palette } from "./palette";
 /**
  * Apply a generated palette to the active tab. The ADAPTIVE engine runs IN the
  * page (only it can see computed styles), so the payload carries the palette +
- * options — NOT a precomputed CSS string. The page detects roles/variables,
- * maps onto the palette, enforces AA contrast, and injects the single
- * `<style id="themeMaker">`.
+ * options — NOT a precomputed CSS string. The content script detects
+ * roles/variables, maps onto the palette, enforces AA contrast, and injects the
+ * single `<style id="themeMaker">`, replying with whether the apply landed.
  */
 export interface ApplySchemeMessage {
   type: "APPLY_SCHEME";
@@ -34,6 +35,11 @@ export interface ApplySchemeMessage {
 /** Remove Thememaker's <style> from the active tab. */
 export interface ResetSchemeMessage {
   type: "RESET_SCHEME";
+}
+
+/** Query whether the active tab currently has a Thememaker style applied. */
+export interface QueryStateMessage {
+  type: "QUERY_STATE";
 }
 
 /**
@@ -81,27 +87,32 @@ export interface ApplyLiveMessage {
   options: ApplyOptions;
 }
 
-/** Messages the CONTENT SCRIPT handles (popup → content script, direct). */
+/**
+ * Fire-and-forget messages the CONTENT SCRIPT handles (popup → content script,
+ * direct). The picker messages need no reply — the in-page panel owns the
+ * interaction and storage is the source of truth.
+ */
 export type ContentMessage =
   | ShowPickerMessage
   | HidePickerMessage
   | ApplyLiveMessage;
 
-/** Query whether the active tab currently has a Thememaker style applied. */
-export interface QueryStateMessage {
-  type: "QUERY_STATE";
-}
-
-/** Discriminated union of all requests the background handles. */
-export type ThememakerMessage =
+/**
+ * Reply-carrying messages the CONTENT SCRIPT handles. The popup awaits the
+ * response (`applied`/`scheme`) to update its own state, so these go through
+ * {@link sendToContentWithReply} (the request/response sibling of the
+ * fire-and-forget {@link sendToContent}).
+ */
+export type ContentReplyMessage =
   | ApplySchemeMessage
   | ResetSchemeMessage
   | QueryStateMessage;
 
 /**
  * Fields every response carries. `ok: false` carries a human-readable `error`
- * (errors can come back for ANY request type — the background catch/exhaustive
- * guard produces this shape — so it lives on the base every response extends).
+ * (errors can come back for ANY request type — the content handler's
+ * catch/exhaustive guard produces this shape — so it lives on the base every
+ * response extends).
  */
 export interface BaseResponse {
   ok: boolean;
@@ -132,8 +143,8 @@ export interface QueryStateResponse extends BaseResponse {
 }
 
 /**
- * The union of all response shapes — the type the background router returns
- * before `sendMessage` narrows it to the caller's request type via
+ * The union of all response shapes — the type the content handler returns
+ * before `sendToContentWithReply` narrows it to the caller's request type via
  * {@link ResponseFor}.
  */
 export type MessageResponse =
@@ -153,21 +164,36 @@ export interface ResponseFor {
 }
 
 /**
- * Promise wrapper over `chrome.runtime.sendMessage`, typed so the response
- * matches the request's `type`.
+ * Request/response send of a {@link ContentReplyMessage} to a specific tab's
+ * CONTENT SCRIPT (`chrome.tabs.sendMessage` WITH a callback). The single apply
+ * transport: the content script applies/resets/queries the page and replies.
+ *
+ * Resolves to a degraded `{ ok: false, applied: false }` (NOT a reject) when the
+ * tab has no listener — i.e. a non-injectable page (`chrome://`, the Web Store,
+ * `file://` without access). `executeScript` could not run on those pages
+ * either, so this is no NEW dead surface; the popup degrades gracefully on them.
  */
-export const sendMessage = <M extends ThememakerMessage>(
+export const sendToContentWithReply = <M extends ContentReplyMessage>(
+  tabId: number,
   message: M,
 ): Promise<ResponseFor[M["type"]]> =>
-  new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(message, (response) => {
-      const err = chrome.runtime.lastError;
-      if (err) {
-        reject(new Error(err.message));
-        return;
-      }
-      resolve(response as ResponseFor[M["type"]]);
-    });
+  new Promise((resolve) => {
+    const degraded = {
+      ok: false,
+      applied: false,
+    } as ResponseFor[M["type"]];
+    try {
+      chrome.tabs.sendMessage(tabId, message, (response) => {
+        // "no receiving end" (non-injectable tab) → degrade, never reject.
+        if (chrome.runtime.lastError || response == null) {
+          resolve(degraded);
+          return;
+        }
+        resolve(response as ResponseFor[M["type"]]);
+      });
+    } catch {
+      resolve(degraded);
+    }
   });
 
 /**

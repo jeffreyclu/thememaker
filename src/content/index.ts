@@ -1,22 +1,28 @@
 /**
- * Always-on content script — per-site AUTO-REAPPLY.
+ * Always-on content script — entry point + message dispatch.
  *
  * Registered for `<all_urls>` at `run_at: document_start` (see
- * `src/manifest.config.ts`). On EVERY page load it reads the saved per-site
- * state for this origin from `chrome.storage.local` and, when the site is
- * enabled with a faithful saved scheme, reapplies the theme — so a reload or a
- * revisit restores the look the user picked, without reopening the popup.
+ * `src/manifest.config.ts`). Two jobs:
  *
- * This is a BUNDLED module (imports resolve normally), NOT a serialized
- * `executeScript` function — so it imports the EXISTING engine
- * (`applyAdaptiveScheme`) and the pure load decision (`loadDecision`) instead of
- * duplicating any logic. It runs in the content-script ISOLATED WORLD, the same
- * world `chrome.scripting.executeScript` injects into, so the engine's
- * `window.__themeMaker*` state and the single `<style id="themeMaker">` are
- * shared with the popup's on-demand path: the two paths never double-apply
- * (both write the same style in place) and never conflict.
+ *  1. AUTO-REAPPLY: on every page load it reads the saved per-site state for
+ *     this origin from `chrome.storage.local` and, when the site is enabled with
+ *     a faithful saved scheme, reapplies the theme — so a reload or revisit
+ *     restores the look the user picked, without reopening the popup.
+ *  2. MESSAGE DISPATCH: it is now the SINGLE owner of all page-side effects. The
+ *     popup sends APPLY_SCHEME / RESET_SCHEME / QUERY_STATE (reply-carrying) and
+ *     SHOW_PICKER / HIDE_PICKER / APPLY_LIVE (fire-and-forget) DIRECTLY to this
+ *     tab's content script via `chrome.tabs.sendMessage` — there is no longer a
+ *     background `chrome.scripting.executeScript` apply path. Because this is
+ *     BUNDLED code (imports resolve normally), the engine it runs can `import`
+ *     shared modules instead of being a serialized, self-contained function.
  *
- * ## Flash elimination
+ * It runs in the content-script ISOLATED WORLD (the same world the old
+ * executeScript path injected into), so the engine's `window.__themeMaker*`
+ * state and the single `<style id="themeMaker">` are shared across the
+ * auto-reapply, popup-apply, and picker paths: they never double-apply (all
+ * write the same style in place) and never conflict.
+ *
+ * ## Flash elimination (see `early-paint.ts`)
  *
  * `chrome.storage` is async, so at `document_start` we can't know the theme
  * before the browser paints the site's original background — that's the reload
@@ -24,10 +30,8 @@
  * `localStorage`: every engine apply caches the EXACT base background it painted
  * (`__thememaker_base__`). At the VERY TOP of `document_start`, BEFORE any async
  * read, we synchronously `readBaseCache()` and, if present, paint that exact hex
- * onto `<html>` — so the first frame is already the themed base (no flash, and
- * since it's the engine's exact base, no early→final second flash either). Then
- * we proceed with the async `loadDecision` + full apply (which rewrites the
- * cache).
+ * onto `<html>` — so the first frame is already the themed base (no flash). Then
+ * we proceed with the async `loadDecision` + full apply (which rewrites cache).
  *
  * Residual flash: only the VERY FIRST themed load of an origin (no cache yet)
  * falls back to the palette-derived base; every subsequent reload is flash-free.
@@ -35,84 +39,23 @@
  */
 import {
   STYLE_ELEMENT_ID,
-  applyAdaptiveScheme,
   baseBackgroundFor,
   readBaseCache,
 } from "../lib/inject";
 import { loadDecision } from "../lib/site-state";
-import { KEYS, type SiteState } from "../lib/storage";
-import { startPick, type PickSession } from "./pick";
 import {
-  mountPickerPanel,
-  PANEL_HOST_ID,
-  type PanelHandle,
-} from "./picker-panel";
-import {
-  withoutRole,
-  withPickedRole,
-  withRoleColor,
-} from "./picker-panel-model";
-import type { ContentMessage } from "../lib/messages";
-import type { Palette } from "../lib/palette";
-import type { ApplyOptions, RoleOverrides, Scheme } from "../types";
-
-/** Promise-wraps the single per-site read; resolves `undefined` on any error. */
-const readSiteState = (origin: string): Promise<SiteState | undefined> =>
-  new Promise((resolve) => {
-    try {
-      const key = KEYS.sitePrefix + origin;
-      chrome.storage.local.get(key, (items) => {
-        // Swallow lastError (e.g. extension context invalidated) → no-op.
-        void chrome.runtime.lastError;
-        resolve(items?.[key] as SiteState | undefined);
-      });
-    } catch {
-      resolve(undefined);
-    }
-  });
-
-/**
- * Paints a base background `hex` onto `<html>` immediately, before the body
- * exists, to remove the reload flash. Uses its own marker `<style>` so it never
- * collides with the engine's `<style id="themeMaker">`; the full engine later
- * overwrites the html/body rule with the precise (body-aware) base.
- */
-const EARLY_STYLE_ID = "themeMakerEarly";
-const paintEarlyBaseColor = (hex: string): void => {
-  const head = document.head || document.documentElement;
-  if (!head) {
-    return;
-  }
-  let style = document.getElementById(
-    EARLY_STYLE_ID,
-  ) as HTMLStyleElement | null;
-  if (!style) {
-    style = document.createElement("style");
-    style.id = EARLY_STYLE_ID;
-    head.appendChild(style);
-  }
-  style.textContent = `html { background-color: ${hex} !important; }`;
-};
-
-/** Removes the early-base marker style once the full engine has painted. */
-const clearEarlyBase = (): void => {
-  document.getElementById(EARLY_STYLE_ID)?.remove();
-};
-
-/** Runs the full adaptive engine once a body is available. */
-const applyWhenReady = (palette: Palette, options: ApplyOptions): void => {
-  const run = (): void => {
-    applyAdaptiveScheme(palette, options);
-    // The engine writes its own html/body base rule into `#themeMaker`; drop the
-    // early stand-in so there's a single source of truth for the page base.
-    clearEarlyBase();
-  };
-  if (document.body) {
-    run();
-  } else {
-    document.addEventListener("DOMContentLoaded", run, { once: true });
-  }
-};
+  applyWhenReady,
+  clearEarlyBase,
+  paintEarlyBaseColor,
+} from "./early-paint";
+import { readSiteState } from "./site-storage";
+import { applyLive, hidePicker, showPicker } from "./picker-session";
+import { runApply, runQuery, runReset } from "./message-apply";
+import type {
+  ContentMessage,
+  ContentReplyMessage,
+  MessageResponse,
+} from "../lib/messages";
 
 /** The content-script entry point. Exported for unit testing. */
 export const runContentScript = async (): Promise<void> => {
@@ -151,201 +94,10 @@ export const runContentScript = async (): Promise<void> => {
   applyWhenReady(decision.palette, decision.options);
 };
 
-// ---- in-page floating picker control ------------------------------------
-//
-// The popup sends SHOW_PICKER (carrying the live theme) then closes. We mount a
-// Shadow DOM panel and a RE-ARMING pick session: clicking page elements adds
-// override rows; editing a row's color (or clearing it) applies live + persists.
-// Storage is the source of truth — overrides live on the per-site savedScheme,
-// so a reload restores them via `loadDecision`. Esc / Done close the panel.
-
-/** The single live floating-control session for this tab. */
-interface PickerSession {
-  panel: PanelHandle;
-  pick: PickSession;
-  palette: Palette;
-  /** The live theme intensity (panel re-applies + persists at this value). */
-  intensity: number;
-  /** The live override map the panel renders + applies + persists. */
-  overrides: RoleOverrides;
-}
-let picker: PickerSession | null = null;
-
-/** Promise-wraps writing this origin's per-site state. */
-const writeSiteState = (origin: string, state: SiteState): Promise<void> =>
-  new Promise((resolve) => {
-    try {
-      chrome.storage.local.set({ [KEYS.sitePrefix + origin]: state }, () => {
-        void chrome.runtime.lastError;
-        resolve();
-      });
-    } catch {
-      resolve();
-    }
-  });
-
-/** The current options (intensity + overrides) for a re-apply. */
-const optionsFor = (s: PickerSession): ApplyOptions =>
-  Object.keys(s.overrides).length > 0
-    ? { intensity: s.intensity, overrides: s.overrides }
-    : { intensity: s.intensity };
-
 /**
- * SERIALIZES persistence: a tail promise that each persist chains onto, so the
- * read-modify-write cycles never interleave. Without this, a fast color-drag
- * (each `input` event → a persist) could fire overlapping read→merge→write
- * cycles and lose an update (last-writer-wins on a STALE read). Chaining makes
- * each persist read AFTER the previous one's write committed.
+ * Handles a fire-and-forget popup → content-script {@link ContentMessage}
+ * (the picker control messages, which need no reply). Exported for tests.
  */
-let persistQueue: Promise<void> = Promise.resolve();
-
-/** Read-modify-write of this origin's saved scheme from the session's state. */
-const persistSession = async (s: PickerSession): Promise<void> => {
-  const origin = location.origin;
-  const site = (await readSiteState(origin)) ?? { enabled: false };
-  // Drop any previously-saved `overrides` here so it can't linger: "no
-  // overrides" is the ABSENCE of the key (same convention as `optionsFor`),
-  // re-added below only when there are some.
-  const { overrides: _prevOverrides, ...prevDetails } =
-    site.savedScheme?.schemeDetails ??
-    ({
-      rootColor: s.palette.seed,
-      colorMode: s.palette.mode,
-    } as Scheme["schemeDetails"]);
-  const hasOverrides = Object.keys(s.overrides).length > 0;
-  // Build/refresh the saved scheme: carry the live palette + intensity +
-  // overrides so `loadDecision` reapplies the exact custom theme next load.
-  const savedScheme: Scheme = {
-    ...(site.savedScheme ?? {
-      colors: {},
-      schemeDetails: {} as Scheme["schemeDetails"],
-    }),
-    schemeDetails: {
-      ...prevDetails,
-      palette: s.palette,
-      intensity: s.intensity,
-      ...(hasOverrides ? { overrides: s.overrides } : {}),
-    },
-  };
-  await writeSiteState(origin, { ...site, enabled: true, savedScheme });
-};
-
-/**
- * Applies the session's overrides LIVE (in-page engine, no executeScript) AND
- * persists them into this origin's saved scheme, ENABLING auto-reapply so a
- * reload restores them. Storage is the single source of truth the popup reads.
- * The live apply is immediate; the persist is SERIALIZED via {@link persistQueue}
- * so overlapping edits can't lose an update.
- */
-const applyAndPersist = (s: PickerSession): Promise<void> => {
-  applyWhenReady(s.palette, optionsFor(s));
-  // Chain onto the queue; a failed persist must not break the chain for the next.
-  persistQueue = persistQueue.then(() => persistSession(s)).catch(() => {});
-  return persistQueue;
-};
-
-/** Re-renders the panel rows from the current overrides (if the panel is open). */
-const renderPicker = (): void => {
-  picker?.panel.render(picker.overrides);
-};
-
-/** Esc closes the floating control (delegates to the panel's Done). */
-const onPickerKey = (e: KeyboardEvent): void => {
-  if (e.key === "Escape" && picker) {
-    e.preventDefault();
-    e.stopPropagation();
-    hidePicker();
-  }
-};
-
-/**
- * Shows the in-page floating control, mounting the Shadow DOM panel + a
- * re-arming pick session. Replaces any existing session. Seeds from the popup's
- * current theme (palette + intensity + overrides) so edits start from the live
- * look and persist back onto the per-site saved scheme.
- */
-export const showPicker = (palette: Palette, options: ApplyOptions): void => {
-  hidePicker();
-
-  // The panel/pick handlers need to read + mutate the LIVE session state, but the
-  // panel/pick handles don't exist until we build them — a chicken-and-egg. We
-  // break it WITHOUT a placeholder cast: the handlers close over `session` (the
-  // `const` declared below), which is assigned BEFORE any handler can fire
-  // (handlers only run on later user interaction — past the TDZ). So `panel`/
-  // `pick` are built with honest types and the session is assembled once,
-  // complete.
-  const panel = mountPickerPanel({
-    onColorChange: (role, color) => {
-      // Do NOT re-render here: rebuilding the rows would replace the
-      // <input type="color"> the user is actively dragging, which closes the
-      // native color dialog. The input already shows its own value — just
-      // update the override and apply live.
-      session.overrides = withRoleColor(session.overrides, role, color);
-      void applyAndPersist(session);
-    },
-    onClearRole: (role) => {
-      session.overrides = withoutRole(session.overrides, role);
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    onClearAll: () => {
-      session.overrides = {};
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    onDone: () => hidePicker(),
-  });
-
-  const pick = startPick({
-    onPicked: (key, currentColor) => {
-      session.overrides = withPickedRole(session.overrides, key, currentColor);
-      renderPicker();
-      void applyAndPersist(session);
-    },
-    // The panel host (and everything inside its shadow root) is excluded so the
-    // control never highlights or recolors itself.
-    isExcluded: (el) => el.closest(`#${PANEL_HOST_ID}`) !== null,
-  });
-
-  const session: PickerSession = {
-    palette,
-    intensity: options.intensity,
-    overrides: { ...(options.overrides ?? {}) },
-    panel,
-    pick,
-  };
-
-  picker = session;
-  panel.render(session.overrides);
-  document.addEventListener("keydown", onPickerKey, true);
-};
-
-/** Hides the floating control + ends pick mode (idempotent). */
-export const hidePicker = (): void => {
-  if (!picker) {
-    return;
-  }
-  document.removeEventListener("keydown", onPickerKey, true);
-  picker.pick.stop();
-  picker.panel.destroy();
-  picker = null;
-};
-
-/**
- * Re-applies the theme in place (popup → content, e.g. after "Clear all" in the
- * popup) and, if the floating control is open, keeps its rows in sync.
- */
-const applyLive = (palette: Palette, options: ApplyOptions): void => {
-  applyWhenReady(palette, options);
-  if (picker) {
-    picker.palette = palette;
-    picker.intensity = options.intensity;
-    picker.overrides = { ...(options.overrides ?? {}) };
-    renderPicker();
-  }
-};
-
-/** Handles a popup → content-script {@link ContentMessage}. Exported for tests. */
 export const handleContentMessage = (message: ContentMessage): void => {
   if (message.type === "SHOW_PICKER") {
     showPicker(message.palette, message.options);
@@ -356,6 +108,44 @@ export const handleContentMessage = (message: ContentMessage): void => {
   }
 };
 
+/**
+ * Handles a reply-carrying popup → content-script {@link ContentReplyMessage}
+ * (APPLY / RESET / QUERY) and returns the typed response the popup awaits. This
+ * is where the old executeScript injector now lives. Exported for tests.
+ */
+export const handleContentReplyMessage = (
+  message: ContentReplyMessage,
+): MessageResponse => {
+  switch (message.type) {
+    case "APPLY_SCHEME":
+      return runApply(
+        applyWhenReady,
+        message.palette,
+        message.options,
+        message.scheme,
+      );
+    case "RESET_SCHEME":
+      return runReset();
+    case "QUERY_STATE":
+      return runQuery();
+    default: {
+      const _exhaustive: never = message;
+      return {
+        ok: false,
+        error: `unknown message: ${JSON.stringify(_exhaustive)}`,
+      };
+    }
+  }
+};
+
+/** True for the reply-carrying message types (vs. the fire-and-forget set). */
+const needsReply = (
+  message: ContentMessage | ContentReplyMessage,
+): message is ContentReplyMessage =>
+  message.type === "APPLY_SCHEME" ||
+  message.type === "RESET_SCHEME" ||
+  message.type === "QUERY_STATE";
+
 // Side-effect entry: kick off on load. Guarded so importing this module in unit
 // tests (which set `__THEMEMAKER_TEST__`) doesn't auto-run against jsdom.
 declare global {
@@ -365,16 +155,37 @@ declare global {
 }
 if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
   void runContentScript();
-  // Listen for the popup's pick-mode messages (direct tab → content script).
+  // Listen for the popup's direct tab → content-script messages.
   try {
-    chrome.runtime.onMessage.addListener((message: ContentMessage) => {
-      handleContentMessage(message);
-      // No async response; return undefined (channel closes immediately).
-    });
+    chrome.runtime.onMessage.addListener(
+      (
+        message: ContentMessage | ContentReplyMessage,
+        _sender,
+        sendResponse: (response: MessageResponse) => void,
+      ) => {
+        if (needsReply(message)) {
+          // APPLY / RESET / QUERY: reply with the typed response. The handler is
+          // total (never throws), so the channel always resolves. Return `true`
+          // — the standard MV3 request/response signal that keeps the channel
+          // open so the (here synchronous) `sendResponse` is reliably delivered.
+          sendResponse(handleContentReplyMessage(message));
+          return true;
+        }
+        handleContentMessage(message);
+        // Fire-and-forget: no async response (channel closes immediately).
+        return undefined;
+      },
+    );
   } catch {
     // chrome.runtime unavailable (non-extension context) — ignore.
   }
 }
 
-export { EARLY_STYLE_ID, paintEarlyBaseColor, clearEarlyBase, applyWhenReady };
+export {
+  EARLY_STYLE_ID,
+  applyWhenReady,
+  clearEarlyBase,
+  paintEarlyBaseColor,
+} from "./early-paint";
+export { showPicker, hidePicker } from "./picker-session";
 export { STYLE_ELEMENT_ID };

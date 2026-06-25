@@ -2,15 +2,13 @@
  * Drives the REAL adaptive engine against live fixture pages — through the
  * extension's production auto-reapply path.
  *
- * Why this path: the extension ships only `activeTab` + `scripting` + `storage`
- * (no host permissions). Without a genuine action-button gesture, `activeTab`
- * host access is never granted, so a headless popup CANNOT `executeScript` into
- * an arbitrary tab (Chrome denies it: "manifest must request permission to
- * access the respective host"). The ALWAYS-ON content script (`<all_urls>` in
- * the manifest) needs no such grant: on every load it reads `site:<origin>` from
- * `chrome.storage.local`, runs the pure `loadDecision`, and applies the saved
- * scheme via the REAL `applyAdaptiveScheme`. That is exactly the Phase-3
- * persistence path, and it is what these helpers exercise.
+ * Why this path: the extension ships only `activeTab` + `storage` (no host
+ * permissions, no `scripting`). The ALWAYS-ON content script (`<all_urls>` in
+ * the manifest) is the single owner of page-side applies: on every load it reads
+ * `site:<origin>` from `chrome.storage.local`, runs the pure `loadDecision`, and
+ * applies the saved scheme via the REAL `applyAdaptiveScheme`. That is exactly
+ * the persistence path the popup's apply also targets (popup → content message),
+ * and it is what these helpers exercise.
  *
  * Faithfulness:
  *  - The palette is produced by the REAL `localPalette` generator (the

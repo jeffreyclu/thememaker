@@ -222,3 +222,76 @@ describe("runContentScript (auto-reapply flow)", () => {
     expect(applySpy).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * APPLY / RESET / QUERY reply-message handling — the page-side routing that the
+ * background's `chrome.scripting.executeScript` injector USED to do (the
+ * relocated `router.test.ts` coverage). `handleContentReplyMessage` is the
+ * content script's request/response handler the popup awaits.
+ */
+describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () => {
+  let applySpy: MockInstance<[Palette, ApplyOptions], boolean>;
+  let removeSpy: MockInstance<[], boolean>;
+  let appliedSpy: MockInstance<[], boolean>;
+
+  beforeEach(() => {
+    document.body.innerHTML = "<p>hi</p>"; // body present → engine runs sync.
+    applySpy = vi.spyOn(inject, "applyAdaptiveScheme").mockReturnValue(true);
+    removeSpy = vi.spyOn(inject, "removeSchemeStyle").mockReturnValue(true);
+    appliedSpy = vi.spyOn(inject, "isSchemeApplied").mockReturnValue(false);
+    (
+      window as unknown as { __THEMEMAKER_TEST__?: boolean }
+    ).__THEMEMAKER_TEST__ = true;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("APPLY_SCHEME runs the engine and echoes the scheme with applied:true", async () => {
+    const { handleContentReplyMessage } = await import("../src/content/index");
+    const scheme = schemeFromPalette(mockPalette, 60, "Test");
+    const resp = handleContentReplyMessage({
+      type: "APPLY_SCHEME",
+      palette: mockPalette,
+      options: { intensity: 60 },
+      scheme,
+    });
+
+    expect(applySpy).toHaveBeenCalledTimes(1);
+    const [palette, options] = applySpy.mock.calls[0];
+    expect(palette).toStrictEqual(mockPalette);
+    expect(options).toEqual({ intensity: 60 });
+    expect(resp).toMatchObject({ ok: true, applied: true, scheme });
+  });
+
+  it("RESET_SCHEME removes the style and reports applied:false", async () => {
+    const { handleContentReplyMessage } = await import("../src/content/index");
+    const resp = handleContentReplyMessage({ type: "RESET_SCHEME" });
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(resp).toStrictEqual({ ok: true, applied: false });
+  });
+
+  it("QUERY_STATE reports whether a style is applied", async () => {
+    appliedSpy.mockReturnValue(true);
+    const { handleContentReplyMessage } = await import("../src/content/index");
+    const resp = handleContentReplyMessage({ type: "QUERY_STATE" });
+    expect(appliedSpy).toHaveBeenCalledTimes(1);
+    expect(resp).toStrictEqual({ ok: true, applied: true });
+  });
+
+  it("turns an engine throw into { ok:false, error } (no throw)", async () => {
+    applySpy.mockImplementation(() => {
+      throw new Error("boom");
+    });
+    const { handleContentReplyMessage } = await import("../src/content/index");
+    const resp = handleContentReplyMessage({
+      type: "APPLY_SCHEME",
+      palette: mockPalette,
+      options: { intensity: 60 },
+      scheme: schemeFromPalette(mockPalette, 60, "Test"),
+    });
+    expect(resp.ok).toBe(false);
+    expect(resp.error).toBe("boom");
+  });
+});

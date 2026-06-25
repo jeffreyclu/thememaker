@@ -15,11 +15,14 @@ import pkg from "../package.json";
  *    accepted trade-off for persistence: it RE-INTRODUCES the "read and change
  *    all your data on all websites" install warning (an explicit product
  *    decision — broad host access in exchange for per-site auto-reapply).
- *  - The popup ALSO injects on demand via `chrome.scripting` (granted by
- *    `activeTab` on the user gesture). Both paths share the same engine and the
- *    single `<style id="themeMaker">`, so they never double-apply.
- *  - Permissions: `activeTab` + `scripting` + `storage`.
- *  - No `web_accessible_resources`: neither path needs any.
+ *  - The popup drives on-demand apply/reset/query by sending messages DIRECTLY
+ *    to that same always-on content script (`chrome.tabs.sendMessage`), which
+ *    runs the engine in the page. There is no `chrome.scripting.executeScript`
+ *    path anymore — so `scripting` is no longer requested. Both the popup-driven
+ *    and auto-reapply paths share the single `<style id="themeMaker">` (no
+ *    double-apply). `activeTab` is still needed for active-tab resolution.
+ *  - Permissions: `activeTab` + `storage`.
+ *  - No `web_accessible_resources`: no path needs any.
  */
 export default defineManifest({
   manifest_version: 3,
@@ -32,7 +35,7 @@ export default defineManifest({
     "48": "icon48.png",
     "128": "icon128.png",
   },
-  permissions: ["activeTab", "scripting", "storage"],
+  permissions: ["activeTab", "storage"],
   content_scripts: [
     {
       matches: ["<all_urls>"],
