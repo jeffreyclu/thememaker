@@ -22,7 +22,7 @@ import type {
 } from "../../lib/messaging";
 import { storage } from "../../lib/storage";
 import type { Intensity, RoleOverrides, Scheme } from "../../types";
-import type { SchemeStore } from "./scheme-store";
+import type { SchemeStore } from "../SchemeProvider";
 import type { PopupActions } from "./usePopup";
 
 /** The exact look to commit (apply + persist): scheme + live intensity + overrides. */

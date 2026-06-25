@@ -26,14 +26,23 @@ import {
   hydratePartial,
   schemeInitialState,
   schemeReducer,
+  type SchemeAction,
   type SchemeState,
 } from "./scheme-reducer";
-import { SchemeStoreContext, type SchemeStore } from "./hooks/scheme-store";
 import { sendToContentWithReply } from "../lib/messaging";
 import { storage, Storage, DEFAULT_SITE_STATE } from "../lib/storage";
 
 // Exported so tests can read the live scheme state.
 export const SchemeStateContext = createContext<SchemeState | null>(null);
+
+/** The scheme store the focused action hooks read (refs + dispatch). */
+export interface SchemeStore {
+  getState: () => SchemeState;
+  dispatch: (action: SchemeAction) => void;
+  activeTabId: () => number | null;
+}
+
+export const SchemeStoreContext = createContext<SchemeStore | null>(null);
 
 export const SchemeProvider = ({
   children,
@@ -132,4 +141,13 @@ export const useSchemeState = (): SchemeState => {
     throw new Error("useSchemeState must be used within a SchemeProvider");
   }
   return state;
+};
+
+/** Reads the scheme store. Throws outside a `SchemeProvider`. */
+export const useSchemeStore = (): SchemeStore => {
+  const store = useContext(SchemeStoreContext);
+  if (!store) {
+    throw new Error("useSchemeStore must be used within a SchemeProvider");
+  }
+  return store;
 };

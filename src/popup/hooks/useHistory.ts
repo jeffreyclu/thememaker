@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 
 import { createSchemeEffects } from "./scheme-effects";
-import { useSchemeStore } from "./scheme-store";
+import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { dequeueScheme } from "../../lib/storage/history";
 

@@ -11,7 +11,7 @@ import { useMemo } from "react";
 
 import { schemeWithIntensity, defaultFavoriteName } from "../../lib/scheme";
 import { createSchemeEffects } from "./scheme-effects";
-import { useSchemeStore } from "./scheme-store";
+import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { storage } from "../../lib/storage";
 import type { Favorite } from "../../lib/storage";

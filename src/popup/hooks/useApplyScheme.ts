@@ -11,7 +11,7 @@ import { useMemo } from "react";
 
 import { applyPayloadForScheme, invertScheme } from "../../lib/scheme";
 import { createSchemeEffects } from "./scheme-effects";
-import { useSchemeStore } from "./scheme-store";
+import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { storage } from "../../lib/storage";
 import { clampIntensity, type Intensity } from "../../types";

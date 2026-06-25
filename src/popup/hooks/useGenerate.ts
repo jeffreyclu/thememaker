@@ -10,7 +10,7 @@ import { useMemo } from "react";
 
 import { generateForSelection } from "../../lib/scheme";
 import { createSchemeEffects } from "./scheme-effects";
-import { useSchemeStore } from "./scheme-store";
+import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 import { usePersist } from "./usePersist";
 import { storage } from "../../lib/storage";

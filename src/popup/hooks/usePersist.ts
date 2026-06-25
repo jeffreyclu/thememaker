@@ -10,7 +10,7 @@
 import { useMemo } from "react";
 
 import { createSchemeEffects, type LiveScheme } from "./scheme-effects";
-import { useSchemeStore } from "./scheme-store";
+import { useSchemeStore } from "../SchemeProvider";
 import { usePopup } from "./usePopup";
 
 export interface PersistActions {

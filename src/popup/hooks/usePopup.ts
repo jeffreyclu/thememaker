@@ -13,7 +13,7 @@
  */
 import { useMemo } from "react";
 
-import { usePopupStore } from "./popup-store";
+import { usePopupStore } from "../PopupProvider";
 
 /** How long the "Saved" confirmation/highlight lingers before clearing. */
 const SAVE_FEEDBACK_MS = 2200;

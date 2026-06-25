@@ -23,12 +23,19 @@ import {
 import {
   popupInitialState,
   popupReducer,
+  type PopupAction,
   type PopupState,
 } from "./popup-reducer";
-import { PopupStoreContext, type PopupStore } from "./hooks/popup-store";
 
 // Exported so tests can read/seed the live view state.
 export const PopupStateContext = createContext<PopupState | null>(null);
+
+/** The popup view store the `usePopup` actions hook reads (view dispatch). */
+export interface PopupStore {
+  dispatch: (action: PopupAction) => void;
+}
+
+export const PopupStoreContext = createContext<PopupStore | null>(null);
 
 export const PopupProvider = ({
   children,
@@ -47,6 +54,15 @@ export const PopupProvider = ({
       </PopupStateContext.Provider>
     </PopupStoreContext.Provider>
   );
+};
+
+/** Reads the popup view store. Throws outside a `PopupProvider`. */
+export const usePopupStore = (): PopupStore => {
+  const store = useContext(PopupStoreContext);
+  if (!store) {
+    throw new Error("usePopupStore must be used within a PopupProvider");
+  }
+  return store;
 };
 
 /** Reads the live popup view state. Throws outside a `PopupProvider`. */
