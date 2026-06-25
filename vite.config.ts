@@ -1,11 +1,12 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import { crx } from "@crxjs/vite-plugin";
 
 import manifest from "./src/manifest.config";
 
 export default defineConfig({
-  plugins: [crx({ manifest })],
+  plugins: [react(), crx({ manifest })],
   build: {
     // Emit a clean, loadable unpacked extension into dist/.
     outDir: "dist",
@@ -17,7 +18,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["tests/setup.ts"],
   },
 });
