@@ -11,12 +11,12 @@
  *
  * Replaces ALL prior `localStorage` usage.
  */
-import { MAX_HISTORY } from "../config";
+import { MAX_HISTORY } from "../../config";
 import { enqueueScheme } from "./history";
-import type { PaletteCacheStore } from "./color-source";
-import type { Palette } from "./palette";
-import { DEFAULT_INTENSITY } from "../types";
-import type { ColorMode, Intensity, Scheme } from "../types";
+import type { PaletteCacheStore } from "../palette/color-source";
+import type { Palette } from "../palette/palette";
+import { DEFAULT_INTENSITY } from "../../types";
+import type { ColorMode, Intensity, Scheme } from "../../types";
 
 /** Minimal promise-based key/value area. The seam tests inject a fake behind. */
 export interface StorageArea {

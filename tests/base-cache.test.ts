@@ -10,16 +10,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Engine } from "../src/lib/engine";
+import { Engine } from "../src/lib/engine/engine";
 import {
   BASE_CACHE_KEY,
   baseBackgroundFor,
   clearBaseCache,
   readBaseCache,
   writeBaseCache,
-} from "../src/lib/base-cache";
-import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
-import { generatePalette } from "../src/lib/palette";
+} from "../src/lib/engine/base-cache";
+import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
+import { generatePalette } from "../src/lib/palette/palette";
 import type { ApplyOptions } from "../src/types";
 
 const htmlBaseFromCss = (): string | undefined => {

@@ -10,14 +10,14 @@
  * `Scheme` for history/swatches.
  */
 import { modes } from "../config";
-import { randomHexColor, randomMode } from "../lib/random";
-import { describeColor } from "../lib/color-names";
-import { isHexColor, normalizeHex } from "../lib/color";
-import { localPalette, apiPalette } from "../lib/color-source";
-import type { PaletteSourceDeps } from "../lib/color-source";
-import { invertPalette } from "../lib/palette";
-import type { Palette } from "../lib/palette";
-import type { ModeSelection } from "./state";
+import { randomHexColor, randomMode } from "../lib/palette/random";
+import { describeColor } from "../lib/color/color-names";
+import { isHexColor, normalizeHex } from "../lib/color/color";
+import { localPalette, apiPalette } from "../lib/palette/color-source";
+import type { PaletteSourceDeps } from "../lib/palette/color-source";
+import { invertPalette } from "../lib/palette/palette";
+import type { Palette } from "../lib/palette/palette";
+import type { ModeSelection } from "./state/state";
 import { DEFAULT_INTENSITY } from "../types";
 import type {
   ApplyOptions,

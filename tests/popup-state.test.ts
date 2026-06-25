@@ -8,7 +8,7 @@ import {
   popupReducer,
   schemeDetailRows,
   type PopupState,
-} from "../src/popup/state";
+} from "../src/popup/state/state";
 import {
   applyPayloadForScheme,
   generateForSelection,

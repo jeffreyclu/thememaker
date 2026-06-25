@@ -6,8 +6,8 @@
  * DOM or `chrome.*`, so the view + the state selectors share ONE set of
  * derivations instead of each re-grouping `scheme.colors`.
  */
-import { describeColor } from "../lib/color-names";
-import type { Scheme } from "../types";
+import { describeColor } from "../../lib/color/color-names";
+import type { Scheme } from "../../types";
 
 /** @returns the friendly label for a scheme history entry. */
 export const historyLabel = (scheme: Scheme, index: number): string => {

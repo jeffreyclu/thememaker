@@ -11,8 +11,8 @@
  * unit-testable without a network or `chrome.storage`.
  */
 import { generatePalette, type Palette } from "./palette";
-import { isHexColor, normalizeHex } from "./color";
-import type { ColorMode } from "../types";
+import { isHexColor, normalizeHex } from "../color/color";
+import type { ColorMode } from "../../types";
 
 /** A minimal persistent cache the API source reads/writes (e.g. chrome.storage). */
 export interface PaletteCacheStore {

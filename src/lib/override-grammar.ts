@@ -13,7 +13,7 @@
  * No DOM, no `chrome.*` — pure string logic so every consumer (popup, picker
  * panel, engine) shares ONE grammar instead of re-deriving it.
  */
-import { isHexColor, normalizeHex } from "./color";
+import { isHexColor, normalizeHex } from "./color/color";
 import type { RoleOverrides } from "../types";
 
 /** Neutral fallback when a picked element's current color can't be parsed. */

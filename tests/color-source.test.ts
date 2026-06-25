@@ -7,9 +7,9 @@ import {
   paletteCacheKey,
   paletteFromApiResponse,
   type PaletteCacheStore,
-} from "../src/lib/color-source";
-import { isHexColor } from "../src/lib/color";
-import type { Palette } from "../src/lib/palette";
+} from "../src/lib/palette/color-source";
+import { isHexColor } from "../src/lib/color/color";
+import type { Palette } from "../src/lib/palette/palette";
 
 const okResponse = (colors: string[]) =>
   ({

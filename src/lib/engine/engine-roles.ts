@@ -13,10 +13,10 @@
  * role-rule / walk modules, so each is a pure function of resolved colors rather
  * than re-reading the palette. No DOM here — pure derivation.
  */
-import { luminanceBucket, nudgeToAA } from "./color";
-import { mixCss, parseCssColor, rgbTupleToHex } from "./color-runtime";
-import type { Palette } from "./palette";
-import type { ApplyOptions } from "../types";
+import { luminanceBucket, nudgeToAA } from "../color/color";
+import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
+import type { Palette } from "../palette/palette";
+import type { ApplyOptions } from "../../types";
 
 /** The concrete role colors + blend state the engine paints a page from. */
 export interface ResolvedRoles {

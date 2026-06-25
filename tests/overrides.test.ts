@@ -23,9 +23,9 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { Engine } from "../src/lib/engine";
-import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
-import { generatePalette } from "../src/lib/palette";
+import { Engine } from "../src/lib/engine/engine";
+import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
+import { generatePalette } from "../src/lib/palette/palette";
 import {
   FALLBACK_COLOR,
   overrideRows,
@@ -33,7 +33,7 @@ import {
   withPickedRole,
   withRoleColor,
   withoutRole,
-} from "../src/content/picker-panel-model";
+} from "../src/content/picker/picker-panel-model";
 
 const OVERRIDES_ID = "themeMakerOverrides";
 const palette = generatePalette("#3a7bd5", "triad");

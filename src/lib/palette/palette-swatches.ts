@@ -5,7 +5,7 @@
  * number of distinct colors. Split out of `palette.ts` to keep each concern
  * small; pure HSL math, no DOM.
  */
-import { hexToHsl } from "./color";
+import { hexToHsl } from "../color/color";
 import type { PaletteRoles } from "./palette-roles";
 
 /** A labeled theme color: the SOT pairing of a semantic role and its hex. */

@@ -14,7 +14,7 @@
  * shadow root, design-token-ish but isolated since the page can't see them).
  */
 import { overrideRows, type OverrideRow } from "./picker-panel-model";
-import type { RoleOverrides } from "../types";
+import type { RoleOverrides } from "../../types";
 
 /** The id on the Shadow DOM host element — the engine + picker exclude this. */
 export const PANEL_HOST_ID = "themeMakerPickerHost";

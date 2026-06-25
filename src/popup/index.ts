@@ -23,17 +23,17 @@ import {
   popupReducer,
   type PopupAction,
   type PopupState,
-} from "./state";
-import { bindEvents, populateModes, queryRefs, render } from "./view";
+} from "./state/state";
+import { bindEvents, populateModes, queryRefs, render } from "./view/view";
 import { makeController } from "./controller";
 import { makeHandlers } from "./handlers";
 import type { PopupContext } from "./context";
-import { sendToContent, sendToContentWithReply } from "../lib/messages";
+import { sendToContent, sendToContentWithReply } from "../lib/storage/messages";
 import {
   createChromeStorage,
   originFromUrl,
   DEFAULT_SITE_STATE,
-} from "../lib/storage";
+} from "../lib/storage/storage";
 
 const storage = createChromeStorage();
 const refs = queryRefs(document);

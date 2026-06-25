@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { describeColor } from "../src/lib/color-names";
+import { describeColor } from "../src/lib/color/color-names";
 
 describe("describeColor", () => {
   it("names colors by hue family", () => {

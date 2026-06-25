@@ -5,8 +5,8 @@
  * `palette.ts` because `deriveRoles` is the file's dominant mass; pure HSL math,
  * no DOM.
  */
-import { hslToHex, luminanceOf } from "./color";
-import type { HSL } from "./color";
+import { hslToHex, luminanceOf } from "../color/color";
+import type { HSL } from "../color/color";
 
 /**
  * The concrete, named color slots the in-page engine paints onto semantic

@@ -20,12 +20,12 @@ import {
 } from "vitest";
 
 import type { ApplyOptions } from "../src/types";
-import type { Palette } from "../src/lib/palette";
+import type { Palette } from "../src/lib/palette/palette";
 
-import { loadDecision } from "../src/lib/site-state";
-import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
+import { loadDecision } from "../src/lib/storage/site-state";
+import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { schemeFromPalette } from "../src/popup/engine-bridge";
-import { KEYS, type SiteState } from "../src/lib/storage";
+import { KEYS, type SiteState } from "../src/lib/storage/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockPalette } from "./mocks";
 import { DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";

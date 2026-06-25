@@ -10,7 +10,7 @@
  * Pure over the injected {@link PopupContext} so it is testable without chrome.
  */
 import { applyPayloadForScheme, schemeWithIntensity } from "./engine-bridge";
-import { siteStateReducer } from "../lib/site-state";
+import { siteStateReducer } from "../lib/storage/site-state";
 import type { PopupContext } from "./context";
 
 const INTENSITY_DEBOUNCE_MS = 120;

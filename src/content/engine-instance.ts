@@ -8,7 +8,7 @@
  * re-applies + slider drags reuse the frozen originals (idempotent) and there is
  * one observer / one work queue for the page.
  */
-import { Engine } from "../lib/engine";
+import { Engine } from "../lib/engine/engine";
 
 /** This tab's single adaptive theming engine. */
 export const engine = new Engine();

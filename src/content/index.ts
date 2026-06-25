@@ -31,17 +31,17 @@
  * theme and calls `engine.preventReloadFlash()` / `engine.cancelReloadFlash()` /
  * `engine.applyWhenReady()` — it holds NO theming logic of its own.
  */
-import { STYLE_ELEMENT_ID } from "../lib/theme-dom-constants";
-import { loadDecision } from "../lib/site-state";
+import { STYLE_ELEMENT_ID } from "../lib/engine/theme-dom-constants";
+import { loadDecision } from "../lib/storage/site-state";
 import { engine } from "./engine-instance";
 import { readSiteState } from "./site-storage";
-import { applyLive, hidePicker, showPicker } from "./picker-session";
+import { applyLive, hidePicker, showPicker } from "./picker/picker-session";
 import { runApply, runQuery, runReset } from "./message-apply";
 import type {
   ContentMessage,
   ContentReplyMessage,
   MessageResponse,
-} from "../lib/messages";
+} from "../lib/storage/messages";
 
 /** The content-script entry point. Exported for unit testing. */
 export const runContentScript = async (): Promise<void> => {
@@ -153,5 +153,5 @@ if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
   }
 }
 
-export { showPicker, hidePicker } from "./picker-session";
+export { showPicker, hidePicker } from "./picker/picker-session";
 export { STYLE_ELEMENT_ID };

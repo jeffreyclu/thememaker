@@ -19,8 +19,8 @@ import type {
   ApplySchemeResponse,
   QueryStateResponse,
   ResetSchemeResponse,
-} from "../lib/messages";
-import type { Palette } from "../lib/palette";
+} from "../lib/storage/messages";
+import type { Palette } from "../lib/palette/palette";
 import type { ApplyOptions, Scheme } from "../types";
 
 /**

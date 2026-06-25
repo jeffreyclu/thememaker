@@ -7,9 +7,9 @@
 import {
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
-} from "../lib/override-grammar";
+} from "../../lib/override-grammar";
 import type { PopupState } from "./state";
-import type { SchemeDetails } from "../types";
+import type { SchemeDetails } from "../../types";
 
 /** @returns the seed metadata for the current scheme, if any. */
 export const currentSchemeDetails = (state: PopupState): SchemeDetails | null =>

@@ -6,8 +6,8 @@ import {
   queryRefs,
   render,
   type PopupHandlers,
-} from "../src/popup/view";
-import { initialPopupState, type PopupState } from "../src/popup/state";
+} from "../src/popup/view/view";
+import { initialPopupState, type PopupState } from "../src/popup/state/state";
 import { modes } from "../src/config";
 import { mockScheme, mockScheme2 } from "./mocks";
 

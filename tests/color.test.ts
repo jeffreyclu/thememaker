@@ -19,7 +19,7 @@ import {
   relativeLuminance,
   rgbToHex,
   rgbToHsl,
-} from "../src/lib/color";
+} from "../src/lib/color/color";
 
 /** Circular hue distance in [0, 180]. */
 const hueDist = (a: number, b: number): number => {

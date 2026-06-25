@@ -101,7 +101,7 @@ export interface SchemeDetails {
    * legacy/history fixtures without a palette still type-check; the popup
    * regenerates a palette from `rootColor` + `colorMode` when it is absent.
    */
-  palette?: import("./lib/palette").Palette;
+  palette?: import("./lib/palette/palette").Palette;
   /** The intensity the scheme was generated/applied with. */
   intensity?: Intensity;
   /**

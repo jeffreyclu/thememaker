@@ -6,9 +6,9 @@
  * bodies don't duplicate it (favorites just adds a delete button per row).
  */
 import { makeSwatchStrip } from "./view-primitives";
-import { historyLabel, schemeSwatches } from "./scheme-view-model";
-import type { PopupState } from "./state";
-import type { Favorite } from "../lib/storage";
+import { historyLabel, schemeSwatches } from "../state/scheme-view-model";
+import type { PopupState } from "../state/state";
+import type { Favorite } from "../../lib/storage/storage";
 
 /**
  * A labeled `<button>` with a right-aligned swatch strip — the shared body of a

@@ -5,12 +5,12 @@
  * and IO and calls `render` after each transition. Event wiring is done once in
  * `bindEvents`, dispatching intents back to the controller via callbacks.
  */
-import { type ModeSelection, type PopupState } from "./state";
-import { isCurrentSaved } from "./state-selectors";
+import { type ModeSelection, type PopupState } from "../state/state";
+import { isCurrentSaved } from "../state/state-selectors";
 import { renderDetails } from "./view-details";
 import { renderFavorites, renderHistory } from "./view-lists";
-import { modes } from "../config";
-import type { Intensity } from "../types";
+import { modes } from "../../config";
+import type { Intensity } from "../../types";
 
 export interface PopupRefs {
   mode: HTMLSelectElement;

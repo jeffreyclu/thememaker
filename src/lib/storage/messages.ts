@@ -12,8 +12,8 @@
  * Every message is discriminated by `type`. `sendToContentWithReply<M>` ties
  * each request type to its response type so callers stay end-to-end typed.
  */
-import type { ApplyOptions, Scheme } from "../types";
-import type { Palette } from "./palette";
+import type { ApplyOptions, Scheme } from "../../types";
+import type { Palette } from "../palette/palette";
 
 /**
  * Apply a generated palette to the active tab. The ADAPTIVE engine runs IN the

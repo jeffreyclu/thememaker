@@ -22,7 +22,7 @@ import {
   propForElement,
   startPick,
   OVERLAY_ID,
-} from "../src/content/pick";
+} from "../src/content/picker/pick";
 
 afterEach(() => {
   document.body.innerHTML = "";

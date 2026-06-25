@@ -14,7 +14,7 @@
  * level deeper (0,2,1). Each rule floors its role seed against a DETERMINISTIC
  * reference surface. Pure string building over the resolved roles.
  */
-import { contrastRatio } from "./color";
+import { contrastRatio } from "../color/color";
 import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
 import type { ResolvedRoles } from "./engine-roles";
 

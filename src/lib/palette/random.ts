@@ -4,8 +4,8 @@
  * Nothing here touches `chrome.*` or the DOM; fully unit-testable. These are the
  * "Generate" entry points: a random seed color and a random color mode.
  */
-import { modes } from "../config";
-import type { ColorMode } from "../types";
+import { modes } from "../../config";
+import type { ColorMode } from "../../types";
 
 /** @returns a random integer between `min` and `max` (inclusive). */
 const randomInt = (min: number, max: number): number =>

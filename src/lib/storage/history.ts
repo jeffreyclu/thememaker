@@ -5,8 +5,8 @@
  * the popup reads entries back out. Both helpers are immutable (return new
  * values, never mutate their inputs).
  */
-import { MAX_HISTORY } from "../config";
-import type { Scheme } from "../types";
+import { MAX_HISTORY } from "../../config";
+import type { Scheme } from "../../types";
 
 /**
  * Appends `scheme` to a bounded history queue (most-recent at the end),

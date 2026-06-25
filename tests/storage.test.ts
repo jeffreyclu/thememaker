@@ -10,7 +10,7 @@ import {
   originFromUrl,
   type Favorite,
   type StorageArea,
-} from "../src/lib/storage";
+} from "../src/lib/storage/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockPalette, mockScheme, mockScheme2 } from "./mocks";
 

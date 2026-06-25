@@ -6,15 +6,15 @@
  * High-frequency vs low-frequency concerns aren't an issue at this scale (one
  * small document), so a single reducer keeps it simple.
  */
-import { dequeueScheme } from "../lib/history";
+import { dequeueScheme } from "../../lib/storage/history";
 import {
   defaultFavoriteName,
   historyLabel,
   schemeDetailRows,
 } from "./scheme-view-model";
-import { clampIntensity, DEFAULT_INTENSITY } from "../types";
-import type { ColorMode, Intensity, RoleOverrides, Scheme } from "../types";
-import type { Favorite, Settings, SiteState } from "../lib/storage";
+import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
+import type { ColorMode, Intensity, RoleOverrides, Scheme } from "../../types";
+import type { Favorite, Settings, SiteState } from "../../lib/storage/storage";
 
 export type ModeSelection = ColorMode | "random";
 

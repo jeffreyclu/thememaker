@@ -10,9 +10,9 @@
  * Everything here is pure and testable: state transitions and the load
  * decision take plain data and return plain data — no DOM, no `chrome.*`.
  */
-import type { ApplyOptions, Scheme } from "../types";
-import { clampIntensity, DEFAULT_INTENSITY } from "../types";
-import type { Palette } from "./palette";
+import type { ApplyOptions, Scheme } from "../../types";
+import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
+import type { Palette } from "../palette/palette";
 import type { SiteState } from "./storage";
 
 // `enable` is the only transition the app dispatches. The popup owns the "full

@@ -11,14 +11,14 @@
  * map as a CSS layer (`<tag>[data-thememaker]{ prop: color !important }`, or a
  * bare `html`/`body` rule for the page base) and persists it on the scheme.
  */
-import { isHexColor, normalizeHex } from "../lib/color";
+import { isHexColor, normalizeHex } from "../../lib/color/color";
 import {
   FALLBACK_COLOR,
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
   type OverrideRow,
-} from "../lib/override-grammar";
-import type { RoleOverrides } from "../types";
+} from "../../lib/override-grammar";
+import type { RoleOverrides } from "../../types";
 
 export { FALLBACK_COLOR };
 export type { OverrideRow };

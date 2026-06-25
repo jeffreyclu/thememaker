@@ -8,9 +8,9 @@
  * they live in `lib/classify.ts` (D2) and `lib/color-runtime.ts` (D3); this
  * module imports them rather than re-implementing them.
  */
-import { isButtonLike } from "../lib/classify";
-import { cssColorToHex } from "../lib/color-runtime";
-import { makeOverrideKey } from "../lib/override-grammar";
+import { isButtonLike } from "../../lib/classify";
+import { cssColorToHex } from "../../lib/color/color-runtime";
+import { makeOverrideKey } from "../../lib/override-grammar";
 
 /**
  * True when the element renders its OWN non-transparent background.

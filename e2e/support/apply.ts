@@ -18,8 +18,8 @@
  *  - Theming itself is done by the REAL bundled content script + engine.
  */
 import type { BrowserContext, Page } from "@playwright/test";
-import { localPalette } from "../../src/lib/color-source";
-import type { Palette } from "../../src/lib/palette";
+import { localPalette } from "../../src/lib/palette/color-source";
+import type { Palette } from "../../src/lib/palette/palette";
 
 /** Generates a real palette from a seed + mode (default a deterministic blue triad). */
 export const makePalette = (seed = "#1565c0", mode = "triad"): Palette =>

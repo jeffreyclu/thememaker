@@ -13,12 +13,12 @@ import {
   applyPayloadForScheme,
   schemeWithIntensity,
 } from "./engine-bridge";
-import { defaultFavoriteName, type ModeSelection } from "./state";
-import type { PopupHandlers } from "./view";
+import { defaultFavoriteName, type ModeSelection } from "./state/state";
+import type { PopupHandlers } from "./view/view";
 import type { Controller } from "./controller";
 import type { PopupContext } from "./context";
-import type { Palette } from "../lib/palette";
-import type { Favorite } from "../lib/storage";
+import type { Palette } from "../lib/palette/palette";
+import type { Favorite } from "../lib/storage/storage";
 import { clampIntensity, type Intensity } from "../types";
 
 /** @returns a stable, collision-resistant favorite id. */

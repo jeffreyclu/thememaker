@@ -13,7 +13,7 @@
  * engine's surface-only classifiers. Pure decisions over an element + resolved
  * roles — `getComputedStyle` reads stay in the walk, not here.
  */
-import { isButtonLike } from "./classify";
+import { isButtonLike } from "../classify";
 import type { ResolvedRoles } from "./engine-roles";
 
 /** The surface FIXED-THEME fill for an element: bg, label seed, optional token. */

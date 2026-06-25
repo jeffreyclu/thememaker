@@ -6,9 +6,9 @@
  * reuses the shared `makeSwatch` chip primitive from `view.ts`.
  */
 import { makeSwatch } from "./view-primitives";
-import { overrideRows, type PopupState } from "./state";
-import { schemeDetailRows } from "./scheme-view-model";
-import { describeColor } from "../lib/color-names";
+import { overrideRows, type PopupState } from "../state/state";
+import { schemeDetailRows } from "../state/scheme-view-model";
+import { describeColor } from "../../lib/color/color-names";
 
 /** A details panel row: swatch + a text label + the hex read-out. */
 const makeDetailRow = (text: string, color: string): HTMLDivElement => {

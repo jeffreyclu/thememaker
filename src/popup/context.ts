@@ -8,13 +8,13 @@
  * directly. This keeps the chrome wiring in one tiny root and makes the
  * controller/handlers unit-testable over a fake `ctx`.
  */
-import type { PopupAction, PopupState } from "./state";
+import type { PopupAction, PopupState } from "./state/state";
 import type {
   ContentMessage,
   ContentReplyMessage,
   ResponseFor,
-} from "../lib/messages";
-import type { createChromeStorage } from "../lib/storage";
+} from "../lib/storage/messages";
+import type { createChromeStorage } from "../lib/storage/storage";
 
 export type PopupStorage = ReturnType<typeof createChromeStorage>;
 

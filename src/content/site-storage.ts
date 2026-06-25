@@ -7,7 +7,7 @@
  * hot path; both wrappers resolve (never reject) so a torn-down extension
  * context is a no-op, not an unhandled rejection.
  */
-import { KEYS, type SiteState } from "../lib/storage";
+import { KEYS, type SiteState } from "../lib/storage/storage";
 
 /** Promise-wraps the single per-site read; resolves `undefined` on any error. */
 export const readSiteState = (origin: string): Promise<SiteState | undefined> =>

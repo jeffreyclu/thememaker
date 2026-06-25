@@ -18,10 +18,10 @@ import {
   withPickedRole,
   withRoleColor,
 } from "./picker-panel-model";
-import { engine } from "./engine-instance";
-import { readSiteState, writeSiteState } from "./site-storage";
-import type { Palette } from "../lib/palette";
-import type { ApplyOptions, RoleOverrides, Scheme } from "../types";
+import { engine } from "../engine-instance";
+import { readSiteState, writeSiteState } from "../site-storage";
+import type { Palette } from "../../lib/palette/palette";
+import type { ApplyOptions, RoleOverrides, Scheme } from "../../types";
 
 /** The single live floating-control session for this tab. */
 interface PickerSession {

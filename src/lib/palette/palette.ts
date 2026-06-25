@@ -22,11 +22,11 @@
  * neutral "paper"; links / buttons / headings carry the saturated accent hues.
  * The in-page engine (`inject.ts`) then enforces AA on every pair.
  */
-import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "./color";
-import type { HSL } from "./color";
+import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "../color/color";
+import type { HSL } from "../color/color";
 import { deriveRoles, wrapHue, type PaletteRoles } from "./palette-roles";
 import { themeSwatches, type ThemeColor } from "./palette-swatches";
-import type { ColorMode } from "../types";
+import type { ColorMode } from "../../types";
 
 // Re-exported so existing consumers keep importing the palette's public types
 // from `./palette` (the `Palette` interface below references both).

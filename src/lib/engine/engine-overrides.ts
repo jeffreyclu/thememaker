@@ -15,9 +15,9 @@
  * Uses `override-grammar.ts` (D4) to parse the `<tag>|<prop>` key, so the picker,
  * popup, and this emitter all speak ONE grammar.
  */
-import { parseOverrideKey } from "./override-grammar";
+import { parseOverrideKey } from "../override-grammar";
 import { OVERRIDE_STYLE_ID, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
-import type { RoleOverrides } from "../types";
+import type { RoleOverrides } from "../../types";
 
 /** The tinted SEMANTIC surface tokens a text override also scopes a variant for. */
 const SURFACE_KEYS = ["card", "code", "banner", "comp"] as const;
