@@ -274,6 +274,26 @@ export function applyAdaptiveScheme(
     return `#${h(rgb[0])}${h(rgb[1])}${h(rgb[2])}`;
   };
 
+  // The ALPHA of a computed background. Hex / rgb() / named → 1 (opaque);
+  // rgba(...) → its alpha; transparent / empty → 0. We preserve this when
+  // painting so a SEMI-TRANSPARENT overlay (e.g. an image-grid hover scrim at
+  // rgba(0,0,0,0.04)) stays see-through instead of becoming an opaque slab that
+  // covers the photo behind it.
+  const alphaOf = (input: string): number => {
+    const s = (input || "").trim().toLowerCase();
+    if (!s || s === "transparent") {
+      return 0;
+    }
+    const m = s.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/);
+    return m ? parseFloat(m[1]) : 1;
+  };
+
+  /** A `#rrggbb` hex re-emitted as `rgba(r,g,b,a)` to carry an alpha. */
+  const withAlpha = (hex: string, a: number): string => {
+    const c = parseColor(hex) ?? [0, 0, 0];
+    return `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${a})`;
+  };
+
   const rgbToHsl = (
     rgb: [number, number, number],
   ): [number, number, number] => {
@@ -1011,7 +1031,12 @@ export function applyAdaptiveScheme(
     // against its DETERMINISTIC fixed-theme bg (`fill.bg`) — stable + readable on
     // what it lands on at full theme. Role tags (a/h1/…) still override per role.
     const color = roleText(fill.label, fill.bg, false);
-    return `[${ATTR}="${id}"] { background-color: ${background} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`;
+    // Preserve the original's transparency: a semi-transparent overlay/scrim
+    // (image-grid hover layers, modal backdrops) stays see-through (themed)
+    // instead of becoming an opaque slab that covers the content behind it.
+    const alpha = alphaOf(orig.bg ?? "");
+    const bgValue = alpha < 1 ? withAlpha(background, alpha) : background;
+    return `[${ATTR}="${id}"] { background-color: ${bgValue} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`;
   };
 
   // ---- write the BASE rules IMMEDIATELY (no themeless gap) -----------------
