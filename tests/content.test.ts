@@ -32,9 +32,9 @@ import { DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";
 
 // Spy on the SINGLE long-lived Engine instance so the flow tests assert WHAT is
 // applied without running the heavy DOM-walk. The content script drives this same
-// instance (`content/engine-instance.ts`), so spying its methods intercepts the
+// instance (`lib/engine (the shared singleton)`), so spying its methods intercepts the
 // real calls.
-import { engine } from "../src/content/engine-instance";
+import { engine } from "../src/lib/engine";
 
 const savedSiteState = (intensity: number): SiteState => ({
   enabled: true,
@@ -255,7 +255,8 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
   });
 
   it("APPLY_SCHEME runs the engine and echoes the scheme with applied:true", async () => {
-    const { handleContentReplyMessage } = await import("../src/content/index");
+    const { handleContentReplyMessage } =
+      await import("../src/content/message-router");
     const scheme = schemeFromPalette(mockPalette, 60, "Test");
     const resp = handleContentReplyMessage({
       type: "APPLY_SCHEME",
@@ -272,7 +273,8 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
   });
 
   it("RESET_SCHEME removes the style and reports applied:false", async () => {
-    const { handleContentReplyMessage } = await import("../src/content/index");
+    const { handleContentReplyMessage } =
+      await import("../src/content/message-router");
     const resp = handleContentReplyMessage({ type: "RESET_SCHEME" });
     expect(removeSpy).toHaveBeenCalledTimes(1);
     expect(resp).toStrictEqual({ ok: true, applied: false });
@@ -280,7 +282,8 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
 
   it("QUERY_STATE reports whether a style is applied", async () => {
     appliedSpy.mockReturnValue(true);
-    const { handleContentReplyMessage } = await import("../src/content/index");
+    const { handleContentReplyMessage } =
+      await import("../src/content/message-router");
     const resp = handleContentReplyMessage({ type: "QUERY_STATE" });
     expect(appliedSpy).toHaveBeenCalledTimes(1);
     expect(resp).toStrictEqual({ ok: true, applied: true });
@@ -290,7 +293,8 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
     applySpy.mockImplementation(() => {
       throw new Error("boom");
     });
-    const { handleContentReplyMessage } = await import("../src/content/index");
+    const { handleContentReplyMessage } =
+      await import("../src/content/message-router");
     const resp = handleContentReplyMessage({
       type: "APPLY_SCHEME",
       palette: mockPalette,

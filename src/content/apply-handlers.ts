@@ -14,7 +14,7 @@
  * `onMessage` reply channel always resolves (the popup awaits it). Failures
  * become `{ ok: false, error }` rather than rejecting the channel.
  */
-import { engine } from "./engine-instance";
+import { engine } from "../lib/engine";
 import type {
   ApplySchemeResponse,
   QueryStateResponse,

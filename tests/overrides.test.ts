@@ -23,7 +23,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { Engine } from "../src/lib/engine/engine";
+import { Engine } from "../src/lib/engine";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette/palette";
 import {

@@ -325,3 +325,10 @@ export class Engine {
     this.observer = observer;
   }
 }
+
+/**
+ * The single page-wide Engine instance. Shared by the content script and the
+ * picker so the engine state and the one `<style id="themeMaker">` are unified
+ * across the auto-reapply, popup-apply, and picker paths.
+ */
+export const engine = new Engine();

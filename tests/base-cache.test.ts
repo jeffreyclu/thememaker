@@ -10,7 +10,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Engine } from "../src/lib/engine/engine";
+import { Engine } from "../src/lib/engine";
 import {
   BASE_CACHE_KEY,
   baseBackgroundFor,
