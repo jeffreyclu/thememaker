@@ -4,10 +4,10 @@
  * Two layers:
  *  1. `loadDecision` as a PURE function: given per-site state → apply with which
  *     palette/options, or no-op. No DOM, no chrome.
- *  2. The content-script flow (`runContentScript`) against the chrome mock + a
- *     FAKE `applyAdaptiveScheme`: it reads `site:<origin>` from
- *     `chrome.storage.local`, paints an early base, and runs the engine when the
- *     body is ready — only when enabled with a faithful saved scheme.
+ *  2. The content-script flow (`runContentScript`) against the chrome mock + the
+ *     single `Engine` instance (spied): it reads `site:<origin>` from
+ *     `chrome.storage.local`, calls `engine.preventReloadFlash()`, and drives
+ *     `engine.applyWhenReady()` — only when enabled with a faithful saved scheme.
  */
 import {
   afterEach,
@@ -23,17 +23,18 @@ import type { ApplyOptions } from "../src/types";
 import type { Palette } from "../src/lib/palette";
 
 import { loadDecision } from "../src/lib/site-state";
+import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
 import { schemeFromPalette } from "../src/popup/engine-bridge";
 import { KEYS, type SiteState } from "../src/lib/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockPalette } from "./mocks";
 import { DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";
 
-// Spy on the engine + style helpers so the flow tests assert WHAT is applied
-// without running the heavy DOM-walk. The content script imports these symbols
-// from these modules, so the spies here are the same bindings it calls.
-import * as engine from "../src/lib/engine";
-import * as themeStyle from "../src/lib/theme-style";
+// Spy on the SINGLE long-lived Engine instance so the flow tests assert WHAT is
+// applied without running the heavy DOM-walk. The content script drives this same
+// instance (`content/engine-instance.ts`), so spying its methods intercepts the
+// real calls.
+import { engine } from "../src/content/engine-instance";
 
 const savedSiteState = (intensity: number): SiteState => ({
   enabled: true,
@@ -108,8 +109,10 @@ describe("runContentScript (auto-reapply flow)", () => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("style");
-    document.getElementById(themeStyle.STYLE_ELEMENT_ID)?.remove();
-    applySpy = vi.spyOn(engine, "applyAdaptiveScheme").mockReturnValue(true);
+    document.getElementById(STYLE_ELEMENT_ID)?.remove();
+    // Spy that CALLS THROUGH to the real engine (so the early-base paint + clear
+    // it owns really happen), while still recording the apply args.
+    applySpy = vi.spyOn(engine, "apply");
     // location.origin in jsdom defaults to a real http origin.
     Object.defineProperty(window, "location", {
       value: new URL("https://example.com/page"),
@@ -121,6 +124,8 @@ describe("runContentScript (auto-reapply flow)", () => {
   afterEach(() => {
     applySpy.mockRestore();
     vi.restoreAllMocks();
+    engine.reset();
+    window.localStorage.clear();
   });
 
   const seedStorage = (origin: string, state: SiteState): void => {
@@ -237,9 +242,9 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
 
   beforeEach(() => {
     document.body.innerHTML = "<p>hi</p>"; // body present → engine runs sync.
-    applySpy = vi.spyOn(engine, "applyAdaptiveScheme").mockReturnValue(true);
-    removeSpy = vi.spyOn(themeStyle, "removeSchemeStyle").mockReturnValue(true);
-    appliedSpy = vi.spyOn(themeStyle, "isSchemeApplied").mockReturnValue(false);
+    applySpy = vi.spyOn(engine, "apply").mockReturnValue(true);
+    removeSpy = vi.spyOn(engine, "reset").mockReturnValue(true);
+    appliedSpy = vi.spyOn(engine, "isApplied").mockReturnValue(false);
     (
       window as unknown as { __THEMEMAKER_TEST__?: boolean }
     ).__THEMEMAKER_TEST__ = true;

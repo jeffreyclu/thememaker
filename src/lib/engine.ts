@@ -1,208 +1,327 @@
 /**
- * The v2 ADAPTIVE THEMING ENGINE — `applyAdaptiveScheme`, the in-page entry point.
+ * The v2 ADAPTIVE THEMING ENGINE — the `Engine` class, the SOLE in-page entry
+ * point for ALL page-theming logic.
  *
  * Runs in the content-script ISOLATED WORLD (bundled code — it `import`s the
- * focused engine modules below; nothing is serialized/injected). It inspects the
- * live page (`getComputedStyle`, `:root` custom properties) and themes it as a
- * "DJ mixer": every themed surface color = `mix(frozenOriginal, fixedTheme,
- * factor)`, `factor = intensity/100`.
+ * focused engine modules below; nothing is serialized/injected) and is PURE
+ * DOM-in/styles-out: NO `chrome.*` anywhere. It inspects the live page
+ * (`getComputedStyle`, `:root` custom properties) and themes it as a "DJ mixer":
+ * every themed surface color = `mix(frozenOriginal, fixedTheme, factor)`,
+ * `factor = intensity/100`.
  *
  *  - TRACK 2 (`fixedTheme`) is a PURE FUNCTION OF THE ELEMENT'S ROLE / STRUCTURE,
- *    never of its original color. Generic surfaces → ONE fixed palette surface;
- *    semantic surfaces (card/code/banner/button via a `data-tm-surf` token) →
- *    their fixed distinct role colors; text → role colors delivered by
- *    ROOT-SCOPED tag rules. THIS is the SPA fix: on pages that recycle DOM nodes /
- *    swap row backgrounds, the theme color no longer changes with the (volatile)
- *    original bg, so identical rows share one color and a recycled node never drifts.
- *  - TRACK 1 (`frozenOriginal`) is each surface's original bg captured ONCE in a
- *    WeakMap and FROZEN; it feeds ONLY the crossfade blend, never the theme-color
- *    choice. A tagged element is never re-themed.
+ *    never of its original color — the SPA fix: recycled nodes never drift.
+ *  - TRACK 1 (`frozenOriginal`) is each surface's original bg captured ONCE in the
+ *    Engine's `originals` WeakMap and FROZEN; it feeds ONLY the crossfade blend.
  *
- * It always themes `<html>` + `<body>` as the base surface, enforces WCAG AA on
- * every text/surface pair against the FIXED reference surface, writes the single
- * `<style id="themeMaker">` IN PLACE (no themeless gap → no flash), and installs
- * an INCREMENTAL, debounced, TIME-SLICED `MutationObserver` for SPA/lazy content.
+ * ## State + the engine loop
  *
- * This orchestrator is a thin wiring SPINE; each concern lives in its own module:
- * `engine-roles` (resolve roles) → `css-var-remap` (detect+remap vars) →
- * `engine-state` (page-side state) → `role-classify`/`engine-surface` (the
- * per-element surface painter) → `role-rules` (root-scoped text) → `engine-walk`
- * (time-sliced scheduler) → `engine-overrides` (per-tag layer) → `engine-observer`
- * (pre-paint + deferred MutationObserver). Tested directly via `tests/engine.test.ts`
- * + `tests/overrides.test.ts` + the Playwright e2e specs.
+ * Every former `window.__themeMaker*` global is now a PRIVATE INSTANCE FIELD: the
+ * `originals` WeakMap, the `doneSet` WeakSet, the monotonic-id / themed-count / cap
+ * `state`, the live `observer`, the `<style>` handle, the work `queue`, and the
+ * `draining` flag. The content script holds ONE long-lived `Engine`, so re-applies
+ * + slider drags reuse the frozen originals exactly as the globals did.
+ *
+ * The Engine owns ONE scheduler: `apply()` AND the MutationObserver both ENQUEUE
+ * work; a single `drain` loop processes the queue in time-sliced slices
+ * (requestIdleCallback) and reschedules itself until drained. The observer's
+ * pre-paint path still themes in-viewport nodes SYNCHRONOUSLY before paint.
+ *
+ * Heavy per-element logic lives in the helper modules it composes (`engine-apply`
+ * resolves the palette → base CSS + paint context; `engine-walk` is the stateless
+ * slice body; `engine-surface` is the per-element painter; `engine-observe` parses
+ * mutation batches; `engine-overrides` is the per-tag layer); this class is the
+ * THIN scheduler that wires them together.
  */
-import { mixCss } from "./color-runtime";
 import {
-  BASE_CACHE_KEY,
+  OVERRIDE_STYLE_ID,
   ROOT_MARKER_ATTR,
   STYLE_ELEMENT_ID,
 } from "./theme-dom-constants";
+import { baseBackgroundFor, clearBaseCache, readBaseCache } from "./base-cache";
+import { ensureStyleEl } from "./theme-style";
+import { resolveApply } from "./engine-apply";
+import { clearEarlyBaseStyle, paintEarlyBaseStyle } from "./engine-early";
 import {
-  engineWindow,
-  initEngineState,
-  type EngineWindow,
-  type OriginalStyle,
-} from "./engine-state";
-import { resolveRoles } from "./engine-roles";
-import { buildVarDecls, detectRootVars } from "./css-var-remap";
-import { buildRoleRules } from "./role-rules";
-import {
-  buildButtonOrder,
-  makeSurfaceFillFor,
-  surfaceRoleBg,
-} from "./role-classify";
-import { originalStyleOf, type SurfaceContext } from "./engine-surface";
-import { createWalk } from "./engine-walk";
-import { installObserver } from "./engine-observer";
+  drainSlice,
+  enqueueInto,
+  EDITABLE_SEL,
+  type WorkItem,
+} from "./engine-walk";
+import { OBSERVE_OPTS, yieldThen } from "./engine-walk-geom";
+import { createSurfaceObserver, isOwnElement } from "./engine-observe";
 import { applyOverrideLayer } from "./engine-overrides";
+import type { SurfaceContext } from "./engine-surface";
+import type { EngineState, OriginalStyle } from "./engine-types";
 import type { Palette } from "./palette";
 import type { ApplyOptions } from "../types";
 
+const DEBOUNCE_MS = 250;
+
 /**
- * The v2 adaptive engine, IN-PAGE entry point.
+ * The adaptive theming engine. ONE long-lived instance owns ALL page state and is
+ * the SOLE entry point for theming the page.
  *
- * @param palette the generated palette (surfaces ascending by luminance).
- * @param options apply options (numeric 0–100 intensity = theme-vs-original blend).
- * @returns `true` once applied.
+ * PUBLIC API (what each method does, at a glance):
+ *  - `apply(palette, options)`     — theme the page right now.
+ *  - `applyWhenReady(...)`         — theme the page as soon as the <body> exists.
+ *  - `reset()`                     — remove the theme entirely.
+ *  - `isApplied()`                 — is the page currently themed?
+ *  - `preventReloadFlash()`        — on a fresh load, instantly repaint the last
+ *                                    themed background so there's no white flash.
+ *  - `cancelReloadFlash()`         — undo that placeholder (page won't be themed).
+ *  - `dispose()`                   — stop background work without un-theming.
  */
-export function applyAdaptiveScheme(
-  palette: Palette,
-  options: ApplyOptions,
-): boolean {
-  // ---- resolve the palette + options into concrete ROLE colors ------------
-  // The anti-monochrome layer: distinct palette slots for distinct semantic
-  // roles, the user's role-keyed overrides layered on, the intensity BLEND
-  // `factor`, the `themedBase`, the tinted banner/comp surfaces, and the
-  // `roleText` AA floor — all derived once in `engine-roles.ts`.
-  const roles = resolveRoles(palette, options);
-  const { factor, themedBase, roleTextPrimary, roleText } = roles;
+export class Engine {
+  // TRACK 1 — each surface's FROZEN original bg/fg, captured once; persists across
+  // applies so re-apply is idempotent (we blend from the cached original, never
+  // re-read our own drifted themed output).
+  private originals = new WeakMap<Element, OriginalStyle>();
+  // Surfaces already TAGGED + frozen — never re-walk/re-theme them. RESET per apply.
+  private doneSet = new WeakSet<Element>();
+  // The monotonic id (NEVER rewound) + the per-apply themed counter / cap flag.
+  private state: EngineState = { nextId: 0, themedCount: 0, capped: false };
 
-  // ---- detect + remap :root CSS variables (css-var-remap.ts) --------------
-  // Var-driven pages read surfaces/text off `:root` custom properties the
-  // per-element walk can't reach, so we detect the color vars, classify each, and
-  // emit a `:root { --x: … !important }` remap toward the theme (surface vars
-  // crossfade, text vars route to the role color AA-floored, border vars remap).
-  const varDecls = buildVarDecls(detectRootVars(), roles);
+  // The live MutationObserver (so reset can disconnect it).
+  private observer: MutationObserver | null = null;
 
-  // ---- per-apply + persistent engine state (shared with the observer) -----
-  // The state shape + its persistent-vs-per-apply reset rules live in
-  // `engine-state.ts`. `originals` (TRACK 1: each surface's FROZEN original bg/fg)
-  // + the monotonic `nextId` persist across applies; the `doneSet` (tagged
-  // surfaces), themed counter, and cap flag RESET here per apply (an explicit
-  // apply REBUILDS the sheet from scratch — slider drags must recolor everything).
-  const w: EngineWindow = engineWindow();
-  const { originals, doneSet } = initEngineState(w);
+  // The scheduler's state: the single `<style>`, the work queue, the draining flag,
+  // the active surface context, and the debounced-observer flush state.
+  private styleEl: HTMLStyleElement | null = null;
+  private ctx: SurfaceContext | null = null;
+  private queue: WorkItem[] = [];
+  private draining = false;
+  private pending = new Set<HTMLElement>();
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  // Whether the reload-flash placeholder is currently showing this load (so the
+  // body-ready apply only paints a fallback base when none was restored).
+  private flashPlaceholderShown = false;
 
-  // Base surface (html/body): ALWAYS painted, crossfaded from the page's FROZEN
-  // ORIGINAL body background toward the themed base by the intensity factor.
-  const bodyOriginal: OriginalStyle = document.body
-    ? originalStyleOf(document.body, originals)
-    : { bg: null, fg: null, bgImage: null, boxShadow: null };
-  const baseBackground = mixCss(
-    bodyOriginal.bg || "#ffffff",
-    themedBase,
-    factor,
-  );
-  // Cache the EXACT resolved base for this origin in the page's own localStorage,
-  // so the content script can synchronously paint it at document_start on the NEXT
-  // load (before any async chrome.storage read) and eliminate the reload flash.
-  // Best-effort: silent if localStorage is blocked.
-  try {
-    window.localStorage.setItem(BASE_CACHE_KEY, baseBackground);
-  } catch {
-    // localStorage unavailable — no early-paint cache next load; not fatal.
-  }
-  // Page base ink carries the faintly-tinted body (textPrimary) slot. Floored
-  // against the DETERMINISTIC base surface (`themedBase` = roles.bg), NOT the
-  // blended `baseBackground`, so the base text color is identical at every
-  // intensity / re-apply / reload (stability-first).
-  const baseText = roleText(roleTextPrimary, themedBase, false);
+  /**
+   * Apply the theme: resolve the palette+options, write the base rules in place
+   * (no themeless gap → no flash), enqueue the body walk, install the observer.
+   * Per-apply state (done-set, counter, cap) RESETS; the frozen originals + the
+   * monotonic id PERSIST. Returns `true` once applied.
+   */
+  apply(palette: Palette, options: ApplyOptions): boolean {
+    // Per-apply RESET: an explicit apply REBUILDS the sheet from scratch (slider
+    // drags must recolor everything), so the done-set + counter + cap flag reset.
+    this.doneSet = new WeakSet<Element>();
+    this.state.themedCount = 0;
+    this.state.capped = false;
 
-  // ---- semantic SURFACE classification (role-classify.ts) -----------------
-  // Surfaces are classified by tag/class into roles (code/card/banner/comp/button)
-  // that pull dedicated palette slots. TEXT role classification lives in the
-  // ROOT-SCOPED tag rules (not here), so the walk only ever touches surfaces.
-  // `buttonOrder` is captured once (document order) so the first button is the
-  // deterministic CTA; `surfaceFillFor` closes over the resolved roles.
-  const buttonOrder = buildButtonOrder();
-  const SURFACE_ROLE_BG = surfaceRoleBg(roles);
-  const surfaceFillFor = makeSurfaceFillFor(roles, buttonOrder);
-  // The per-element SURFACE PAINTER's context (the DJ-mixer crossfade) — passed to
-  // the time-sliced walk + the observer's pre-paint path.
-  const surfaceCtx: SurfaceContext = {
-    w,
-    doneSet,
-    originals,
-    factor,
-    roleText,
-    surfaceFillFor,
-  };
+    const { baseParts, surfaceCtx } = resolveApply(
+      palette,
+      options,
+      this.state,
+      this.originals,
+      this.doneSet,
+    );
+    this.ctx = surfaceCtx;
 
-  // ---- write the BASE rules IMMEDIATELY (no themeless gap) -----------------
-  const baseParts: string[] = [];
-  if (varDecls.length > 0) {
-    baseParts.push(`:root { ${varDecls.join(" ")} }`);
-  }
-  baseParts.push(
-    `html { background-color: ${baseBackground} !important; background-image: none !important; color: ${baseText} !important; }`,
-    `body { background-color: ${baseBackground} !important; background-image: none !important; color: ${baseText} !important; }`,
-  );
+    // The single <style id="themeMaker">, reused IN PLACE (never removed-then-
+    // appended). Each apply REBUILDS it: start empty, write base, stream surfaces.
+    const head = document.head || document.documentElement;
+    const style = ensureStyleEl(STYLE_ELEMENT_ID);
+    style.textContent = "";
+    this.styleEl = style;
+    // ROOT MARKER on <html>: a bare presence attr every role-text rule is scoped
+    // under, so the engine's text colors clear site single-class specificity.
+    if (!document.documentElement.hasAttribute(ROOT_MARKER_ATTR)) {
+      document.documentElement.setAttribute(ROOT_MARKER_ATTR, "");
+    }
 
-  // ---- ROLE TEXT as ROOT-SCOPED TAG rules (role-rules.ts) -----------------
-  // Text color is delivered by INHERITANCE + root-scoped tag/role selectors,
-  // emitted ONCE — NOT per element — so any newly-created or typed node is the
-  // right color the instant it exists (no per-keystroke flash). Page-level rules
-  // floor against the harder of {themedBase, roleSurface}; per-surface variants
-  // floor against their own tinted surface.
-  for (const r of buildRoleRules(roles, SURFACE_ROLE_BG)) {
-    baseParts.push(r);
+    // Write the base rules now, then kick off the surface walk (ABOVE-THE-FOLD
+    // first). The first slice runs synchronously inside this call.
+    this.appendRules(baseParts);
+    if (document.body) {
+      enqueueInto(this.queue, this.doneSet, document.body, true);
+      if (!this.draining) {
+        this.drain();
+      }
+    }
+    // Per-tag overrides: a sibling <style> emitted AFTER the main one so it wins.
+    applyOverrideLayer(options.overrides, head);
+    // Install the observer for SPA/lazy content (it enqueues into our queue).
+    this.installObserver();
+    // The full theme owns the html/body base now; retire the flash placeholder so
+    // there is a single source of truth for the page base.
+    this.cancelReloadFlash();
+    return true;
   }
 
-  // ---- write the single <style id="themeMaker"> IN PLACE ------------------
-  const head = document.querySelector("head") || document.documentElement;
-  let style = document.getElementById(
-    STYLE_ELEMENT_ID,
-  ) as HTMLStyleElement | null;
-  if (!style) {
-    style = document.createElement("style");
-    style.id = STYLE_ELEMENT_ID;
-    head.appendChild(style);
-  }
-  const styleEl = style;
-  // Each explicit apply REBUILDS the sheet: start from empty, write base rules,
-  // then stream the surface walk in.
-  styleEl.textContent = "";
-  // ROOT MARKER: a stable presence attribute on <html> that every role-text rule
-  // is scoped under, so the engine's text colors clear site single-class
-  // specificity. It carries no value, so it never collides with the per-element
-  // `[data-thememaker="N"]` surface rules.
-  if (!document.documentElement.hasAttribute(ROOT_MARKER_ATTR)) {
-    document.documentElement.setAttribute(ROOT_MARKER_ATTR, "");
-  }
-
-  // ---- run the TIME-SLICED surface walk (engine-walk.ts) ------------------
-  // Write the base rules now, then kick off the surface walk. The first slice runs
-  // synchronously inside this call, ABOVE-THE-FOLD first.
-  const walk = createWalk(styleEl, surfaceCtx);
-  walk.appendRules(baseParts);
-  if (document.body) {
-    walk.enqueue(document.body, true);
-    if (!walk.isDraining()) {
-      walk.drainQueue();
+  /**
+   * Theme the page once a `document.body` exists (deferring to `DOMContentLoaded`
+   * otherwise) — the body-ready entry point every page-side caller uses. If the
+   * reload-flash placeholder isn't already showing (first themed load, no cache),
+   * it paints the palette-derived base now so the page is never left un-themed.
+   */
+  applyWhenReady(palette: Palette, options: ApplyOptions): void {
+    if (!this.flashPlaceholderShown) {
+      this.paintFlashPlaceholder(baseBackgroundFor(palette, options));
+    }
+    const run = (): void => {
+      this.apply(palette, options);
+    };
+    if (document.body) {
+      run();
+    } else {
+      document.addEventListener("DOMContentLoaded", run, { once: true });
     }
   }
 
-  // ---- per-tag custom overrides: a SEPARATE CSS layer ON TOP --------------
-  // `options.overrides` maps `<tag>|<prop>` → exact hex; emitted as a sibling
-  // `<style id="themeMakerOverrides">` AFTER the main one so it wins.
-  applyOverrideLayer(options.overrides, head);
+  /**
+   * Prevent the reload flash: synchronously repaint the EXACT themed base from the
+   * last load onto `<html>` at `document_start`, BEFORE any async storage read, so
+   * the first frame is already themed instead of the site's un-themed background.
+   * Returns `true` if a themed base was remembered (and repainted), else `false`.
+   */
+  preventReloadFlash(): boolean {
+    const remembered = readBaseCache();
+    if (remembered) {
+      this.paintFlashPlaceholder(remembered);
+    }
+    return remembered !== null;
+  }
 
-  // ---- install the MutationObserver (engine-observer.ts) ------------------
-  // PRE-PAINT in-viewport surfaces synchronously (no white flash) + DEFER the
-  // off-screen remainder through the debounced, time-sliced drainer. The last args
-  // are stashed on the window for any observer-driven re-paint.
-  w.__themeMakerArgs = [palette, options];
-  installObserver(walk, doneSet, originals);
+  /** Undo the reload-flash placeholder when the page won't be themed after all. */
+  cancelReloadFlash(): void {
+    clearEarlyBaseStyle();
+    this.flashPlaceholderShown = false;
+  }
 
-  return true;
+  /** True when a Thememaker theme is currently on the page. */
+  isApplied(): boolean {
+    return document.getElementById(STYLE_ELEMENT_ID) !== null;
+  }
+
+  /**
+   * Reset: tear down the observer + work, drop the override layer, the root marker,
+   * the base cache, and the main <style>. Frozen originals are dropped so a fresh
+   * apply re-captures true originals. Returns `true` if a style was removed.
+   */
+  reset(): boolean {
+    this.dispose();
+    this.originals = new WeakMap<Element, OriginalStyle>();
+    this.doneSet = new WeakSet<Element>();
+    this.state = { nextId: 0, themedCount: 0, capped: false };
+    clearBaseCache();
+    document.getElementById(OVERRIDE_STYLE_ID)?.remove();
+    document.documentElement.removeAttribute(ROOT_MARKER_ATTR);
+    const old = document.getElementById(STYLE_ELEMENT_ID);
+    if (old) {
+      old.remove();
+      this.styleEl = null;
+      return true;
+    }
+    return false;
+  }
+
+  /** Disconnect the observer + cancel pending work (without removing the style). */
+  dispose(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+      this.observer = null;
+    }
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.queue = [];
+    this.pending = new Set<HTMLElement>();
+    this.draining = false;
+  }
+
+  /** Paint the reload-flash placeholder + remember it is showing. */
+  private paintFlashPlaceholder(hex: string): void {
+    paintEarlyBaseStyle(hex);
+    this.flashPlaceholderShown = true;
+  }
+
+  /** Append themed rules onto the live <style> (no-op for an empty list). */
+  private appendRules(rules: string[]): void {
+    if (rules.length === 0 || !this.styleEl) {
+      return;
+    }
+    const existing = this.styleEl.textContent ?? "";
+    this.styleEl.textContent = existing
+      ? `${existing}\n${rules.join("\n")}`
+      : rules.join("\n");
+  }
+
+  /**
+   * The ENGINE LOOP: drain the queue in time-sliced slices, yielding between them
+   * and rescheduling until drained. The observer is disconnected across each slice
+   * (our attribute/style writes must not re-enter its queue) and reconnected after.
+   */
+  private drain(): void {
+    if (!this.styleEl || !this.ctx) {
+      return;
+    }
+    this.draining = true;
+    const obs = this.observer;
+    if (obs) {
+      obs.disconnect();
+    }
+    drainSlice(this.queue, this.ctx, (r) => this.appendRules(r));
+    if (obs && document.body) {
+      obs.observe(document.body, OBSERVE_OPTS);
+    }
+    this.draining = false;
+    if (this.queue.length > 0) {
+      yieldThen(() => {
+        if (this.queue.length > 0) {
+          this.drain();
+        }
+      });
+    }
+  }
+
+  /** Queue the observer's off-screen remainder behind a debounce, then drain it. */
+  private deferOffscreen(roots: HTMLElement[]): void {
+    for (const el of roots) {
+      this.pending.add(el);
+    }
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+    }
+    this.flushTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
+  }
+
+  /** Flush the debounced off-screen remainder into the queue + drain it. */
+  private flush(): void {
+    this.flushTimer = null;
+    for (const el of this.pending) {
+      if (!el.isConnected || isOwnElement(el) || el.closest(EDITABLE_SEL)) {
+        continue;
+      }
+      enqueueInto(this.queue, this.doneSet, el, true);
+    }
+    this.pending = new Set<HTMLElement>();
+    if (this.queue.length > 0 && !this.draining) {
+      this.drain();
+    }
+  }
+
+  /**
+   * Install the surface MutationObserver (any prior one is disconnected) and begin
+   * observing the body. The observer pre-paints in-viewport mutations and hands
+   * the off-screen remainder to {@link deferOffscreen}.
+   */
+  private installObserver(): void {
+    if (this.observer) {
+      this.observer.disconnect();
+    }
+    const observer = createSurfaceObserver({
+      doneSet: this.doneSet,
+      originals: this.originals,
+      getCtx: () => this.ctx,
+      appendRules: (r) => this.appendRules(r),
+      deferOffscreen: (roots) => this.deferOffscreen(roots),
+    });
+    if (document.body) {
+      observer.observe(document.body, OBSERVE_OPTS);
+    }
+    this.observer = observer;
+  }
 }

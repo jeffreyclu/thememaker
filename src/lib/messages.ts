@@ -2,12 +2,12 @@
  * Typed message contract for the popup → content-script channel.
  *
  * The popup is the control surface; the ALWAYS-ON content script (`<all_urls>`
- * @ `document_start`) owns ALL page-side effects — it already imports the engine
- * (`applyAdaptiveScheme` et al.) and runs it in the page's isolated world.
- * Apply / reset / query / pick are therefore delivered DIRECTLY to the active
- * tab's content script via `chrome.tabs.sendMessage` (no background hub, no
- * `chrome.scripting.executeScript`). This is why the engine can be ordinary
- * bundled code that `import`s shared modules.
+ * @ `document_start`) owns ALL page-side effects — it holds the single `Engine`
+ * instance and drives `engine.apply()` / `reset()` / `isApplied()` in the page's
+ * isolated world. Apply / reset / query / pick are therefore delivered DIRECTLY to
+ * the active tab's content script via `chrome.tabs.sendMessage` (no background
+ * hub, no `chrome.scripting.executeScript`). This is why the engine can be
+ * ordinary bundled code that `import`s shared modules.
  *
  * Every message is discriminated by `type`. `sendToContentWithReply<M>` ties
  * each request type to its response type so callers stay end-to-end typed.
@@ -78,8 +78,8 @@ export interface HidePickerMessage {
  * Re-apply the theme in place with the given options (intensity + overrides).
  * Sent from the popup when it changes overrides while the page is themed (e.g.
  * "Clear all"), so the in-page result reflects the popup edit without a reload.
- * The content script runs the SAME `applyAdaptiveScheme` engine in place and
- * keeps its panel rows in sync.
+ * The content script drives the SAME `engine.applyWhenReady` in place and keeps
+ * its panel rows in sync.
  */
 export interface ApplyLiveMessage {
   type: "APPLY_LIVE";

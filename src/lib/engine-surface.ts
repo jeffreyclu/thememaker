@@ -23,7 +23,7 @@ import {
 import { hasImageBackground, isSkippable } from "./role-classify";
 import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
 import type { ResolvedRoles } from "./engine-roles";
-import type { EngineWindow, OriginalStyle } from "./engine-state";
+import type { EngineState, OriginalStyle } from "./engine-types";
 import type { SurfaceFill } from "./role-classify";
 
 /** Hard cap on total themed surfaces so the <style> + work can't grow unbounded. */
@@ -31,7 +31,7 @@ export const MAX_THEMED = 12000;
 
 /** Everything the per-element painter reads/mutates for an apply. */
 export interface SurfaceContext {
-  w: EngineWindow;
+  state: EngineState;
   doneSet: WeakSet<Element>;
   originals: WeakMap<Element, OriginalStyle>;
   factor: number;
@@ -76,15 +76,15 @@ export const processElement = (
   el: HTMLElement,
   ctx: SurfaceContext,
 ): string | null => {
-  const { w, doneSet, originals, factor, roleText, surfaceFillFor } = ctx;
+  const { state, doneSet, originals, factor, roleText, surfaceFillFor } = ctx;
   if (doneSet.has(el) || isSkippable(el)) {
     return null;
   }
   // Honor the total themed-surface budget. Past the cap we stop tagging new
   // surfaces (already-themed ones keep their frozen rules). Warn once.
-  if ((w.__themeMakerThemedCount as number) >= MAX_THEMED) {
-    if (!w.__themeMakerCapped) {
-      w.__themeMakerCapped = true;
+  if (state.themedCount >= MAX_THEMED) {
+    if (!state.capped) {
+      state.capped = true;
       try {
         // eslint-disable-next-line no-console
         console.warn(
@@ -118,11 +118,11 @@ export const processElement = (
   }
 
   doneSet.add(el);
-  w.__themeMakerThemedCount = (w.__themeMakerThemedCount as number) + 1;
+  state.themedCount += 1;
   let id = el.getAttribute(ROOT_MARKER_ATTR);
   if (id === null) {
-    id = String(w.__themeMakerNextId as number);
-    w.__themeMakerNextId = (w.__themeMakerNextId as number) + 1;
+    id = String(state.nextId);
+    state.nextId += 1;
     el.setAttribute(ROOT_MARKER_ATTR, id);
   }
   const frozenOriginal = rgbTupleToHex(bgRgb);

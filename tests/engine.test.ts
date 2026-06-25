@@ -1,60 +1,62 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { applyAdaptiveScheme } from "../src/lib/engine";
-import {
-  STYLE_ELEMENT_ID,
-  applySchemeStyle,
-  isSchemeApplied,
-  removeSchemeStyle,
-} from "../src/lib/theme-style";
+import { Engine } from "../src/lib/engine";
+import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
 import { contrastRatio, hexToHsl } from "../src/lib/color";
 import type { ApplyOptions } from "../src/types";
 
-// The injected functions run in the page world; jsdom provides document.
-describe("inject (page-side DOM apply)", () => {
+// The Engine runs in the page world; jsdom provides document.
+describe("Engine — <style> management (apply / reset / isApplied)", () => {
+  const palette = generatePalette("#3a7bd5", "triad");
+  const opts: ApplyOptions = { intensity: 50 };
+
   afterEach(() => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
+    document.documentElement.removeAttribute("style");
+    document.documentElement.removeAttribute("data-thememaker");
   });
 
-  it("applySchemeStyle adds a single <style> with the css", () => {
+  it("apply adds a single <style id='themeMaker'>", () => {
     expect(document.head.childElementCount).toBe(0);
-    expect(applySchemeStyle("body { color: red; }")).toBe(true);
+    document.body.innerHTML = "<div>content</div>";
+    expect(new Engine().apply(palette, opts)).toBe(true);
     const style = document.getElementById(STYLE_ELEMENT_ID) as HTMLStyleElement;
     expect(style).toBeTruthy();
     expect(style.tagName).toBe("STYLE");
-    expect(style.textContent).toBe("body { color: red; }");
-    expect(document.head.childElementCount).toBe(1);
+    expect(document.querySelectorAll(`#${STYLE_ELEMENT_ID}`)).toHaveLength(1);
   });
 
-  it("applySchemeStyle reuses the existing style in place (no flash, no dupes)", () => {
-    applySchemeStyle("body { color: red; }");
+  it("re-apply reuses the existing style in place (no flash, no dupes)", () => {
+    document.body.innerHTML = "<div>content</div>";
+    const engine = new Engine();
+    engine.apply(palette, opts);
     const first = document.getElementById(STYLE_ELEMENT_ID);
-    applySchemeStyle("body { color: blue; }");
+    engine.apply(palette, opts);
     // SAME element instance — written in place, never removed-then-appended.
     expect(document.getElementById(STYLE_ELEMENT_ID)).toBe(first);
     expect(document.querySelectorAll(`#${STYLE_ELEMENT_ID}`)).toHaveLength(1);
-    expect(
-      (document.getElementById(STYLE_ELEMENT_ID) as HTMLStyleElement)
-        .textContent,
-    ).toBe("body { color: blue; }");
   });
 
-  it("removeSchemeStyle removes the style and reports it", () => {
-    applySchemeStyle("body { color: red; }");
-    expect(removeSchemeStyle()).toBe(true);
+  it("reset removes the style and reports it", () => {
+    document.body.innerHTML = "<div>content</div>";
+    const engine = new Engine();
+    engine.apply(palette, opts);
+    expect(engine.reset()).toBe(true);
     expect(document.getElementById(STYLE_ELEMENT_ID)).toBeNull();
-    // removing again reports false
-    expect(removeSchemeStyle()).toBe(false);
+    // resetting again reports false
+    expect(engine.reset()).toBe(false);
   });
 
-  it("isSchemeApplied reflects whether the style is present", () => {
-    expect(isSchemeApplied()).toBe(false);
-    applySchemeStyle("body { color: red; }");
-    expect(isSchemeApplied()).toBe(true);
-    removeSchemeStyle();
-    expect(isSchemeApplied()).toBe(false);
+  it("isApplied reflects whether the style is present", () => {
+    document.body.innerHTML = "<div>content</div>";
+    const engine = new Engine();
+    expect(engine.isApplied()).toBe(false);
+    engine.apply(palette, opts);
+    expect(engine.isApplied()).toBe(true);
+    engine.reset();
+    expect(engine.isApplied()).toBe(false);
   });
 });
 
@@ -63,25 +65,26 @@ describe("inject (page-side DOM apply)", () => {
 // tests pin the structural invariants the engine MUST hold in any environment:
 // the single <style id="themeMaker">, the :root variable remap, AA on the
 // remapped pair, and observer install/teardown.
-describe("applyAdaptiveScheme (in-page engine — structural invariants)", () => {
+describe("Engine.apply (in-page engine — structural invariants)", () => {
   const palette = generatePalette("#3a7bd5", "triad");
   const opts: ApplyOptions = { intensity: 50 };
 
-  const win = (): {
-    __themeMakerObserver?: MutationObserver;
-    __themeMakerNextId?: number;
-  } =>
-    window as unknown as {
-      __themeMakerObserver?: MutationObserver;
-      __themeMakerNextId?: number;
-    };
+  let engine: Engine;
 
   afterEach(() => {
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("style");
   });
+
+  // A FRESH instance per test so the per-test reset + state is isolated; the
+  // idempotency tests deliberately reuse the SAME instance (its frozen originals
+  // persist across applies, exactly as the page-side singleton does).
+  const newEngine = (): Engine => {
+    engine = new Engine();
+    return engine;
+  };
 
   /** Declares :root color variables the page would normally ship. */
   const seedVars = (css: string) => {
@@ -93,16 +96,16 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
   it("writes exactly one <style id='themeMaker'>", () => {
     seedVars(":root { --bg: #ffffff; --color-text: #111111; }");
     document.body.innerHTML = "<div>content</div>";
-    expect(applyAdaptiveScheme(palette, opts)).toBe(true);
+    expect(newEngine().apply(palette, opts)).toBe(true);
     expect(document.querySelectorAll(`#${STYLE_ELEMENT_ID}`)).toHaveLength(1);
-    expect(isSchemeApplied()).toBe(true);
+    expect(engine.isApplied()).toBe(true);
   });
 
   it("detects :root variables and emits a :root remap block", () => {
     seedVars(
       ":root { --bg: #ffffff; --color-text: #111111; --border: #cccccc; }",
     );
-    applyAdaptiveScheme(palette, opts);
+    newEngine().apply(palette, opts);
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     expect(css).toContain(":root {");
     expect(css).toContain("--bg:");
@@ -111,7 +114,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
 
   it("the remapped text variable passes AA against the remapped bg", () => {
     seedVars(":root { --bg: #ffffff; --color-text: #111111; }");
-    applyAdaptiveScheme(palette, opts);
+    newEngine().apply(palette, opts);
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     const bg = /--bg:\s*(#[0-9a-f]{6})/i.exec(css)?.[1] as string;
     const text = /--color-text:\s*(#[0-9a-f]{6})/i.exec(css)?.[1] as string;
@@ -122,9 +125,9 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
 
   it("re-applies IN PLACE on the same <style> (no flash, no duplicates)", () => {
     seedVars(":root { --bg: #ffffff; --color-text: #111111; }");
-    applyAdaptiveScheme(palette, opts);
+    newEngine().apply(palette, opts);
     const first = document.getElementById(STYLE_ELEMENT_ID);
-    applyAdaptiveScheme(generatePalette("#aa3333", "complement"), opts);
+    engine.apply(generatePalette("#aa3333", "complement"), opts);
     // SAME element instance — overwritten via textContent, never re-appended.
     expect(document.getElementById(STYLE_ELEMENT_ID)).toBe(first);
     expect(document.querySelectorAll(`#${STYLE_ELEMENT_ID}`)).toHaveLength(1);
@@ -133,7 +136,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
   it("ALWAYS themes html + body as a base surface (bug #1)", () => {
     document.body.innerHTML = "<div>content</div>";
     // Even at intensity 0 (only the base is painted).
-    applyAdaptiveScheme(palette, { intensity: 0 });
+    newEngine().apply(palette, { intensity: 0 });
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     expect(css).toMatch(/^html \{[^}]*background-color:/m);
     expect(css).toMatch(/^body \{[^}]*background-color:/m);
@@ -141,7 +144,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
 
   it("the base html/body text is AA against the base background (bug #3)", () => {
     document.body.innerHTML = "<p>plain</p>";
-    applyAdaptiveScheme(palette, { intensity: 0 });
+    newEngine().apply(palette, { intensity: 0 });
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     const htmlRule = /html \{([^}]*)\}/.exec(css)?.[1] ?? "";
     const bg = /background-color:\s*(#[0-9a-f]{6})/i.exec(htmlRule)?.[1];
@@ -154,27 +157,45 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     );
   });
 
-  it("keeps a MONOTONIC id counter on window (never resets to 0)", () => {
-    document.body.innerHTML = "<div>a</div>";
-    applyAdaptiveScheme(palette, opts);
-    const afterFirst = win().__themeMakerNextId ?? 0;
-    applyAdaptiveScheme(palette, opts);
-    // Re-applying does not rewind the counter below where it was.
-    expect(win().__themeMakerNextId ?? 0).toBeGreaterThanOrEqual(afterFirst);
+  it("keeps a MONOTONIC id counter across applies (never rewinds)", () => {
+    document.body.innerHTML =
+      '<div style="background-color: rgb(20,20,20)">a</div>';
+    const e = newEngine();
+    e.apply(palette, opts);
+    const firstId = Number(
+      (document.querySelector("div") as HTMLElement).getAttribute(
+        "data-thememaker",
+      ),
+    );
+    // A second SURFACE appears, then we re-apply on the SAME instance — its id
+    // must be strictly greater (the counter is never rewound to 0).
+    document.body.innerHTML +=
+      '<section style="background-color: rgb(40,40,40)">b</section>';
+    e.apply(palette, opts);
+    const secondId = Number(
+      (document.querySelector("section") as HTMLElement).getAttribute(
+        "data-thememaker",
+      ),
+    );
+    expect(secondId).toBeGreaterThan(firstId);
   });
 
   it("installs a MutationObserver and tears it down on reset", () => {
     seedVars(":root { --bg: #ffffff; --color-text: #111111; }");
-    applyAdaptiveScheme(palette, opts);
-    expect(win().__themeMakerObserver).toBeInstanceOf(MutationObserver);
-    expect(removeSchemeStyle()).toBe(true);
-    expect(win().__themeMakerObserver).toBeUndefined();
+    document.body.innerHTML = "<div>content</div>";
+    const e = newEngine();
+    e.apply(palette, opts);
+    expect(document.getElementById(STYLE_ELEMENT_ID)).not.toBeNull();
+    expect(e.reset()).toBe(true);
     expect(document.getElementById(STYLE_ELEMENT_ID)).toBeNull();
+    // A reset re-apply must still work (observer re-installed cleanly).
+    e.apply(palette, opts);
+    expect(e.isApplied()).toBe(true);
   });
 
   it("is resilient when there are no :root color variables", () => {
     document.body.innerHTML = "<p>plain</p>";
-    expect(applyAdaptiveScheme(palette, opts)).toBe(true);
+    expect(newEngine().apply(palette, opts)).toBe(true);
     // still a single (possibly empty) style element, no crash
     expect(document.querySelectorAll(`#${STYLE_ELEMENT_ID}`)).toHaveLength(1);
   });
@@ -189,13 +210,16 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     const css = (): string =>
       document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
 
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    // ONE instance for the whole drag — the frozen originals persist across
+    // applies, so re-mapping never drifts.
+    const e = newEngine();
+    e.apply(palette, { intensity: 100 });
     const first = css();
 
     // Drag all the way left...
-    applyAdaptiveScheme(palette, { intensity: 0 });
+    e.apply(palette, { intensity: 0 });
     // ...and all the way back right.
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    e.apply(palette, { intensity: 100 });
     const back = css();
 
     // Returning to the same intensity reproduces the exact same CSS — detection
@@ -219,7 +243,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
       '<small style="color: rgb(90,90,90)">muted note</small>' +
       '<button style="background-color: rgb(220,220,220); color: rgb(0,0,0)">Submit</button>' +
       '<button class="btn-secondary" style="background-color: rgb(220,220,220); color: rgb(0,0,0)">Cancel</button>';
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    newEngine().apply(palette, { intensity: 100 });
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     const all = [
       ...css.matchAll(/(?:background-)?color:\s*(#[0-9a-f]{6})/gi),
@@ -255,7 +279,9 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
       document.body.innerHTML = richPage;
       document.body.style.backgroundColor = "rgb(255,255,255)";
       document.body.style.color = "rgb(20,20,20)";
-      applyAdaptiveScheme(generatePalette("#3a7bd5", mode), { intensity: 100 });
+      // A FRESH instance per mode (each mode is an independent page).
+      const e = new Engine();
+      e.apply(generatePalette("#3a7bd5", mode), { intensity: 100 });
       const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
       const colors = [
         ...css.matchAll(/(?:background-)?color:\s*(#[0-9a-f]{6})/gi),
@@ -266,7 +292,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
           .filter((hsl) => hsl.s >= 12)
           .map((hsl) => Math.round(hsl.h / 30)),
       );
-      removeSchemeStyle();
+      e.reset();
       document.body.innerHTML = "";
       document.head.innerHTML = "";
       return families.size;
@@ -284,7 +310,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     document.body.innerHTML =
       '<button class="btn-primary" style="background-color: rgb(200,200,200); color: rgb(0,0,0)">Save</button>' +
       '<button class="btn-secondary" style="background-color: rgb(200,200,200); color: rgb(0,0,0)">Cancel</button>';
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    newEngine().apply(palette, { intensity: 100 });
     const css = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
     const btns = document.querySelectorAll("button");
     const bgFor = (el: Element): string => {
@@ -309,8 +335,9 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
       '<a href="#" style="color: rgb(0,0,238)">Link</a>';
     document.body.style.backgroundColor = "rgb(255,255,255)";
 
+    const e = newEngine();
     const cssWith = (overrides?: Record<string, string>): string => {
-      applyAdaptiveScheme(palette, { intensity: 100, overrides });
+      e.apply(palette, { intensity: 100, overrides });
       const out = document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
       return out;
     };
@@ -345,7 +372,6 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
 
     // The link (untouched role) is identical with and without the override.
     const linkWithOverride = linkColor(themed);
-    removeSchemeStyle();
     const plain = cssWith(undefined);
     expect(linkColor(plain)).toBe(linkWithOverride);
   });
@@ -353,7 +379,7 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
   it("in-page: an UNREADABLE override is relit (AA floor holds, not collapsed)", () => {
     document.body.innerHTML = '<h1 style="color: rgb(0,0,0)">Title</h1>';
     document.body.style.backgroundColor = "rgb(255,255,255)";
-    applyAdaptiveScheme(palette, {
+    newEngine().apply(palette, {
       intensity: 100,
       overrides: { heading: "#fffbe0" }, // pale → unreadable on white
     });
@@ -373,7 +399,8 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
   it("re-detects against ORIGINAL colors, not our themed output (no drift)", () => {
     document.body.innerHTML =
       '<div style="background-color: rgb(240, 240, 240)">x</div>';
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    const e = newEngine();
+    e.apply(palette, { intensity: 100 });
     const div = document.querySelector("div") as HTMLElement;
     const id = div.getAttribute("data-thememaker");
     // Capture the surface rule emitted for this element.
@@ -387,8 +414,8 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
     };
     const firstBg = ruleFor();
     // Re-apply several times at the same intensity; the mapped bg must not move.
-    applyAdaptiveScheme(palette, { intensity: 100 });
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    e.apply(palette, { intensity: 100 });
+    e.apply(palette, { intensity: 100 });
     expect(ruleFor()).toBe(firstBg);
     expect(firstBg).toBeTruthy();
   });
@@ -405,15 +432,22 @@ describe("applyAdaptiveScheme (in-page engine — structural invariants)", () =>
 // dial, and of a row's swapped (hover/selected) background. This is what stops
 // the Gmail flicker.
 // ---------------------------------------------------------------------------
-describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () => {
+describe("Engine.apply — DETERMINISTIC text color (SPA stability)", () => {
   const palette = generatePalette("#3a7bd5", "triad");
 
+  let engine: Engine;
+
   afterEach(() => {
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("style");
   });
+
+  const newEngine = (): Engine => {
+    engine = new Engine();
+    return engine;
+  };
 
   const css = (): string =>
     document.getElementById(STYLE_ELEMENT_ID)?.textContent ?? "";
@@ -440,7 +474,7 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
       `<article style="background-color: ${rowBg}">` +
       `<span style="color: ${textColor}">row text</span></article>`;
     document.body.style.backgroundColor = "#ffffff";
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    newEngine().apply(palette, { intensity: 100 });
     const article = document.querySelector("article") as HTMLElement;
     return surfaceColor(article);
   };
@@ -450,7 +484,7 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
       '<a href="#" style="color: rgb(0,0,0)">one</a>' +
       '<a href="#" style="color: rgb(255,0,255)">two</a>';
     document.body.style.backgroundColor = "#ffffff";
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    newEngine().apply(palette, { intensity: 100 });
     const a = linkTagColor();
     expect(a).toBeTruthy();
     // No per-element link rules exist — there is ONE deterministic page-level
@@ -462,10 +496,10 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
 
   it("row surface text color is INDEPENDENT of the row's swapped background", () => {
     const normal = rowSurfaceColor("rgb(255,255,255)", "rgb(34,34,34)");
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     const hovered = rowSurfaceColor("rgb(238,243,255)", "rgb(34,34,34)");
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     const selected = rowSurfaceColor("rgb(210,227,255)", "rgb(34,34,34)");
     // The row is a CARD surface → its mapped bg is the SAME role surface
@@ -479,9 +513,9 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
     const at = (intensity: number): string => {
       document.body.innerHTML = '<a href="#" style="color: rgb(0,0,0)">x</a>';
       document.body.style.backgroundColor = "#ffffff";
-      applyAdaptiveScheme(palette, { intensity });
+      newEngine().apply(palette, { intensity });
       const c = linkTagColor();
-      removeSchemeStyle();
+      engine.reset();
       document.head.innerHTML = "";
       return c;
     };
@@ -502,7 +536,7 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
       '<p style="color: rgb(0,0,0)">para</p>' +
       '<a href="#" style="color: rgb(0,0,0)">link</a>';
     document.body.style.backgroundColor = "#ffffff";
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    newEngine().apply(palette, { intensity: 100 });
     const p = document.querySelector("p") as HTMLElement;
     const a = document.querySelector("a") as HTMLElement;
     // Neither text element is tagged with a per-element id (only surfaces are).
@@ -521,9 +555,11 @@ describe("applyAdaptiveScheme — DETERMINISTIC text color (SPA stability)", () 
       '<span style="color: rgb(0,0,0)">row text</span>' +
       '<a href="#" style="color: rgb(0,0,0)">link</a></article>';
     document.body.style.backgroundColor = "#ffffff";
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    // ONE instance — re-applying on it reuses the frozen originals (idempotent).
+    const e = newEngine();
+    e.apply(palette, { intensity: 100 });
     const first = css();
-    applyAdaptiveScheme(palette, { intensity: 100 });
+    e.apply(palette, { intensity: 100 });
     expect(css()).toBe(first);
   });
 });

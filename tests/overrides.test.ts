@@ -21,10 +21,10 @@
  * (`picker-panel-model.ts`): row derivation, label formatting (incl. the `page`
  * sentinel), and the immutable add/edit/remove transitions.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { applyAdaptiveScheme } from "../src/lib/engine";
-import { STYLE_ELEMENT_ID, removeSchemeStyle } from "../src/lib/theme-style";
+import { Engine } from "../src/lib/engine";
+import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
 import {
   FALLBACK_COLOR,
@@ -43,15 +43,21 @@ const overrideCss = (): string =>
   document.getElementById(OVERRIDES_ID)?.textContent ?? "";
 
 describe("per-tag override CSS layer (live path in inject.ts)", () => {
+  let engine: Engine;
+
+  beforeEach(() => {
+    engine = new Engine();
+  });
+
   afterEach(() => {
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     document.body.innerHTML = "";
   });
 
   it("emits the right override selector per prop (bg → data-attr; text → tag)", () => {
     document.body.innerHTML = "<div>x</div><h3>y</h3>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "div|background": "#112233", "h3|color": "#445566" },
     });
@@ -72,7 +78,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
     document.body.innerHTML = "<p>x</p>";
     // A pale-yellow text override on a light page would be relit by the engine's
     // AA floor — but per-tag overrides are exact, so it's emitted verbatim.
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 100,
       overrides: { "p|color": "#fffbe0" },
     });
@@ -83,7 +89,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
 
   it("maps the `page` sentinel to a bare `html, body` rule", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "page|background": "#abcdef" },
     });
@@ -96,7 +102,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
 
   it("uses bare `html`/`body` selectors for the html/body tags", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "html|background": "#0a0b0c", "body|background": "#0d0e0f" },
     });
@@ -107,7 +113,7 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
 
   it("places the override layer AFTER the main #themeMaker style (so it wins)", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "div|background": "#112233" },
     });
@@ -123,13 +129,13 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
 
   it("emits NO override style when there are no overrides", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, { intensity: 80, overrides: {} });
+    engine.apply(palette, { intensity: 80, overrides: {} });
     expect(document.getElementById(OVERRIDES_ID)).toBeNull();
   });
 
   it("skips invalid hex values and unsafe tag names", () => {
     document.body.innerHTML = "<div>x</div><span>y</span>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: {
         "div|background": "not-a-color", // invalid hex → skipped
@@ -145,25 +151,25 @@ describe("per-tag override CSS layer (live path in inject.ts)", () => {
 
   it("is cleared on reset (removeSchemeStyle drops the override layer)", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "div|background": "#112233" },
     });
     expect(document.getElementById(OVERRIDES_ID)).toBeTruthy();
-    removeSchemeStyle();
+    engine.reset();
     expect(document.getElementById(OVERRIDES_ID)).toBeNull();
     expect(document.getElementById(STYLE_ELEMENT_ID)).toBeNull();
   });
 
   it("removes a stale override layer when re-applied with no overrides", () => {
     document.body.innerHTML = "<div>x</div>";
-    applyAdaptiveScheme(palette, {
+    engine.apply(palette, {
       intensity: 80,
       overrides: { "div|background": "#112233" },
     });
     expect(document.getElementById(OVERRIDES_ID)).toBeTruthy();
     // Re-apply the same theme with the overrides cleared → layer goes away.
-    applyAdaptiveScheme(palette, { intensity: 80, overrides: {} });
+    engine.apply(palette, { intensity: 80, overrides: {} });
     expect(document.getElementById(OVERRIDES_ID)).toBeNull();
   });
 });

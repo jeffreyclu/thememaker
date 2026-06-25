@@ -17,34 +17,23 @@
  *     shared modules instead of being a serialized, self-contained function.
  *
  * It runs in the content-script ISOLATED WORLD (the same world the old
- * executeScript path injected into), so the engine's `window.__themeMaker*`
- * state and the single `<style id="themeMaker">` are shared across the
- * auto-reapply, popup-apply, and picker paths: they never double-apply (all
- * write the same style in place) and never conflict.
+ * executeScript path injected into), and holds the SINGLE long-lived `Engine`
+ * instance (`content/engine-instance.ts`): the Engine's encapsulated state and
+ * the single `<style id="themeMaker">` are shared across the auto-reapply,
+ * popup-apply, and picker paths, so they never double-apply (all write the same
+ * style in place) and never conflict.
  *
- * ## Flash elimination (see `early-paint.ts`)
+ * ## Flash elimination
  *
- * `chrome.storage` is async, so at `document_start` we can't know the theme
- * before the browser paints the site's original background — that's the reload
- * flash. We eliminate it with a SYNCHRONOUS, same-origin cache in the page's own
- * `localStorage`: every engine apply caches the EXACT base background it painted
- * (`__thememaker_base__`). At the VERY TOP of `document_start`, BEFORE any async
- * read, we synchronously `readBaseCache()` and, if present, paint that exact hex
- * onto `<html>` — so the first frame is already the themed base (no flash). Then
- * we proceed with the async `loadDecision` + full apply (which rewrites cache).
- *
- * Residual flash: only the VERY FIRST themed load of an origin (no cache yet)
- * falls back to the palette-derived base; every subsequent reload is flash-free.
- * A reset/disable clears the cache so a disabled site never early-paints stale.
+ * Reload-flash prevention is the ENGINE's job, not this script's: the engine
+ * remembers the last themed base and, told to, repaints it synchronously at
+ * `document_start` before any async read. This script just decides WHETHER to
+ * theme and calls `engine.preventReloadFlash()` / `engine.cancelReloadFlash()` /
+ * `engine.applyWhenReady()` — it holds NO theming logic of its own.
  */
-import { STYLE_ELEMENT_ID } from "../lib/theme-style";
-import { baseBackgroundFor, readBaseCache } from "../lib/base-cache";
+import { STYLE_ELEMENT_ID } from "../lib/theme-dom-constants";
 import { loadDecision } from "../lib/site-state";
-import {
-  applyWhenReady,
-  clearEarlyBase,
-  paintEarlyBaseColor,
-} from "./early-paint";
+import { engine } from "./engine-instance";
 import { readSiteState } from "./site-storage";
 import { applyLive, hidePicker, showPicker } from "./picker-session";
 import { runApply, runQuery, runReset } from "./message-apply";
@@ -63,32 +52,23 @@ export const runContentScript = async (): Promise<void> => {
     return;
   }
 
-  // 1) SYNCHRONOUS, BEFORE any async read: paint the cached EXACT base from the
-  // page's own localStorage so the very first frame is already the themed base
-  // (no flash). `cached` is null on the first themed load (no cache yet).
-  const cached = readBaseCache();
-  if (cached) {
-    paintEarlyBaseColor(cached);
-  }
+  // Synchronously, BEFORE any async read: repaint the last themed base so the
+  // first frame is already themed (no reload flash). No-op if this origin was
+  // never themed.
+  engine.preventReloadFlash();
 
-  // 2) Now the async per-site read decides whether to actually theme.
+  // The async per-site read decides whether to actually theme.
   const site = await readSiteState(origin);
   const decision = loadDecision(site);
   if (!decision.apply) {
-    // Site no longer themed (e.g. cache stale vs. storage) — undo any early
-    // paint so we don't tint a page we're not theming.
-    clearEarlyBase();
+    // Not themed (e.g. disabled/cleared) — undo the flash placeholder.
+    engine.cancelReloadFlash();
     return;
   }
 
-  // 3) First themed load with no cache: fall back to the palette-derived base so
-  // there's still a base paint this load (the engine then caches the exact one).
-  if (!cached) {
-    paintEarlyBaseColor(baseBackgroundFor(decision.palette, decision.options));
-  }
-
-  // 4) Run the full engine when the DOM is ready (it rewrites the cache).
-  applyWhenReady(decision.palette, decision.options);
+  // Theme when the DOM is ready (the engine paints a fallback base first if this
+  // is the very first themed load with no remembered base).
+  engine.applyWhenReady(decision.palette, decision.options);
 };
 
 /**
@@ -115,12 +95,7 @@ export const handleContentReplyMessage = (
 ): MessageResponse => {
   switch (message.type) {
     case "APPLY_SCHEME":
-      return runApply(
-        applyWhenReady,
-        message.palette,
-        message.options,
-        message.scheme,
-      );
+      return runApply(message.palette, message.options, message.scheme);
     case "RESET_SCHEME":
       return runReset();
     case "QUERY_STATE":
@@ -178,11 +153,5 @@ if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
   }
 }
 
-export {
-  EARLY_STYLE_ID,
-  applyWhenReady,
-  clearEarlyBase,
-  paintEarlyBaseColor,
-} from "./early-paint";
 export { showPicker, hidePicker } from "./picker-session";
 export { STYLE_ELEMENT_ID };

@@ -8,9 +8,9 @@
  *    silent fallback when `localStorage` is unavailable / throws.
  *  - the engine apply path WRITES the cache; the reset path CLEARS it.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyAdaptiveScheme } from "../src/lib/engine";
+import { Engine } from "../src/lib/engine";
 import {
   BASE_CACHE_KEY,
   baseBackgroundFor,
@@ -18,7 +18,7 @@ import {
   readBaseCache,
   writeBaseCache,
 } from "../src/lib/base-cache";
-import { STYLE_ELEMENT_ID, removeSchemeStyle } from "../src/lib/theme-style";
+import { STYLE_ELEMENT_ID } from "../src/lib/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
 import type { ApplyOptions } from "../src/types";
 
@@ -31,8 +31,14 @@ const htmlBaseFromCss = (): string | undefined => {
 };
 
 describe("baseBackgroundFor (matches the engine's painted base)", () => {
+  let engine: Engine;
+
+  beforeEach(() => {
+    engine = new Engine();
+  });
+
   afterEach(() => {
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     window.localStorage.clear();
@@ -51,7 +57,7 @@ describe("baseBackgroundFor (matches the engine's painted base)", () => {
       // A body with no explicit background → engine treats the original as white,
       // exactly what `baseBackgroundFor` assumes.
       document.body.innerHTML = "<p>content</p>";
-      applyAdaptiveScheme(palette, options);
+      engine.apply(palette, options);
       expect(htmlBaseFromCss()).toBe(
         baseBackgroundFor(palette, options).toLowerCase(),
       );
@@ -110,29 +116,35 @@ describe("base cache helpers (read/write/clear)", () => {
 });
 
 describe("engine writes the base cache; reset clears it", () => {
+  let engine: Engine;
+
+  beforeEach(() => {
+    engine = new Engine();
+  });
+
   afterEach(() => {
-    removeSchemeStyle();
+    engine.reset();
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     window.localStorage.clear();
   });
 
-  it("applyAdaptiveScheme caches the EXACT base it painted", () => {
+  it("apply caches the EXACT base it painted", () => {
     const palette = generatePalette("#3a7bd5", "triad");
     document.body.innerHTML = "<p>x</p>";
-    applyAdaptiveScheme(palette, { intensity: 80 });
+    engine.apply(palette, { intensity: 80 });
     const painted = htmlBaseFromCss();
     expect(painted).toBeTruthy();
     // The cache holds exactly what the engine painted onto html/body.
     expect(readBaseCache()?.toLowerCase()).toBe(painted);
   });
 
-  it("removeSchemeStyle clears the cache so a disabled site won't early-paint", () => {
+  it("reset clears the cache so a disabled site won't early-paint", () => {
     const palette = generatePalette("#3a7bd5", "triad");
     document.body.innerHTML = "<p>x</p>";
-    applyAdaptiveScheme(palette, { intensity: 80 });
+    engine.apply(palette, { intensity: 80 });
     expect(readBaseCache()).not.toBeNull();
-    removeSchemeStyle();
+    engine.reset();
     expect(readBaseCache()).toBeNull();
   });
 });

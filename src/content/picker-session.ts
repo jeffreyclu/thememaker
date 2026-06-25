@@ -18,7 +18,7 @@ import {
   withPickedRole,
   withRoleColor,
 } from "./picker-panel-model";
-import { applyWhenReady } from "./early-paint";
+import { engine } from "./engine-instance";
 import { readSiteState, writeSiteState } from "./site-storage";
 import type { Palette } from "../lib/palette";
 import type { ApplyOptions, RoleOverrides, Scheme } from "../types";
@@ -89,7 +89,7 @@ const persistSession = async (s: PickerSession): Promise<void> => {
  * edits can't lose an update.
  */
 const applyAndPersist = (s: PickerSession): Promise<void> => {
-  applyWhenReady(s.palette, optionsFor(s));
+  engine.applyWhenReady(s.palette, optionsFor(s));
   // Chain onto the queue; a failed persist must not break the chain for the next.
   persistQueue = persistQueue.then(() => persistSession(s)).catch(() => {});
   return persistQueue;
@@ -187,7 +187,7 @@ export const hidePicker = (): void => {
  * popup) and, if the floating control is open, keeps its rows in sync.
  */
 export const applyLive = (palette: Palette, options: ApplyOptions): void => {
-  applyWhenReady(palette, options);
+  engine.applyWhenReady(palette, options);
   if (picker) {
     picker.palette = palette;
     picker.intensity = options.intensity;
