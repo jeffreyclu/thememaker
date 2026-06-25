@@ -17,7 +17,7 @@ import { localPalette, apiPalette } from "../lib/palette/palette-source";
 import type { PaletteSourceDeps } from "../lib/palette/palette-source";
 import { invertPalette } from "../lib/palette/palette";
 import type { Palette } from "../lib/palette/palette";
-import type { ModeSelection } from "./state/state";
+import type { ModeSelection } from "./state";
 import { DEFAULT_INTENSITY } from "../types";
 import type {
   ApplyOptions,

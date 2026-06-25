@@ -1,10 +1,10 @@
 /**
  * Pure popup state model + reducer.
  *
- * The popup view (`view.ts`) is a thin renderer bound to this state; all
- * transitions live here so they are unit-testable without a DOM or chrome.*.
- * High-frequency vs low-frequency concerns aren't an issue at this scale (one
- * small document), so a single reducer keeps it simple.
+ * The React popup binds to this state via `useReducer` (see `PopupProvider`);
+ * all transitions live here so they stay unit-testable without a DOM or
+ * chrome.*. High-frequency vs low-frequency concerns aren't an issue at this
+ * scale (one small document), so a single reducer keeps it simple.
  */
 import { dequeueScheme } from "../../lib/storage/history";
 import {
@@ -14,7 +14,9 @@ import {
 } from "./scheme-view-model";
 import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
 import type { ColorMode, Intensity, RoleOverrides, Scheme } from "../../types";
-import type { Favorite, Settings, SiteState } from "../../lib/storage/storage";
+import type { Favorite } from "../../lib/storage/storage";
+
+export { hydratePartial, type HydrateInputs } from "./hydrate";
 
 export type ModeSelection = ColorMode | "random";
 
@@ -82,48 +84,6 @@ export const initialPopupState: PopupState = {
   loading: false,
   error: null,
   savedFavoriteId: null,
-};
-
-/** Inputs for {@link hydratePartial}: persisted storage + active-tab state. */
-export interface HydrateInputs {
-  settings: Settings;
-  history: Scheme[];
-  /** Saved GLOBAL favorites. */
-  favorites: Favorite[];
-  origin: string | null;
-  site: SiteState;
-  /** Whether the active tab already has a Thememaker style applied. */
-  applied: boolean;
-}
-
-/**
- * Computes the popup's initial state patch from persisted storage + the active
- * tab. Crucially it restores this origin's saved theme as `current` (with its
- * saved intensity) so the intensity slider / details / re-apply work after a
- * reload or a popup reopen on a persisted site: the popup is recreated every
- * time it opens, so without this `current` is null and the slider is a no-op
- * even though the content script already themed the page.
- */
-export const hydratePartial = (inputs: HydrateInputs): Partial<PopupState> => {
-  const savedScheme = inputs.site.savedScheme ?? null;
-  // Read the saved scheme's metadata once instead of chaining into it repeatedly.
-  const saved = savedScheme?.schemeDetails;
-  return {
-    mode: inputs.settings.mode,
-    // Prefer the saved scheme's intensity so the dial matches what is on the
-    // page; clamp to the selectable range (migrates old/out-of-range values).
-    intensity: clampIntensity(saved?.intensity ?? inputs.settings.intensity),
-    invert: saved?.invert ?? inputs.settings.invert ?? false,
-    favorites: inputs.favorites,
-    history: inputs.history,
-    origin: inputs.origin,
-    siteEnabled: inputs.site.enabled,
-    applied: inputs.applied,
-    current: savedScheme,
-    // Restore the saved custom-theme overrides so reopening the popup on a
-    // persisted site shows (and keeps re-applying) the user's picks.
-    overrides: saved?.overrides ?? {},
-  };
 };
 
 export type PopupAction =

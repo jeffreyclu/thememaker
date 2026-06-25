@@ -8,7 +8,7 @@ import {
   labelForOverrideKey,
   overrideRows as overrideRowsBase,
 } from "../../lib/override-keys";
-import type { PopupState } from "./state";
+import type { PopupState } from ".";
 import type { SchemeDetails } from "../../types";
 
 /** @returns the seed metadata for the current scheme, if any. */
