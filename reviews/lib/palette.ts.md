@@ -54,3 +54,12 @@ Lines 370–376. `accents` is computed but the role-based engine reads `roles.*`
 1. **Refactor `deriveRoles`**: hoist the ~40 magic literals into named lightness/saturation tables that make the inter-role *relationships* explicit, and add property tests for the invariants the comments promise (distinct surfaces, distinct hues on multi-hue modes).
 2. **Kill the `as unknown as` double-cast** in `invertPalette` with a typed `mapRoles` helper shared with `mapping.ts`.
 3. **Document + test the low-harmony hue collapse** (`secondaryHue`/`altHue` wrapping onto earlier hues on complement/mono) so the "distinct buttons/surfaces" promise is verified where hue can't provide it.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED rename-only / behavior-preserving. Verified every change in the diff produces NO color change:
+  - `NEUTRAL_SAT = 18` and `HUE_FOLD_DEG = 22` replace the bare literals `18`/`22` in `themeSwatches.sameSwatch` — identical values.
+  - `mapRoles` replaces the manual `{ ...roles }` + loop in `invertPalette`: iterates the same `Object.keys(roles)`, applies the same `invertLightness`, yields the same key set. Type-safe (no `as unknown as`). Same output.
+  - The new `altHue`/`secondaryHue` low-harmony-wrap comment is documentation only — no code change.
+  - 23 palette tests green; e2e determinism specs (byte-identical surface bgs across re-apply/reload) green — proves generated colors are unchanged.
+- VERIFIED-INVALID re-check (`accents` is load-bearing): correct — `inject.ts` consumes `accents[0]`/`accents[last]`.

@@ -44,3 +44,7 @@ Lines 106, 115, 120. `activeTab` throws if `tab.id == null` (84), so by the call
 1. **Replace `applied: !removed && false` with a plain `false`** (+ comment) — remove the obfuscated constant.
 2. **Refine `activeTab`'s return type** to `Tab & { id: number }` so the three `tab.id as number` casts vanish.
 3. **Comment the two `executeScript` boundary casts** as the irreducible `chrome.scripting` typing gap. Otherwise this file is solid.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED: the confusing `applied: !removed && false` (always `false`) is now `applied: false` directly, matching `ResetSchemeResponse.applied?: false`. Behavior-identical. `activeTab()` now returns `chrome.tabs.Tab & { id: number }` so call sites drop the `tab.id as number` casts; the two remaining `executeScript`-boundary casts are commented as the irreducible `chrome.scripting` typing gap. Solid. 5 router tests green.

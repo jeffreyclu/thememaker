@@ -45,3 +45,8 @@ Lines 96–99 repeat the `overrides && Object.keys(overrides).length > 0 ? {inte
 1. **Verify and prune unused actions** (`toggle`/`rememberScheme`/`forgetScheme`) — delete any with no production dispatcher rather than carrying speculative reducer surface.
 2. **Route the popup's reset through the reducer** so "off = disable + forget" is expressed as pure transitions, not a raw storage write that bypasses the reducer's semantics.
 3. **Share the `applyOptions(intensity, overrides)` builder** to stop re-deriving the "empty overrides → omit" shape in a fourth location.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (collapsed to one action): `SiteAction` is now only `{ type: "enable"; scheme?: Scheme }`. Verified the real dispatch still matches: the popup's `persistTheme` (popup/index.ts:144-151) dispatches `{ type: "enable", scheme: schemeWithIntensity(...) }` through `siteStateReducer` — matches. `onReset` writes `{ enabled: false, savedScheme: undefined }` directly to storage (no reducer), so no `disable`/`forget` action is needed. Grepped: `siteStateReducer` has no other callers, and no caller dispatches a removed action type. Removing the actions broke nothing.
+- `loadDecision` unchanged in behavior: requires `enabled` + a concrete `palette`; clamps intensity; carries overrides only when non-empty. Pairs correctly with storage's `definedOnly` (a reset's `savedScheme: undefined` is dropped on read, so `loadDecision` returns `apply:false`). Verified via 8 site-persistence + 4 site-state tests + 3 persistence e2e specs.

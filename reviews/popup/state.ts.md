@@ -59,3 +59,11 @@ The popup labels roles "Page background"/"Body text"/etc.; the in-page panel (`p
 1. **Collapse the four `show*` disclosure booleans + their four toggle actions** into one disclosure sub-shape with a single parameterized toggle action — removes four parallel reducer cases.
 2. **Fix the `value as string` cast** in `schemeDetailRows` (guard with `typeof`), and ideally tighten the `Scheme` index-signature type at the root so the cast isn't needed anywhere.
 3. **Extract a shared `overrideKey` parser/formatter** and use it here instead of the fourth hand-rolled `tag|prop` split.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED: `schemeDetailRows` (state.ts:254-265) iterates `Object.entries(scheme.colors)` cast-free; `value` is typed `string`.
+- VERIFIED-INVALID re-check: agree it was already resolved by the foundation pass.
+- NEW (NOTE — same root cause as the types.ts colors item): `schemeDetailRows` does NOT guard `scheme.colors`; a legacy/hand-edited persisted scheme lacking `.colors` crashes here. Known/accepted ("clear storage"). One read-side `?? {}` would localize the robustness fix.
+- Re-render gating dependency check (consumed by view.ts): `schemeDetailRows` reads only `scheme.colors`; `overrideRows` reads only `state.overrides`; `baseColorForRole` reads `state.current...palette.roles`. All three are covered by the view's `current`/`overrides` gate keys — no hidden state escapes the gate. No stale-detail risk.
+- `dequeueScheme` (history.ts) bounds-checks index and returns `null`; `selectHistory` no-ops on null. Correct.

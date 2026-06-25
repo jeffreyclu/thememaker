@@ -56,3 +56,9 @@ Line 36. Ties to the medium finding — the parameter exists but the consumer ig
 1. **Inject the memory cache** (factory or dep) instead of a module-level mutable `Map`, removing the global state and the `clearMemoryCache` test hook.
 2. **Resolve the API-as-seed-picker honesty issue**: request `count=1` (only the first color is used) and/or document loudly that the API contributes a single seed, not a palette — or make it actually use the harmony.
 3. **Add a test pinning "fallback results are never cached"** so the retry-can-reach-API invariant can't regress.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (injected memory cache): `apiPalette` reads `deps.memoryCache` (an injected `Map`, no module global). The popup owns ONE `paletteMemoryCache` for its lifetime (popup/index.ts:47) and passes it on every Generate, so the session tier persists across clicks; tests pass a fresh `Map` per case. Lifecycle/identity correct.
+- Cache-key check: `paletteCacheKey(seed, mode)` = `palette:${normalizeHex(seed).toLowerCase()}:${mode}`. Same key space for the memory tier and the persistent tier (both keyed by this function), so a persistent hit warms memory under the identical key — no collision, no split-brain. Distinct seed/mode pairs produce distinct keys. Correct.
+- Tier order (memory → persistent → fetch → local fallback) is correct; fallback results are NOT cached (so a later online retry can still reach the API). `resp.ok` is not checked, but a non-2xx/non-JSON body throws in `resp.json()` or yields a null parse → caught → fallback. Robust. No regression.

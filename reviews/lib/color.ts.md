@@ -27,3 +27,12 @@ This is the cleanest substantial file in the repo: pure functions, honest `RGB`/
 1. **Collapse `ensureContrast`/`nudgeToAA` into a shared `relightToAA` helper** — removes the biggest internal duplication and shrinks the lockstep surface.
 2. **Delete the unused `ratio` field** in `ensureContrast`'s search result and fix the "tie-break on ratio headroom" comment that describes behavior the code doesn't implement.
 3. **Add a cross-implementation equivalence test** between this canonical math and the inject.ts port (shared with the inject.ts recommendation).
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (contrast de-dup): `ensureContrast`/`nudgeToAA` now both delegate to a shared `relightToAA(color, bg, target, onFail)`. Verified BEHAVIOR-IDENTICAL to the pre-fix code:
+  - Old `ensureContrast` used `hslToHex({ ...base, l })`; new shared core uses `hslToHex({ h: base.h, s: base.s, l })` — same since `base = {h,s,l}`.
+  - Tie-break: old `ensureContrast` comment claimed "tie-break on ratio headroom" but the actual code was `dDelta <= lDelta ? darker : lighter` (delta only, darker wins ties). New code is the same. (The lying comment is now gone.) Old `nudgeToAA` already used identical delta logic. So the merge is exact.
+  - Fallbacks differ ONLY in the thunk: `ensureContrast` → best black/white extreme; `nudgeToAA` → `ensureContrast`. Preserved.
+  - Confirmed by 38 color tests + inject/overrides/contrast e2e all green.
+- VERIFIED-INVALID re-checks (no cross-equivalence test; throwing `hexToHsl`): agree with the resolutions — `inject.ts` is the single shipped engine tested directly; the two copies are honestly documented as intentionally separate.

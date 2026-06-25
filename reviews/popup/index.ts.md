@@ -66,3 +66,9 @@ Line 283. A 50ms race to let the message flush before closing the popup. Works, 
 1. **Extract a single `commitCurrent()`** for the apply-live + persist flow duplicated across five handlers, with consistent error handling that always clears `loading`.
 2. **Snapshot `state` into locals before the first `await`** in each async handler so an interleaved gesture can't make a flow act on mutated state mid-flight.
 3. **Add try/catch (or route through `commitCurrent`) so a post-dispatch throw can't strand the popup** in a disabled "Generating…" state, and replace the `setTimeout(window.close, 50)` with a deterministic close after the awaited `sendToContent`.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (shared `commitCurrent`): history/favorite/invert handlers now dispatch their unique action then call `commitCurrent`, which wraps `applyCurrentScheme` + `persistTheme` in a try/catch that surfaces failures as `generateError` (so the popup can't strand in a stuck-`loading`/disabled state). `onGenerate` has its own try/catch around the whole flow. The old `setTimeout(window.close, 50)` is replaced by `await sendToContent(...)` then `window.close()` — deterministic.
+- CONFIRMED FIXED (memory cache owned here): `paletteMemoryCache` is a single popup-lifetime `Map` injected into every Generate via `deps.memoryCache`. Correct ownership/lifecycle.
+- NEW (NOTE — colors robustness, root cause in types.ts): `dispatch` → `render` runs synchronously with no try/catch. On `hydrate`, if `inputs.site.savedScheme`/a favorite/a history entry lacks `.colors` (legacy/hand-edited storage), `render` throws inside `schemeSwatches`/`schemeDetailRows` and white-screens the popup. Accepted per the "clear storage" decision; a read-side `?? {}` guard would make it graceful.

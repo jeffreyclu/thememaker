@@ -255,7 +255,9 @@ export const schemeDetailRows = (
   scheme: Scheme,
 ): Array<{ tags: string; color: string }> => {
   const byColor: Record<string, string[]> = {};
-  for (const [label, color] of Object.entries(scheme.colors)) {
+  // Guard: a malformed/hand-edited storage entry without `colors` degrades to
+  // "no detail rows" instead of white-screening the popup (render runs in dispatch).
+  for (const [label, color] of Object.entries(scheme.colors ?? {})) {
     (byColor[color] ??= []).push(label);
   }
   return Object.entries(byColor).map(([color, tags]) => ({

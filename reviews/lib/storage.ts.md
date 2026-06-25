@@ -49,3 +49,7 @@ Honest and correct (it's the thin real-API adapter; tests inject fakes). Worth a
 1. **Validate/clamp on read** (at least `intensity`) so a partial/legacy stored object can't shadow a default with `undefined`.
 2. **Unify the bounded-append logic** between `saveFavorite` and `pushHistory`/`enqueueScheme` into one parameterized helper.
 3. **Drop the redundant double cache prefix** (`cache:` + `palette:`). Otherwise leave this file as the reference adapter — it needs nothing else.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED: `enqueueScheme` now imported from the new pure `./history` module (the dead `theme-engine.ts` is deleted). `definedOnly()` is a genuine robustness improvement: it strips `undefined`-valued keys before spreading a stored partial over a default, so a stored `{ savedScheme: undefined }` (written by reset) can't shadow — `getSiteState` returns clean `{ enabled:false }` and `loadDecision` correctly says `apply:false`. 23 storage tests green. No regression.

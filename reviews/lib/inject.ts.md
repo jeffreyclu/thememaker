@@ -54,3 +54,10 @@ Fine locally, but `w2` exists only to dodge the outer `w` (the window-state alia
 1. **Break `applyAdaptiveScheme` apart.** Extract the pure color math + role classification + role-rule builder into a separately unit-tested module and have the build inline it (or at minimum into clearly-named self-contained inner functions). The function must stop being 1330 lines.
 2. **Make "lockstep" mechanical, not aspirational.** Add a test that feeds identical inputs to `color.ts` and an extracted copy of the inject port and asserts equal output. A comment is not a guarantee; a CI assertion is.
 3. **Consolidate the `window.__themeMaker*` global state behind one typed accessor and delete the dead `__themeMakerWriting` flag**, letting disconnect/reconnect be the single re-entrancy mechanism.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (dead-flag removal): grepped `cbe650f:src/lib/inject.ts` for `__themeMakerWriting` — every one of the 12 occurrences was a WRITE (`= true/false`), ZERO reads. So the flag had no behavioral effect and its removal is safe. The real re-entrancy guard is the observer's `observer.disconnect()` around its synchronous pre-paint writes (inject.ts:1494) plus `isOwnElement` + `doneSet.has(t)` filtering (1426-1483) — none of which referenced the flag. Re-entrancy protection intact. 31 e2e specs (flicker/determinism/pre-paint) green.
+- CONFIRMED FIXED (`relightToAA` twin-collapse in the payload): the inlined `ensureContrast`/`nudgeToAA` now share `relightToAA` exactly as the canonical `color.ts` does; the per-direction search, delta tie-break, and fallback thunks match the pre-fix bodies. Verified against `tests/inject.test.ts` + `tests/overrides.test.ts` + contrast e2e at intensity 10/100.
+- DEFERRED items (1330-line `applyAdaptiveScheme` split; one typed window-state accessor) remain correctly deferred per charter.
+- No new regression introduced by the inject.ts changes.

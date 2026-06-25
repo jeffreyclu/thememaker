@@ -28,3 +28,10 @@ Well-documented and the intensity helpers are clean. But this file is the SOURCE
 1. **Restructure `Scheme`** to `{ schemeDetails; colors: Record<string,string> }` — kills the unsound index signature and the `value as string` casts in four downstream files. Highest-leverage fix in the repo.
 2. **Split `RoleOverrides`** into a role-keyed type and a `<tag>|<prop>`-keyed `TagOverrides`, so the two override grammars are type-distinct and `applyOverridesToRoles` loses its `as unknown as`.
 3. **Make `ColorMode` a union** and delete the dead `HtmlElements` type with the v1 engine.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED: `Scheme` is now `{ schemeDetails: SchemeDetails; colors: Record<string,string> }` (types.ts:127-131). Every read site (`state.ts:258 schemeDetailRows`, `view.ts:237 schemeSwatches`, `color-source.ts:55`) and every build site (`engine-bridge.ts schemeFromPalette`, `content/index.ts:218`) is cast-free. Build + 259 unit + 31 e2e all green.
+- CONFIRMED FIXED: `ColorMode` union, `HtmlElements`/`htmlElements` deleted (grep: zero refs), `RoleOverrides`/`TagPropKey` documented. All accurate.
+- VERIFIED-INVALID re-check (`Intensity = number`): agree, correctly invalid.
+- NEW (robustness NOTE, known/accepted decision — flagged once): `colors` is now a REQUIRED field with no optionality and no read-side guard. A persisted `Scheme` (favorite/history/savedScheme) written before this split, or any hand-edited storage, lacks `.colors` and HARD-CRASHES `Object.entries(scheme.colors)`/`Object.values(scheme.colors)` with `TypeError: Cannot convert undefined or null to object` (reproduced). Because `render()` runs synchronously inside `dispatch` with NO try/catch, this white-screens the popup on hydrate. The chosen remediation is "clear storage" (legacy unsupported) — accepted per charter. Residual risk noted: a one-line guard (`Object.entries(scheme.colors ?? {})` at the two read sites, or `colors?: Record<string,string>` + `?? {}`) would turn an unrecoverable popup crash into graceful degradation (swatches just don't render) for ~zero cost. Recommend recording as a decision either way.

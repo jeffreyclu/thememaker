@@ -26,3 +26,7 @@ A clean, well-typed contract layer. Discriminated unions, a request→response t
 1. **Make `ResponseFor` deliver real per-type response shapes** or drop it — don't keep the indirection that maps every request to one loose envelope.
 2. **Fix the `applied: !removed && false`** dead expression (in router.ts) to a plain `false`.
 3. Otherwise leave it — this is a solid contract layer.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (per-request response types): `BaseResponse` + `ApplySchemeResponse`/`ResetSchemeResponse`/`QueryStateResponse`, with `ResponseFor` mapping each request to its specific response. `sendMessage<M>` resolves `ResponseFor[M["type"]]` so callers get the narrowed shape (a `QUERY_STATE` caller can't read `scheme?`, a `RESET_SCHEME` caller sees `applied: false` literal). Verified the popup consumers only read fields present on their narrowed type (`resp.ok/error/applied` on apply; `resp.ok/error` on reset; `resp.applied` on query). Build + 6 messages tests green. Solid contract layer.

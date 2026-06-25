@@ -34,3 +34,7 @@ The picker session machinery (overlay, capture-phase listeners, re-arm, teardown
 1. **Fix or delete the false `roleOfElement`/`mapping.ts` docstring** (lines 12, 21–23). Either wire the picker to the shared core or describe the self-contained reality. This is the headline issue.
 2. **Stop re-porting** `isButtonLike`/`hasOwnBackground`/`rgbToHex` — `pick.ts` is a bundled module and can import shared helpers; extract a `dom-roles.ts`.
 3. **Reconcile the override-key grammar**: the picker emits `<tag>|<prop>` while `mapping.ts` defines a role-key contract. Decide which one is real and delete the other so there is one override language in the codebase.
+
+## RE-REVIEW (post-fix audit)
+
+- No behavioral change in the fix commits beyond context. Re-scrutinized the pick session lifecycle for regressions: capture-phase `mousemove`/`click`/`scroll` listeners are added in `startPick` and removed symmetrically in `teardown` (idempotent via the `active` guard); the overlay is the single handle to the only `#OVERLAY_ID` and is removed on teardown. The `<tag>|<prop>` grammar the picker emits is the one the engine's override CSS layer consumes (the rival role-key grammar lived in the deleted `mapping.ts`, so the "two override languages" finding is now moot — one language remains). No regression.

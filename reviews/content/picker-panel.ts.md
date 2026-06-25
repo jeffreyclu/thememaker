@@ -28,3 +28,7 @@ A genuinely clean view component: Shadow DOM isolation, callback-based intents (
 1. **Pick one DOM-construction style** — build the static shell with `createElement` like `renderRow` does, eliminating the `innerHTML` block and the three non-null `as` casts.
 2. **Extract the design tokens** (`#4f46e5`/`#e2e2e6`/`#6b6b73`/`#b42318`) into a shared module so the panel and `popup.css` don't drift.
 3. **Add the Phase-4 focus management** (focus into the panel on mount, restore on destroy) to close the a11y gap the panel currently leaves to `index.ts`.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED (rebuilt without `innerHTML`): the shell is built with a typed `el(tag, className)` helper and every node is a typed reference — no `innerHTML` + re-query + non-null cast that would silently break on a class/attr rename. Row rebuilds use `rowsEl.replaceChildren()`; per-row listeners are GC'd with the rows. `destroy` removes the host (and its shadow tree), so no listener leak. No regression introduced.

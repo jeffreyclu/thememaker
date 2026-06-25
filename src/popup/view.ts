@@ -234,7 +234,9 @@ const schemeSwatches = (scheme: PopupState["current"]): string[] => {
     return [];
   }
   const seen: string[] = [];
-  for (const color of Object.values(scheme.colors)) {
+  // Guard: a malformed/hand-edited storage entry without `colors` degrades to
+  // "no swatches" instead of white-screening the popup (render runs in dispatch).
+  for (const color of Object.values(scheme.colors ?? {})) {
     if (!seen.includes(color)) {
       seen.push(color);
     }

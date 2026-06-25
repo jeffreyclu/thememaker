@@ -51,3 +51,13 @@ Line 49. The bridge prepends `#` to `randomHexColor()`, implying `randomHexColor
 1. **Fix the `Scheme` type at the root** (separate `colors` map from `schemeDetails`) so `schemeFromPalette` stops using `as Scheme` and the downstream `value as string` casts vanish across state.ts/view.ts.
 2. **Extract `resolvePalette(details)`** to dedupe the legacy-fallback palette resolution repeated in three functions.
 3. **Unify the "no overrides" representation** with a shared `withOverrides` helper instead of the `overrides: undefined` spread trick, and align the project on one absence convention.
+
+## RE-REVIEW (post-fix audit)
+
+- CONFIRMED FIXED: `schemeFromPalette` builds `{ schemeDetails, colors }` with no `as Scheme` cast; `colors` derived from `palette.themeColors` (the SOT) so swatches == painted colors.
+- VERIFIED-INVALID re-checks (no double-`#`; `randomHexColor` returns full hex): both correct.
+- NEW scrutiny of the Scheme-building helpers (all carry `colors` correctly):
+  - `schemeFromPalette` always sets `colors` — OK.
+  - `invertScheme` rebuilds via `schemeFromPalette(invertPalette(...))` so `colors` is recomputed from the inverted palette — consistent with the new palette. OK.
+  - `schemeWithIntensity` (211-232) spreads `...scheme` (preserving `colors`) and only replaces `schemeDetails`. Since `resolvePalette` returns the SAME palette object for non-legacy schemes (just re-stamps intensity/overrides), the preserved `colors` stays consistent with the palette. For a LEGACY scheme (no palette) it regenerates a local palette but keeps the old `colors` — a theoretical display/paint mismatch, but legacy schemes are unsupported by decision, so not actionable. NOTE only.
+- No regression found.
