@@ -691,6 +691,7 @@ export function applyAdaptiveScheme(
     bg: string | null;
     fg: string | null;
     bgImage: string | null;
+    boxShadow: string | null;
   };
   const w = window as unknown as {
     __themeMakerObserver?: MutationObserver;
@@ -748,6 +749,7 @@ export function applyAdaptiveScheme(
       bg: cs.backgroundColor || null,
       fg: cs.color || null,
       bgImage: cs.backgroundImage || null,
+      boxShadow: cs.boxShadow || null,
     };
     originals.set(el, captured);
     return captured;
@@ -773,7 +775,7 @@ export function applyAdaptiveScheme(
   // ORIGINAL body background toward the themed base by the intensity factor.
   const bodyOriginal = document.body
     ? originalStyleOf(document.body)
-    : { bg: null, fg: null, bgImage: null };
+    : { bg: null, fg: null, bgImage: null, boxShadow: null };
   const baseBackground = mix(bodyOriginal.bg || "#ffffff", themedBase, factor);
   // Cache the EXACT resolved base for this origin in the page's own
   // localStorage, so the content script can synchronously paint it at
@@ -1036,7 +1038,15 @@ export function applyAdaptiveScheme(
     // instead of becoming an opaque slab that covers the content behind it.
     const alpha = alphaOf(orig.bg ?? "");
     const bgValue = alpha < 1 ? withAlpha(background, alpha) : background;
-    return `[${ATTR}="${id}"] { background-color: ${bgValue} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important; }`;
+    // Soften drop shadows: an element that HAD a box-shadow keeps a gentle,
+    // neutral elevation (so cards/menus/dialogs still float) instead of its
+    // original — which is often heavy/muddy on a re-themed surface. Elements
+    // with no shadow stay flat (we never ADD one).
+    const shadowDecl =
+      orig.boxShadow && orig.boxShadow !== "none"
+        ? " box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 6px 16px rgba(0,0,0,0.12) !important;"
+        : "";
+    return `[${ATTR}="${id}"] { background-color: ${bgValue} !important; background-image: none !important; color: ${color} !important; text-shadow: none !important;${shadowDecl} }`;
   };
 
   // ---- write the BASE rules IMMEDIATELY (no themeless gap) -----------------
