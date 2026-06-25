@@ -1,5 +1,5 @@
 /**
- * The top control cluster: mode / intensity / invert. A CONNECTED component that
+ * The top control cluster: mode / intensity / invert. A connected component that
  * reads state + actions from context and feeds the three pure form primitives
  * (`ModeSelect` / `IntensitySlider` / `InvertToggle`), which stay reusable on a
  * minimal value+onChange contract.

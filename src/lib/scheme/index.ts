@@ -1,5 +1,5 @@
 /**
- * The SCHEME domain — pure, DOM-free, `chrome.*`-free.
+ * The scheme domain — pure, DOM-free, `chrome.*`-free.
  *
  * Single entry for the scheme building/transform logic (`mode` selection +
  * seed resolution, palette→`Scheme` builders, generate, invert, the apply/persist

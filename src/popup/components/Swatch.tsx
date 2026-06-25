@@ -1,5 +1,5 @@
 /**
- * Shared popup VIEW PRIMITIVES: the small color-chip components used by the
+ * Shared popup view primitives: the small color-chip components used by the
  * details, history, and favorites views. Pure presentation — props only, no
  * state, no `chrome.*`. Memoized so list re-renders skip unchanged chips.
  */

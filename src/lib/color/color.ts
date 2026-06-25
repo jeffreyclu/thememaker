@@ -2,12 +2,11 @@
  * Pure color math — conversions, WCAG luminance/contrast, contrast enforcement,
  * and luminance bucketing.
  *
- * NOTHING here touches the DOM or `chrome.*`; it is fully unit-testable. This is
- * THE single source of truth for color math across the whole extension: both the
- * popup/palette path (`palette.ts`, `color-source.ts`) AND the in-page adaptive
- * engine import this core (the engine's tolerant runtime layer, `color-runtime.ts`,
- * wraps it for parsing computed `rgb()`/`rgba()` values). There is no longer a
- * hand-ported copy — the engine is bundled code that imports this directly.
+ * Nothing here touches the DOM or `chrome.*`; it is fully unit-testable. The
+ * single source of truth for color math across the extension: both the
+ * popup/palette path (`palette.ts`, `color-source.ts`) and the in-page adaptive
+ * engine import this core (the engine's tolerant runtime layer,
+ * `color-runtime.ts`, wraps it for parsing computed `rgb()`/`rgba()` values).
  */
 
 export interface RGB {
@@ -25,7 +24,7 @@ export interface HSL {
 const clamp = (n: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, n));
 
-/** Normalizes a hex string to a 6-digit lowercase form WITH a leading '#'. */
+/** Normalizes a hex string to a 6-digit lowercase form with a leading '#'. */
 export const normalizeHex = (hex: string): string => {
   let h = hex.trim().toLowerCase();
   if (h.startsWith("#")) {
@@ -184,12 +183,12 @@ export const meetsContrast = (
 
 /**
  * Shared core for {@link ensureContrast} and {@link nudgeToAA}: relight `color`
- * (preserving hue + saturation) to the NEAREST lightness that meets `target`
+ * (preserving hue + saturation) to the nearest lightness that meets `target`
  * against `bg`, walking both directions in fine steps so the move is minimal
  * (least destructive). On a tie, prefers the smaller lightness delta. If neither
  * hue-preserving direction can reach the target, defers to `onFail()`.
  *
- * The two public functions differ ONLY in that fallback thunk, so the search /
+ * The two public functions differ only in that fallback thunk, so the search /
  * tie-break body lives here once.
  */
 const relightToAA = (
@@ -228,12 +227,11 @@ const relightToAA = (
 };
 
 /**
- * Adjusts `text`'s LIGHTNESS (preserving hue/saturation where possible) until it
- * meets WCAG AA against `bg`. Tries darkening AND lightening and keeps whichever
+ * Adjusts `text`'s lightness (preserving hue/saturation where possible) until it
+ * meets WCAG AA against `bg`. Tries darkening and lightening and keeps whichever
  * direction moves the least; if neither hue-preserving direction can reach it,
- * falls back to pure black or white (whichever wins).
- *
- * GUARANTEE: the returned color always satisfies `meetsContrast(result, bg)`.
+ * falls back to pure black or white (whichever wins). The returned color always
+ * satisfies `meetsContrast(result, bg)`.
  */
 export const ensureContrast = (
   text: string,
@@ -249,20 +247,20 @@ export const ensureContrast = (
   });
 
 /**
- * Nudges `color` to the NEAREST shade of ITS OWN hue that meets WCAG AA against
+ * Nudges `color` to the nearest shade of its own hue that meets WCAG AA against
  * `bg`, by walking lightness in fine steps (preserving hue + saturation).
  *
- * This is the anti-monochrome contrast strategy: when a saturated accent role
- * (a colorful link/heading/button) fails AA against the background it lands on,
- * we keep it COLORFUL — we shift only its lightness to the closest AA-passing
- * version of the SAME hue, rather than collapsing it to black/white (which is
- * what made multi-hue palettes read as grayscale). Only if no shade of the hue
- * can reach AA in either direction do we fall back to `ensureContrast` (which
- * ends at the better black/white extreme). Saturation is preserved so the role
- * keeps its identity; the result is GUARANTEED to meet AA.
+ * The anti-monochrome contrast strategy: when a saturated accent role (a
+ * colorful link/heading/button) fails AA against the background it lands on, it
+ * stays colorful — only its lightness shifts to the closest AA-passing version
+ * of the same hue, rather than collapsing to black/white (which makes multi-hue
+ * palettes read as grayscale). Only if no shade of the hue can reach AA in
+ * either direction does it fall back to `ensureContrast` (which ends at the
+ * better black/white extreme). Saturation is preserved so the role keeps its
+ * identity; the result is guaranteed to meet AA.
  *
- * (Behaviorally identical to `ensureContrast` except for the last-resort
- * fallback — both share {@link relightToAA}.)
+ * Behaviorally identical to `ensureContrast` except for the last-resort
+ * fallback — both share {@link relightToAA}.
  */
 export const nudgeToAA = (color: string, bg: string, large = false): string =>
   relightToAA(color, bg, large ? AA_LARGE : AA_NORMAL, () =>
@@ -271,8 +269,8 @@ export const nudgeToAA = (color: string, bg: string, large = false): string =>
 
 /**
  * Linearly blends `from` toward `to` in sRGB space by factor `t` in [0, 1].
- * `t = 0` returns `from`, `t = 1` returns `to`. This is the core of the
- * intensity dial: "how much of the theme is applied vs. the original".
+ * `t = 0` returns `from`, `t = 1` returns `to` — the core of the intensity dial
+ * (how much of the theme is applied vs. the original).
  */
 export const mixHex = (from: string, to: string, t: number): string => {
   const k = clamp(t, 0, 1);

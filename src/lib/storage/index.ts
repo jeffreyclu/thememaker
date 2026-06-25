@@ -8,8 +8,6 @@
  * The adapter is built on a minimal `StorageArea` interface so unit tests inject
  * a fake and never touch real browser APIs. `Storage.chromeArea()` adapts a real
  * `chrome.storage.StorageArea` (callback API) to a promise-based one.
- *
- * Replaces ALL prior `localStorage` usage.
  */
 import { MAX_HISTORY } from "../../config";
 import { enqueueScheme } from "./history";
@@ -51,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /**
- * A named, GLOBAL (not per-site) favorite scheme the user saved. Stored as a
+ * A named, global (not per-site) favorite scheme the user saved. Stored as a
  * bounded list in `sync` under {@link KEYS.favorites} so it roams with the
  * profile.
  */
@@ -86,7 +84,7 @@ export interface SiteState {
 export const DEFAULT_SITE_STATE: SiteState = { enabled: false };
 
 /**
- * The application storage facade — the SOLE storage interface.
+ * The application storage facade — the sole storage interface.
  *
  * Both areas are injected so tests can supply fakes; production wires the
  * shared {@link storage} singleton over `chrome.storage.local|sync`. All
@@ -110,11 +108,11 @@ export class Storage {
 
   /**
    * Adapts a real `chrome.storage` area (callback API) to the promise-based
-   * {@link StorageArea}. The area is looked up by NAME on each op (never
+   * {@link StorageArea}. The area is looked up by name on each op (never
    * captured) so the module-level {@link storage} singleton, built at import,
-   * always talks to the CURRENT `chrome.storage` — in production the areas are
-   * stable (byte-identical), and under unit tests this lets the per-test
-   * chrome-mock swap (a fresh `globalThis.chrome` each `beforeEach`) take effect.
+   * always talks to the current `chrome.storage` — in production the areas are
+   * stable, and under unit tests this lets the per-test chrome-mock swap (a fresh
+   * `globalThis.chrome` each `beforeEach`) take effect.
    */
   private static chromeArea(name: "local" | "sync"): StorageArea {
     return {
@@ -148,8 +146,8 @@ export class Storage {
   }
 
   /**
-   * Drops keys whose value is `undefined` so a partial/legacy stored object
-   * can't shadow a default when spread over it
+   * Drops keys whose value is `undefined` so a partial stored object can't
+   * shadow a default when spread over it
    * (`{ ...DEFAULT, ...Storage.definedOnly(stored) }`).
    */
   private static definedOnly<T extends object>(
@@ -227,7 +225,7 @@ export class Storage {
 
   /**
    * Appends `favorite` to the bounded favorites list and persists it to `sync`.
-   * Re-saving an id REPLACES the existing entry (so a rename/overwrite is
+   * Re-saving an id replaces the existing entry (so a rename/overwrite is
    * idempotent); the list is capped at {@link MAX_FAVORITES} (oldest dropped).
    * @returns the new favorites array.
    */
@@ -269,7 +267,7 @@ export class Storage {
 }
 
 /**
- * The application-wide storage SINGLETON. The popup and content script share
+ * The application-wide storage singleton. The popup and content script share
  * this one instance; with no args the class wires itself over real
  * `chrome.storage` (lazily), so it is safe to construct at module load and
  * stays correct under the per-test chrome mock.

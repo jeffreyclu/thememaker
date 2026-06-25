@@ -1,6 +1,6 @@
 /**
  * Details disclosure: the toggle + the panel (the current scheme's seed +
- * per-color detail rows + custom-override rows). CONNECTED: reads its own state +
+ * per-color detail rows + custom-override rows). Connected: reads its own state +
  * intent from context. The leaf `DetailRow` stays pure.
  */
 import { memo } from "react";

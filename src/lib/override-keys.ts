@@ -1,17 +1,17 @@
 /**
- * The `<tag>|<prop>` override-key GRAMMAR — the single source of truth shared by
- * the element picker (which PRODUCES keys), the engine's override layer (which
- * PARSES them into CSS), and the popup/panel rows (which LABEL them).
+ * The `<tag>|<prop>` override-key grammar — the single source of truth shared by
+ * the element picker (which produces keys), the engine's override layer (which
+ * parses them into CSS), and the popup/panel rows (which label them).
  *
  * An override key is one of:
  *  - `<tag>|<prop>` — a per-tag override, prop ∈ {"background","color"} (e.g.
  *    `div|background`, `h3|color`). `<tag>` is a lowercase HTML tag name, with
  *    `page` as a sentinel for the page base (html/body).
- *  - a bare ROLE key (e.g. `textPrimary`, `bg`) — a generated-scheme role the
+ *  - a bare role key (e.g. `textPrimary`, `bg`) — a generated-scheme role the
  *    popup's customize panel can override; these have no `|`.
  *
  * No DOM, no `chrome.*` — pure string logic so every consumer (popup, picker
- * panel, engine) shares ONE grammar instead of re-deriving it.
+ * panel, engine) shares one grammar instead of re-deriving it.
  */
 import { isHexColor, normalizeHex } from "./color/color";
 import type { RoleOverrides } from "../types";
@@ -29,7 +29,7 @@ export interface ParsedOverrideKey {
   role: string;
 }
 
-/** Parses an override key into its `<tag>|<prop>` parts (D4). */
+/** Parses an override key into its `<tag>|<prop>` parts. */
 export const parseOverrideKey = (key: string): ParsedOverrideKey => {
   const bar = key.indexOf("|");
   if (bar < 0) {
@@ -47,18 +47,18 @@ export const makeOverrideKey = (
 /**
  * Options for {@link labelForOverrideKey}: each consumer supplies its own
  * no-bar role table and its own `page`-sentinel wording, so the shared parse +
- * generic `tag · prop` formatting can serve both the popup and the picker panel
+ * generic `tag · prop` formatting serves both the popup and the picker panel
  * without changing either's output.
  */
 export interface OverrideLabelOptions {
-  /** Label table for bare ROLE keys (no `|`); falls back to the key itself. */
+  /** Label table for bare role keys (no `|`); falls back to the key itself. */
   roleLabels?: Record<string, string>;
   /** The full label for the `page` sentinel tag (e.g. "Page background"). */
   pageLabel?: string;
 }
 
 /**
- * The human label for an override key (D5). For a bare role key it looks up
+ * The human label for an override key. For a bare role key it looks up
  * `roleLabels` (falling back to the key); for a `<tag>|<prop>` key it formats
  * `tag · background|text`, with the `page` sentinel using `pageLabel`.
  */
@@ -85,9 +85,9 @@ export interface OverrideRow {
 }
 
 /**
- * Maps an override map to rows in insertion order (D6). `labelFor` lets each
- * consumer supply its own label wording; `validateColor` toggles the hex
- * normalization the picker panel needs (and the popup's raw passthrough).
+ * Maps an override map to rows in insertion order. `labelFor` lets each consumer
+ * supply its own label wording; `validateColor` toggles the hex normalization
+ * the picker panel needs (and the popup's raw passthrough).
  */
 export const overrideRows = (
   overrides: RoleOverrides,

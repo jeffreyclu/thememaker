@@ -1,8 +1,8 @@
 /**
- * The action buttons (Generate / Save / Reset / Customize). A CONNECTED
+ * The action buttons (Generate / Save / Reset / Customize). A connected
  * component: it reads state + actions from context, so the container passes it
  * nothing. The repeated button markup is factored into one `<button>` map over a
- * small descriptor list — no copy-paste per button.
+ * descriptor list.
  */
 import { memo } from "react";
 

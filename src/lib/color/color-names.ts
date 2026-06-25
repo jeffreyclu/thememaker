@@ -1,12 +1,9 @@
 /**
  * Offline, deterministic color naming.
  *
- * The legacy extension showed thecolorapi.com's whimsical seed names (e.g.
- * "Brandy Rose"), but the default path now generates palettes LOCALLY with no
- * network, so there is no name to show — schemes fell back to "scheme". This
- * derives a readable, descriptive name from the color itself (hue family +
- * lightness/saturation modifier), so every generated scheme is labeled without
- * a request or a big name table.
+ * Derives a readable, descriptive name from the color itself (hue family +
+ * lightness/saturation modifier), so every locally-generated scheme is labeled
+ * without a network request or a big name table.
  */
 import { hexToHsl, normalizeHex } from "./color";
 

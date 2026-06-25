@@ -1,31 +1,31 @@
 /**
- * Local-first, PURE palette generation via HSL color theory (the GENERATION
- * CORE, composed by the `PaletteGenerator` class in `./index`).
+ * Local-first, pure palette generation via HSL color theory (the generation
+ * core, composed by the `PaletteGenerator` class in `./index`).
  *
  * Given a seed hex + mode, this produces a deterministic, offline, instant
- * palette — the DEFAULT color source. `thecolorapi.com` is an OPTIONAL
+ * palette — the default color source. `thecolorapi.com` is an optional
  * "surprise me" source layered on top (see `palette-source.ts`), which falls
  * back here when the network fails.
  *
- * No DOM, no `chrome.*`. The output is a structured `Palette` DTO — a PLAIN,
- * SERIALIZABLE data shape (NOT a class instance), because it travels from the
+ * No DOM, no `chrome.*`. The output is a structured `Palette` DTO — a plain,
+ * serializable data shape (not a class instance), because it travels from the
  * popup to the in-page engine over `chrome.tabs.sendMessage` (structured clone)
  * and is persisted to `chrome.storage`. Class methods would be lost over that
- * boundary, so the wire object MUST stay plain; the `PaletteGenerator` class is a
- * generator/factory that PRODUCES these plain DTOs.
+ * boundary, so the wire object stays plain; the `PaletteGenerator` class is a
+ * factory that produces these plain DTOs.
  *
- * ## Semantic roles (the anti-monochrome fix)
+ * ## Semantic roles (the anti-monochrome layer)
  *
- * Raw `surfaces`/`accents` ramps are NOT enough: painting every background from
+ * Raw `surfaces`/`accents` ramps are not enough: painting every background from
  * one desaturated surface ramp and every text run from `accents[0]` collapses a
- * 5-color palette to two visible colors. So we ALSO derive a `roles` object that
- * spends the WHOLE harmony by assigning DISTINCT colors to DISTINCT SEMANTIC
- * ROLES (heading / link / body / primary button / …). Multi-hue modes pull
- * DIFFERENT harmony hues for different roles (e.g. triad: heading=hue A,
- * link=hue B, primary=hue C); monochrome modes differentiate roles by lightness
- * / saturation steps so hierarchy stays clear. Backgrounds remain tinted, mostly
- * neutral "paper"; links / buttons / headings carry the saturated accent hues.
- * The in-page engine (`inject.ts`) then enforces AA on every pair.
+ * 5-color palette to two visible colors. So a `roles` object also spends the
+ * whole harmony by assigning distinct colors to distinct semantic roles
+ * (heading / link / body / primary button / …). Multi-hue modes pull different
+ * harmony hues for different roles (e.g. triad: heading=hue A, link=hue B,
+ * primary=hue C); monochrome modes differentiate roles by lightness / saturation
+ * steps so hierarchy stays clear. Backgrounds remain tinted, mostly neutral
+ * "paper"; links / buttons / headings carry the saturated accent hues. The
+ * in-page engine then enforces AA on every pair.
  */
 import { hexToHsl, hslToHex, luminanceOf, normalizeHex } from "../color/color";
 import type { HSL } from "../color/color";
@@ -34,7 +34,7 @@ import { themeSwatches, type ThemeColor } from "./palette-swatches";
 import type { ColorMode } from "../../types";
 
 /**
- * A structured palette — the PLAIN, SERIALIZABLE colors DTO that flows over the
+ * A structured palette — the plain, serializable colors DTO that flows over the
  * wire (popup → engine) and into storage. `surfaces` are ordered dark→light
  * (used for luminance bucketing onto the page's existing surfaces); `accents`
  * are the harmony hues for text/links/borders. `seed` is the originating color.
@@ -44,7 +44,7 @@ export interface Palette {
   seed: string;
   mode: ColorMode;
   /**
-   * The SOURCE-OF-TRUTH swatches: the DISTINCT colors actually painted on the
+   * The source-of-truth swatches: the distinct colors actually painted on the
    * page, in display order (primary/root first), de-duplicated. This is what the
    * popup shows — a swatch is always a real painted color, and the count matches
    * the theme's real number of distinct colors.
@@ -57,7 +57,7 @@ export interface Palette {
   /** Concrete semantic role → color mapping (the anti-monochrome layer). */
   roles: PaletteRoles;
   /**
-   * The labeled SOURCE-OF-TRUTH color list (role + hex), in display order. The
+   * The labeled source-of-truth color list (role + hex), in display order. The
    * popup renders these (label + swatch) so what the user sees is exactly what
    * is painted. `swatches` is just the hex projection of this list.
    */
@@ -135,8 +135,8 @@ export const generatePalette = (seed: string, mode: ColorMode): Palette => {
 
   const roles = deriveRoles(base, hues, isMono, monoBias);
 
-  // SOURCE OF TRUTH: the distinct colors the engine actually paints. `swatches`
-  // is the hex projection of this labeled list, so the popup display == the DOM.
+  // The distinct colors the engine actually paints. `swatches` is the hex
+  // projection of this labeled list, so the popup display == the DOM.
   const themeColors = themeSwatches(roles);
   const swatches = themeColors.map((tc) => tc.color);
 
@@ -151,7 +151,7 @@ export const generatePalette = (seed: string, mode: ColorMode): Palette => {
   };
 };
 
-/** Flips a single hex's LIGHTNESS (l → 100 − l), keeping its hue + saturation. */
+/** Flips a single hex's lightness (l → 100 − l), keeping its hue + saturation. */
 const invertLightness = (hex: string): string => {
   const c = hexToHsl(normalizeHex(hex));
   return hslToHex({ h: c.h, s: c.s, l: 100 - c.l });
@@ -159,7 +159,7 @@ const invertLightness = (hex: string): string => {
 
 /**
  * Maps `fn` over every color in a {@link PaletteRoles}, preserving its fixed key
- * set. Type-safe with NO `as unknown as` round-trip: the accumulator is typed as
+ * set. Type-safe with no `as unknown as` round-trip: the accumulator is typed as
  * a partial `PaletteRoles` and the keys are narrowed to `keyof PaletteRoles`, so
  * the result is a full `PaletteRoles` once every role is visited.
  */
@@ -175,7 +175,7 @@ const mapRoles = (
 };
 
 /**
- * Returns a NEW palette with every derived color's lightness flipped — turning a
+ * Returns a new palette with every derived color's lightness flipped — turning a
  * light theme into a dark one (and vice versa) while keeping hues. `seed`/`mode`
  * are untouched (the root-color identity stays). Self-inverse (mod rounding).
  */

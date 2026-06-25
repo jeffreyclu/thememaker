@@ -1,5 +1,5 @@
 /**
- * The mode SELECTION type + seed/mode resolution for generation.
+ * The mode selection type + seed/mode resolution for generation.
  *
  * Pure + total (never throws), DOM-free and `chrome.*`-free. The dropdown value
  * ("random" or a concrete color mode) and the helpers that turn it — plus an
@@ -23,7 +23,7 @@ export const resolveMode = (selection: ModeSelection): ColorMode =>
 
 /**
  * Resolves the concrete seed hex Generate should use: a valid chosen seed
- * (normalized to `#rrggbb`), else a fresh RANDOM color. Pure + total.
+ * (normalized to `#rrggbb`), else a fresh random color. Pure + total.
  */
 export const resolveSeed = (seed?: string): string =>
   seed && isHexColor(seed) ? normalizeHex(seed) : paletteGenerator.randomSeed();

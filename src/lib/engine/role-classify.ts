@@ -1,31 +1,31 @@
 /**
- * Semantic SURFACE / element classification (D7) — the engine-internal decisions
- * over an element's tag/class/attributes that the surface walk consumes.
+ * Semantic surface / element classification: the engine-internal decisions over an
+ * element's tag/class/attributes that the surface walk consumes.
  *
  * Surfaces are classified by tag/class into roles (button / code / card / banner /
  * complementary / generic) that pull dedicated palette slots, so every surface's
- * theme color is a PURE FUNCTION OF ITS ROLE (never of its original-bg luminance)
- * — that decoupling is the SPA fix (recycled/restyled nodes and identical rows
- * share one color). TEXT role classification lives in the ROOT-SCOPED tag rules
+ * theme color is a pure function of its role, never of its original-bg luminance.
+ * That decoupling is what lets recycled/restyled nodes and identical rows share
+ * one color on SPAs. Text role classification lives in the root-scoped tag rules
  * (`role-rules.ts`), so these classifiers only ever decide surfaces.
  *
- * The shared `isButtonLike` lives in `classify.ts` (D2); this module adds the
- * engine's surface-only classifiers. Pure decisions over an element + resolved
- * roles — `getComputedStyle` reads stay in the walk, not here.
+ * The shared `isButtonLike` lives in `classify.ts`; this module adds the engine's
+ * surface-only classifiers. Pure decisions over an element + resolved roles;
+ * `getComputedStyle` reads stay in the walk, not here.
  */
 import { isButtonLike } from "../classify";
 import type { ResolvedRoles } from "./engine-roles";
 
-/** The surface FIXED-THEME fill for an element: bg, label seed, optional token. */
+/** The surface fixed-theme fill for an element: bg, label seed, optional token. */
 export interface SurfaceFill {
   bg: string;
   label: string;
-  /** A `data-tm-surf` token for tinted SEMANTIC surfaces (card/code/banner/comp). */
+  /** A `data-tm-surf` token for tinted semantic surfaces (card/code/banner/comp). */
   surf?: string;
 }
 
 // Tag membership tested via ` tag ` substring lookups against these space-padded
-// strings (the engine's existing style — kept verbatim for byte-equivalence).
+// strings.
 const CODE_TAGS = " pre code kbd samp ";
 const CARD_TAGS = " article section figure dialog details fieldset blockquote ";
 const BANNER_TAGS = " header nav ";
@@ -82,10 +82,10 @@ export const classifyButton = (
 };
 
 /**
- * Surface scope tokens → the DETERMINISTIC reference bg the scoped text rules
- * floor against. Tinted SEMANTIC surfaces (card/code/banner/comp) carry a token
- * so text inside them floors against THAT surface (AA + colorful). Generic
- * surfaces are NOT tokenized (their text uses the page-level role rules).
+ * Surface scope tokens to the deterministic reference bg the scoped text rules
+ * floor against. Tinted semantic surfaces (card/code/banner/comp) carry a token so
+ * text inside them floors against that surface (AA + colorful). Generic surfaces
+ * are not tokenized; their text uses the page-level role rules.
  */
 export const surfaceRoleBg = (
   roles: ResolvedRoles,
@@ -98,11 +98,11 @@ export const surfaceRoleBg = (
 
 /**
  * Builds the surface fill resolver for the current palette: maps an element to
- * its FIXED-THEME bg + label seed + optional `data-tm-surf` token. THE CORE FIX:
- * every surface's `bg` is a PURE FUNCTION OF ITS ROLE — buttons → primary/
- * secondary; code/card/banner/comp → their tinted slots; generic surfaces → the
- * ONE fixed `roleSurface`. Total (never null): a generic surface is a first-class
- * role. Buttons carry no token (their content is a label, not document text).
+ * its fixed-theme bg + label seed + optional `data-tm-surf` token. Every surface's
+ * `bg` is a pure function of its role: buttons to primary/secondary;
+ * code/card/banner/comp to their tinted slots; generic surfaces to the one fixed
+ * `roleSurface`. Total (never null): a generic surface is a first-class role.
+ * Buttons carry no token (their content is a label, not document text).
  */
 export const makeSurfaceFillFor = (
   roles: ResolvedRoles,
@@ -123,7 +123,7 @@ export const makeSurfaceFillFor = (
       };
     }
     if (BANNER_TAGS.indexOf(` ${tag} `) >= 0) {
-      // Header/nav get their OWN hued surface tint (heading hue → bg).
+      // Header/nav get their own hued surface tint (heading hue to bg).
       return {
         bg: roles.bannerBg,
         label: roles.roleTextPrimary,
@@ -131,7 +131,7 @@ export const makeSurfaceFillFor = (
       };
     }
     if (COMPLEMENTARY_TAGS.indexOf(` ${tag} `) >= 0) {
-      // Aside/footer get a different hued tint (link hue → bg).
+      // Aside/footer get a different hued tint (link hue to bg).
       return {
         bg: roles.complementaryBg,
         label: roles.roleTextPrimary,
@@ -145,7 +145,7 @@ export const makeSurfaceFillFor = (
         surf: "card",
       };
     }
-    // GENERIC surface → the ONE fixed role surface (decoupled from original bg).
+    // Generic surface: the one fixed role surface (decoupled from original bg).
     return { bg: roles.roleSurface, label: roles.roleTextPrimary };
   };
 };
@@ -166,7 +166,7 @@ export const isSkippable = (el: HTMLElement): boolean => {
 };
 
 /**
- * Editable regions (compose boxes, inputs) must NEVER be re-walked/re-themed:
+ * Editable regions (compose boxes, inputs) must never be re-walked/re-themed:
  * typing churns their subtree on every keystroke, and they inherit the correct
  * text color from their surface/base anyway. Skipping them keeps typing smooth.
  */
@@ -180,10 +180,10 @@ export const isEditableRoot = (el: HTMLElement): boolean => {
 };
 
 /**
- * A computed `background-image` is a REAL image asset to PRESERVE when it
- * contains a `url(...)` (raster/SVG/sprite/photo). Pure gradients (`linear-`/
- * `radial-`/`conic-gradient`, no `url(`) are decorative and safe to replace with
- * the themed solid. `none` and empty are not images.
+ * A computed `background-image` is a real image asset to preserve when it contains
+ * a `url(...)` (raster/SVG/sprite/photo). Pure gradients (`linear-`/`radial-`/
+ * `conic-gradient`, no `url(`) are decorative and safe to replace with the themed
+ * solid. `none` and empty are not images.
  */
 export const hasImageBackground = (bgImage: string | null): boolean => {
   if (!bgImage) {

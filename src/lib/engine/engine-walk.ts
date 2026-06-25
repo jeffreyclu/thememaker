@@ -1,14 +1,10 @@
 /**
- * The TIME-SLICED surface-walk SLICE functions — the per-slice work the Engine's
- * scheduler drives, with NO state of its own.
+ * The time-sliced surface-walk slice functions, with no state of their own.
  *
- * The Engine owns the work queue + the draining flag + the scheduling (the loop
- * that reschedules itself until drained); this module is the stateless body of one
- * slice: flatten a subtree into queued work (`enqueueInto`), drain a budgeted slice
- * from the queue (`drainSlice`), and the observer's synchronous PRE-PAINT pass
- * (`paintViewport`). Each takes the Engine's queue/state explicitly, so there are
- * no `window.__themeMaker*` globals — the painter (`engine-surface.ts`) still owns
- * the per-element decision.
+ * The Engine owns the work queue and scheduling; this module is the stateless body
+ * of one slice: flatten a subtree into queued work (`enqueueInto`), drain a
+ * budgeted slice from the queue (`drainSlice`), and the observer's synchronous
+ * pre-paint pass (`paintViewport`). Each takes the Engine's queue/state explicitly.
  */
 import {
   processElement,
@@ -30,7 +26,7 @@ const SLICE_BUDGET_MS = 4;
 const MAX_NODES_PER_SLICE = 400;
 
 // Bound the synchronous pre-paint work per observer callback so a huge burst can't
-// jank (the overflow goes to the deferred path).
+// jank; the overflow goes to the deferred path.
 const SYNC_CAP = 600;
 
 /** A flattened subtree + a cursor, so a slice can pause mid-subtree and resume. */
@@ -72,7 +68,7 @@ export const enqueueInto = (
 };
 
 /**
- * Drains ONE time-sliced slice from `work`, painting each element through the
+ * Drains one time-sliced slice from `work`, painting each element through the
  * context and appending the rules via `appendRules`. Stops the queue once the
  * themed budget is hit. Mutates `work` in place; the Engine reschedules if work
  * remains.
@@ -116,10 +112,10 @@ export const drainSlice = (
 };
 
 /**
- * PRE-PAINT: process `roots` (added/recycled subtrees) NOW for their in-/near-
- * viewport surfaces, appending their rules synchronously (no white flash). The
- * band is ~2 viewports past the fold so overscan rows are themed before scroll;
- * off-screen / overflow roots are RETURNED for the deferred path.
+ * Process `roots` (added/recycled subtrees) now for their in-/near-viewport
+ * surfaces, appending their rules synchronously (no white flash). The band is
+ * ~2 viewports past the fold so overscan rows are themed before scroll;
+ * off-screen / overflow roots are returned for the deferred path.
  */
 export const paintViewport = (
   roots: HTMLElement[],
@@ -131,8 +127,8 @@ export const paintViewport = (
   const deferred: HTMLElement[] = [];
   let budget = SYNC_CAP;
   for (const root of roots) {
-    // Never theme inside an editable region (typing churns it; its text inherits
-    // the right color) — keeps the compose box flicker-free.
+    // Never theme inside an editable region: typing churns it and its text
+    // inherits the right color, so skipping keeps the compose box flicker-free.
     if (root.closest(EDITABLE_SEL)) {
       continue;
     }
@@ -148,7 +144,7 @@ export const paintViewport = (
         break;
       }
       if (!inViewport(el, margin)) {
-        anyDeferred = true; // off-screen → leave for the deferred walk
+        anyDeferred = true; // off-screen: leave for the deferred walk
         continue;
       }
       const rule = processElement(el, ctx);
@@ -158,7 +154,7 @@ export const paintViewport = (
       }
     }
     // If any element in this subtree was off-screen or hit the cap, re-enqueue the
-    // WHOLE subtree to the deferred path; `doneSet` makes the already-themed ones
+    // whole subtree to the deferred path; `doneSet` makes the already-themed ones
     // cheap no-ops, so only the leftover (off-screen) surfaces do work.
     if (anyDeferred) {
       deferred.push(root);

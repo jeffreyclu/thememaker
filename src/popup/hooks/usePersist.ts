@@ -1,11 +1,11 @@
 /**
  * `usePersist` — per-site theme persistence.
  *
- * Surfaces the auto-save of the live look for the active origin (so a reload
- * restores it), wrapped so a failure surfaces as a popup error instead of
- * stranding. The apply/intensity/invert/history/favorite flows persist via the
- * shared effect engine's `commitCurrent`; this hook is the standalone persist the
- * generate flow runs after a fresh apply.
+ * Auto-saves the live look for the active origin (so a reload restores it),
+ * wrapped so a failure surfaces as a popup error. The
+ * apply/intensity/invert/history/favorite flows persist via the client's
+ * `commitCurrent`; this hook is the standalone persist the generate flow runs
+ * after a fresh apply.
  */
 import { useMemo } from "react";
 

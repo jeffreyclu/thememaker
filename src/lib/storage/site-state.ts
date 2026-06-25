@@ -2,10 +2,10 @@
  * Pure per-site state reducer + content-script load decision.
  *
  * The per-site toggle is wired in the popup and persisted in `chrome.storage`
- * (see `Storage.getSiteState`/`setSiteState`). Phase 3 consumes the
- * `enabled` flag + `savedScheme` for AUTO-REAPPLY on every page load via the
- * always-on content script (`src/content/index.ts`), which calls
- * `loadDecision` to decide whether to paint and with what palette/options.
+ * (see `Storage.getSiteState`/`setSiteState`). The `enabled` flag + `savedScheme`
+ * drive auto-reapply on every page load via the always-on content script
+ * (`src/content/index.ts`), which calls `loadDecision` to decide whether to
+ * paint and with what palette/options.
  *
  * Everything here is pure and testable: state transitions and the load
  * decision take plain data and return plain data — no DOM, no `chrome.*`.
@@ -17,8 +17,7 @@ import type { SiteState } from ".";
 
 // `enable` is the only transition the app dispatches. The popup owns the "full
 // reset" (off + forget) and writes that state directly (see popup `onReset`), so
-// no `disable`/`forget` reducer action is needed. Add variants here when a real
-// caller dispatches them — not before.
+// no `disable`/`forget` reducer action is needed.
 export type SiteAction = { type: "enable"; scheme?: Scheme };
 
 /** Pure reducer: given current per-site state and an action, return the next. */
@@ -28,7 +27,7 @@ export const siteStateReducer = (
 ): SiteState => {
   switch (action.type) {
     case "enable": {
-      // Enabling persists the CURRENTLY-applied scheme (when supplied) so the
+      // Enabling persists the currently-applied scheme (when supplied) so the
       // content script can faithfully reapply it on the next load. If no scheme
       // is supplied, keep whatever was already remembered (no `savedScheme` key
       // is added when there is nothing to remember).
@@ -47,7 +46,7 @@ export const siteStateReducer = (
  *
  * Given an origin's persisted `SiteState`, decide whether the always-on content
  * script should auto-reapply a theme on this page load, and with which palette +
- * options. Auto-apply requires BOTH `enabled` AND a saved scheme that carries a
+ * options. Auto-apply requires both `enabled` and a saved scheme that carries a
  * concrete `palette` + `intensity` (so the reapply is faithful and needs no
  * regeneration in the page).
  *
@@ -67,9 +66,9 @@ export const loadDecision = (
   }
   const details = state.savedScheme?.schemeDetails;
   const palette = details?.palette;
-  // A faithful reapply needs a concrete palette. Legacy schemes saved before
-  // Phase 2 (no palette) are skipped rather than guessed — the popup re-saves a
-  // full palette on the next apply.
+  // A faithful reapply needs a concrete palette. Entries without a palette are
+  // skipped rather than guessed — the popup re-saves a full palette on the next
+  // apply.
   if (!palette) {
     return { apply: false };
   }

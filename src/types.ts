@@ -1,8 +1,5 @@
 /**
  * Shared domain types for Thememaker.
- *
- * These are intentionally permissive (behavior-preserving migration). The
- * adaptive engine in later phases will tighten them.
  */
 
 /**
@@ -24,20 +21,20 @@ export type ColorMode =
 /**
  * How aggressively the adaptive engine repaints a page, as a dial that drives a
  * LIVE slider in the popup. The selectable range is {@link MIN_INTENSITY}–100;
- * 0 ("base only") is intentionally NOT selectable, because a page with only
+ * 0 ("base only") is intentionally not selectable, because a page with only
  * html/body repainted and nothing else looks broken.
  *
- * Intensity controls SURFACE COVERAGE only — how many element backgrounds get
+ * Intensity controls surface coverage only — how many element backgrounds get
  * repainted — never text readability (which is always enforced):
  *  - `MIN_INTENSITY`: html/body + the largest page surfaces are repainted.
  *  - rising: progressively repaint smaller surface elements (the area threshold
- *           DECREASES as intensity rises).
- *  - `100`: repaint every detected surface AND borders.
+ *           decreases as intensity rises).
+ *  - `100`: repaint every detected surface and borders.
  */
 export type Intensity = number;
 
 /**
- * The lowest SELECTABLE intensity. We never go to 0 (base-only), which leaves a
+ * The lowest selectable intensity. We never go to 0 (base-only), which leaves a
  * page looking unstyled; the slider floor is this value so the far-left still
  * tints the page meaningfully.
  */
@@ -60,7 +57,7 @@ export const clampIntensity = (n: number): Intensity =>
  * A `<tag>|<prop>` override key produced by the element picker, e.g.
  * `div|background`, `p|color`, or the special `page|background`. The part before
  * `|` is a lowercase HTML tag name (or `page`/`html`/`body`); the part after is
- * the CSS aspect being overridden. This is the SINGLE override grammar the live
+ * the CSS aspect being overridden. This is the single override grammar the live
  * engine speaks — `inject.ts`'s override layer parses exactly these keys into a
  * CSS rule.
  */
@@ -70,7 +67,7 @@ export type TagPropKey = `${string}|background` | `${string}|color`;
  * A custom-theme override map: `<tag>|<prop>` key → exact hex color. Keys are
  * {@link TagPropKey}s emitted by the in-page element picker (e.g.
  * `div|background`, `p|color`, `page|background`). An override paints that exact
- * color as a CSS layer ON TOP of the generated theme (see the override block in
+ * color as a CSS layer on top of the generated theme (see the override block in
  * `inject.ts`); tags/props absent from the map keep their generated colors.
  *
  * The key type is widened to `string` (not the strict `TagPropKey` template
@@ -97,9 +94,9 @@ export interface SchemeDetails {
   colorMode: ColorMode;
   rootColorName?: string;
   /**
-   * The structured palette this scheme was built from (Phase 2). Optional so
-   * legacy/history fixtures without a palette still type-check; the popup
-   * regenerates a palette from `rootColor` + `colorMode` when it is absent.
+   * The structured palette this scheme was built from. Optional so history
+   * fixtures without a palette still type-check; the popup regenerates a palette
+   * from `rootColor` + `colorMode` when it is absent.
    */
   palette?: import("./lib/palette").Palette;
   /** The intensity the scheme was generated/applied with. */
@@ -116,7 +113,7 @@ export interface SchemeDetails {
 
 /**
  * A generated color scheme. `schemeDetails` carries the seed/palette metadata
- * the engine actually reapplies from; `colors` is a DISPLAY-ONLY map of
+ * the engine actually reapplies from; `colors` is a display-only map of
  * role-label → hex used by the popup's swatch/detail renderers (the in-page
  * engine paints from the palette, not from these per-label colors).
  *

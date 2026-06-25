@@ -1,9 +1,9 @@
 /**
- * Pure SCHEME transforms — the scheme domain the popup's state machine and its
+ * Pure scheme transforms — the scheme domain the popup's state machine and its
  * action hooks build on.
  *
- * The popup CANNOT see the target page's computed styles, so it only generates
- * the PALETTE + OPTIONS; the adaptive detection/mapping/contrast/inject runs
+ * The popup cannot see the target page's computed styles, so it only generates
+ * the palette + options; the adaptive detection/mapping/contrast/inject runs
  * in-page. This module resolves a palette from the online source (cached) when
  * online — falling back to local generation offline or on any failure — and
  * builds the lightweight display `Scheme` (history/swatches) plus the
@@ -72,8 +72,8 @@ export interface GenerateResult {
 
 /**
  * Generates a palette for the current selection. Uses the online source (cached)
- * when `online`, with a real fallback to local generation on any failure;
- * generates locally when offline. NEVER throws.
+ * when `online`, with a fallback to local generation on any failure; generates
+ * locally when offline. Never throws.
  */
 export const generateForSelection = async (
   opts: GeneratePaletteOptions,
@@ -98,8 +98,8 @@ export const generateForSelection = async (
 };
 
 /**
- * Resolves the palette to (re)apply: the one stored on the scheme, or — for
- * legacy entries — a fresh local palette regenerated from its seed + mode.
+ * Resolves the palette to (re)apply: the one stored on the scheme, or — when a
+ * scheme has none — a fresh local palette regenerated from its seed + mode.
  */
 const resolvePalette = (details: SchemeDetails): Palette =>
   details.palette ??
@@ -120,7 +120,7 @@ const resolveOverrides = (
 
 /**
  * Inverts a scheme's palette (light↔dark) for the live Invert toggle, preserving
- * intensity + overrides and flipping `invert`. Unchanged when it carries no palette.
+ * intensity + overrides and flipping `invert`. Unchanged when it has no palette.
  */
 export const invertScheme = (scheme: Scheme): Scheme => {
   const details = scheme.schemeDetails;
@@ -139,9 +139,9 @@ export const invertScheme = (scheme: Scheme): Scheme => {
 };
 
 /**
- * Resolves the apply payload for an EXISTING scheme. Uses the stored palette;
- * regenerates one locally for legacy entries. The current `intensity` overrides
- * any stored one so the toggle is always respected.
+ * Resolves the apply payload for an existing scheme. Uses the stored palette;
+ * regenerates one locally for entries without one. The current `intensity`
+ * overrides any stored one so the toggle is always respected.
  */
 export const applyPayloadForScheme = (
   scheme: Scheme,
@@ -158,9 +158,9 @@ export const applyPayloadForScheme = (
 };
 
 /**
- * Stamps the CURRENT (live) intensity + overrides onto a scheme so the persisted
- * per-site `savedScheme` reapplies at exactly the look on screen. The palette is
- * resolved (regenerated for legacy schemes) so the saved scheme always carries a
+ * Stamps the live intensity + overrides onto a scheme so the persisted per-site
+ * `savedScheme` reapplies at exactly the look on screen. The palette is resolved
+ * (regenerated for schemes without one) so the saved scheme always carries a
  * concrete palette the content script can reapply faithfully.
  */
 export const schemeWithIntensity = (

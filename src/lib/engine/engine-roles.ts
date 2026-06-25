@@ -1,17 +1,17 @@
 /**
- * Resolves a generated `Palette` + `ApplyOptions` into the concrete RESOLVED
- * ROLE colors the engine paints from — the anti-monochrome layer's runtime side.
+ * Resolves a generated `Palette` + `ApplyOptions` into the concrete resolved role
+ * colors the engine paints from.
  *
- * The palette's `roles` are derived purely in `palette.ts`; here we:
+ * The palette's `roles` are derived in `palette.ts`; here we:
  *  - layer the user's role-keyed `overrides` on top (invalid keys / non-hex
  *    values are ignored; each lands through the engine's AA floor downstream);
- *  - fill safe fallbacks so a legacy palette (no `roles`) still themes;
- *  - compute the intensity BLEND `factor`, the `themedBase` (html/body surface),
+ *  - fill safe fallbacks so a palette with no `roles` still themes;
+ *  - compute the intensity blend `factor`, the `themedBase` (html/body surface),
  *    the tinted banner/complementary surface bgs, and the `roleText` AA floor.
  *
  * The result is a plain value object threaded into the classifier / var-remap /
  * role-rule / walk modules, so each is a pure function of resolved colors rather
- * than re-reading the palette. No DOM here — pure derivation.
+ * than re-reading the palette. Pure derivation, no DOM.
  */
 import { luminanceBucket, nudgeToAA } from "../color/color";
 import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
@@ -20,9 +20,9 @@ import type { ApplyOptions } from "../../types";
 
 /** The concrete role colors + blend state the engine paints a page from. */
 export interface ResolvedRoles {
-  /** Intensity → theme-vs-original blend factor in [0,1]. */
+  /** Intensity as a theme-vs-original blend factor in [0,1]. */
   factor: number;
-  /** The fully-themed base surface (html/body) BEFORE blending. */
+  /** The fully-themed base surface (html/body) before blending. */
   themedBase: string;
   roleTextPrimary: string;
   roleTextSecondary: string;
@@ -36,22 +36,22 @@ export interface ResolvedRoles {
   roleSurface: string;
   roleSurfaceAlt: string;
   roleBorder: string;
-  /** The DETERMINISTIC tinted bg of a banner (header/nav) surface. */
+  /** The deterministic tinted bg of a banner (header/nav) surface. */
   bannerBg: string;
-  /** The DETERMINISTIC tinted bg of a complementary (aside/footer) surface. */
+  /** The deterministic tinted bg of a complementary (aside/footer) surface. */
   complementaryBg: string;
   /** A surface color for a luminance bucket (the palette's surfaces ramp). */
   surfaceFor: (bucket: "dark" | "medium" | "light") => string;
   /**
-   * DETERMINISTIC text color from a ROLE SEED, AA-floored against a DETERMINISTIC
+   * Deterministic text color from a role seed, AA-floored against a deterministic
    * reference background. A pure function of (seed, refBg, large): independent of
-   * any element's original color, the intensity dial, or the live painted bg —
-   * which is what stops text FLICKER / drift on churny SPAs.
+   * any element's original color, the intensity dial, or the live painted bg,
+   * which is what stops text flicker / drift on churny SPAs.
    */
   roleText: (seed: string, refBg: string, large: boolean) => string;
 }
 
-/** Resolves the palette + options into the concrete RESOLVED ROLE colors. */
+/** Resolves the palette + options into the concrete resolved role colors. */
 export const resolveRoles = (
   palette: Palette,
   options: ApplyOptions,
@@ -123,7 +123,7 @@ export const resolveRoles = (
   const roleText = (seed: string, refBg: string, large: boolean): string =>
     nudgeToAA(seed, refBg, large);
 
-  // The DETERMINISTIC tinted bg of each tinted SEMANTIC surface role.
+  // The deterministic tinted bg of each tinted semantic surface role.
   const bannerBg = mixCss(roleHeading, themedBase, 0.86);
   const complementaryBg = mixCss(roleLink, themedBase, 0.86);
 

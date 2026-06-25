@@ -1,37 +1,32 @@
 /**
- * The v2 ADAPTIVE THEMING ENGINE — the `Engine` class, the SOLE in-page entry
- * point for ALL page-theming logic.
+ * The adaptive theming engine — the `Engine` class, the sole in-page entry point
+ * for all page-theming logic.
  *
- * Runs in the content-script ISOLATED WORLD (bundled code — it `import`s the
- * focused engine modules below; nothing is serialized/injected) and is PURE
- * DOM-in/styles-out: NO `chrome.*` anywhere. It inspects the live page
- * (`getComputedStyle`, `:root` custom properties) and themes it as a "DJ mixer":
- * every themed surface color = `mix(frozenOriginal, fixedTheme, factor)`,
- * `factor = intensity/100`.
+ * Runs in the content-script isolated world and is pure DOM-in/styles-out (no
+ * `chrome.*`). It inspects the live page (`getComputedStyle`, `:root` custom
+ * properties) and recolors every themed surface as
+ * `mix(frozenOriginal, fixedTheme, factor)`, `factor = intensity/100`.
  *
- *  - TRACK 2 (`fixedTheme`) is a PURE FUNCTION OF THE ELEMENT'S ROLE / STRUCTURE,
- *    never of its original color — the SPA fix: recycled nodes never drift.
- *  - TRACK 1 (`frozenOriginal`) is each surface's original bg captured ONCE in the
- *    Engine's `originals` WeakMap and FROZEN; it feeds ONLY the crossfade blend.
+ *  - `fixedTheme` is a pure function of the element's role/structure, never of its
+ *    original color, so recycled SPA nodes never drift.
+ *  - `frozenOriginal` is each surface's original bg captured once in the
+ *    `originals` WeakMap and frozen; it only feeds the blend.
  *
- * ## State + the engine loop
+ * All page state lives on private instance fields (the `originals` WeakMap, the
+ * `doneSet` WeakSet, the id/count/cap `state`, the `observer`, the `<style>`
+ * handle, the work `queue`, the `draining` flag). The content script holds one
+ * long-lived `Engine`, so re-applies and slider drags reuse the frozen originals.
  *
- * Every former `window.__themeMaker*` global is now a PRIVATE INSTANCE FIELD: the
- * `originals` WeakMap, the `doneSet` WeakSet, the monotonic-id / themed-count / cap
- * `state`, the live `observer`, the `<style>` handle, the work `queue`, and the
- * `draining` flag. The content script holds ONE long-lived `Engine`, so re-applies
- * + slider drags reuse the frozen originals exactly as the globals did.
- *
- * The Engine owns ONE scheduler: `apply()` AND the MutationObserver both ENQUEUE
+ * The Engine owns one scheduler: `apply()` and the MutationObserver both enqueue
  * work; a single `drain` loop processes the queue in time-sliced slices
  * (requestIdleCallback) and reschedules itself until drained. The observer's
- * pre-paint path still themes in-viewport nodes SYNCHRONOUSLY before paint.
+ * pre-paint path themes in-viewport nodes synchronously before paint.
  *
  * Heavy per-element logic lives in the helper modules it composes (`engine-apply`
- * resolves the palette → base CSS + paint context; `engine-walk` is the stateless
- * slice body; `engine-surface` is the per-element painter; `engine-observe` parses
- * mutation batches; `engine-overrides` is the per-tag layer); this class is the
- * THIN scheduler that wires them together.
+ * resolves the palette into base CSS + paint context; `engine-walk` is the
+ * stateless slice body; `engine-surface` is the per-element painter;
+ * `engine-observe` parses mutation batches; `engine-overrides` is the per-tag
+ * layer); this class is the thin scheduler that wires them together.
  */
 import {
   OVERRIDE_STYLE_ID,
@@ -73,13 +68,13 @@ const DEBOUNCE_MS = 250;
  *  - `dispose()`                   — stop background work without un-theming.
  */
 export class Engine {
-  // TRACK 1 — each surface's FROZEN original bg/fg, captured once; persists across
-  // applies so re-apply is idempotent (we blend from the cached original, never
-  // re-read our own drifted themed output).
+  // Each surface's frozen original bg/fg, captured once; persists across applies so
+  // re-apply is idempotent (blend from the cached original, never re-read our own
+  // drifted themed output).
   private originals = new WeakMap<Element, OriginalStyle>();
-  // Surfaces already TAGGED + frozen — never re-walk/re-theme them. RESET per apply.
+  // Surfaces already tagged + frozen — never re-walk/re-theme them. Reset per apply.
   private doneSet = new WeakSet<Element>();
-  // The monotonic id (NEVER rewound) + the per-apply themed counter / cap flag.
+  // The monotonic id (never rewound) + the per-apply themed counter / cap flag.
   private state: EngineState = { nextId: 0, themedCount: 0, capped: false };
 
   // The live MutationObserver (so reset can disconnect it).
@@ -98,14 +93,14 @@ export class Engine {
   private flashPlaceholderShown = false;
 
   /**
-   * Apply the theme: resolve the palette+options, write the base rules in place
-   * (no themeless gap → no flash), enqueue the body walk, install the observer.
-   * Per-apply state (done-set, counter, cap) RESETS; the frozen originals + the
-   * monotonic id PERSIST. Returns `true` once applied.
+   * Apply the theme: resolve the palette + options, write the base rules in place
+   * (no themeless gap, so no flash), enqueue the body walk, install the observer.
+   * Per-apply state (done-set, counter, cap) resets; the frozen originals and the
+   * monotonic id persist. Returns `true` once applied.
    */
   apply(palette: Palette, options: ApplyOptions): boolean {
-    // Per-apply RESET: an explicit apply REBUILDS the sheet from scratch (slider
-    // drags must recolor everything), so the done-set + counter + cap flag reset.
+    // An explicit apply rebuilds the sheet from scratch (slider drags must recolor
+    // everything), so the done-set + counter + cap flag reset.
     this.doneSet = new WeakSet<Element>();
     this.state.themedCount = 0;
     this.state.capped = false;
@@ -119,19 +114,20 @@ export class Engine {
     );
     this.ctx = surfaceCtx;
 
-    // The single <style id="themeMaker">, reused IN PLACE (never removed-then-
-    // appended). Each apply REBUILDS it: start empty, write base, stream surfaces.
+    // The single <style id="themeMaker">, reused in place (never removed then
+    // re-appended). Each apply rebuilds it: start empty, write base, stream
+    // surfaces.
     const head = document.head || document.documentElement;
     const style = ensureStyleEl(STYLE_ELEMENT_ID);
     style.textContent = "";
     this.styleEl = style;
-    // ROOT MARKER on <html>: a bare presence attr every role-text rule is scoped
-    // under, so the engine's text colors clear site single-class specificity.
+    // A bare presence attr on <html> every role-text rule is scoped under, so the
+    // engine's text colors clear site single-class specificity.
     if (!document.documentElement.hasAttribute(ROOT_MARKER_ATTR)) {
       document.documentElement.setAttribute(ROOT_MARKER_ATTR, "");
     }
 
-    // Write the base rules now, then kick off the surface walk (ABOVE-THE-FOLD
+    // Write the base rules now, then kick off the surface walk (above-the-fold
     // first). The first slice runs synchronously inside this call.
     this.appendRules(baseParts);
     if (document.body) {
@@ -140,9 +136,9 @@ export class Engine {
         this.drain();
       }
     }
-    // Per-tag overrides: a sibling <style> emitted AFTER the main one so it wins.
+    // Per-tag overrides: a sibling <style> emitted after the main one so it wins.
     applyOverrideLayer(options.overrides, head);
-    // Install the observer for SPA/lazy content (it enqueues into our queue).
+    // Observe SPA/lazy content (it enqueues into our queue).
     this.installObserver();
     // The full theme owns the html/body base now; retire the flash placeholder so
     // there is a single source of truth for the page base.
@@ -152,9 +148,9 @@ export class Engine {
 
   /**
    * Theme the page once a `document.body` exists (deferring to `DOMContentLoaded`
-   * otherwise) — the body-ready entry point every page-side caller uses. If the
-   * reload-flash placeholder isn't already showing (first themed load, no cache),
-   * it paints the palette-derived base now so the page is never left un-themed.
+   * otherwise). If the reload-flash placeholder isn't already showing (first themed
+   * load, no cache), it paints the palette-derived base now so the page is never
+   * left un-themed.
    */
   applyWhenReady(palette: Palette, options: ApplyOptions): void {
     if (!this.flashPlaceholderShown) {
@@ -171,10 +167,10 @@ export class Engine {
   }
 
   /**
-   * Prevent the reload flash: synchronously repaint the EXACT themed base from the
-   * last load onto `<html>` at `document_start`, BEFORE any async storage read, so
-   * the first frame is already themed instead of the site's un-themed background.
-   * Returns `true` if a themed base was remembered (and repainted), else `false`.
+   * Synchronously repaint the exact themed base from the last load onto `<html>` at
+   * `document_start`, before any async storage read, so the first frame is already
+   * themed instead of the site's un-themed background. Returns `true` if a themed
+   * base was remembered (and repainted), else `false`.
    */
   preventReloadFlash(): boolean {
     const remembered = readBaseCache();
@@ -196,9 +192,9 @@ export class Engine {
   }
 
   /**
-   * Reset: tear down the observer + work, drop the override layer, the root marker,
-   * the base cache, and the main <style>. Frozen originals are dropped so a fresh
-   * apply re-captures true originals. Returns `true` if a style was removed.
+   * Tear down the observer + work, drop the override layer, the root marker, the
+   * base cache, and the main <style>. Frozen originals are dropped so a fresh apply
+   * re-captures true originals. Returns `true` if a style was removed.
    */
   reset(): boolean {
     this.dispose();
@@ -250,9 +246,9 @@ export class Engine {
   }
 
   /**
-   * The ENGINE LOOP: drain the queue in time-sliced slices, yielding between them
-   * and rescheduling until drained. The observer is disconnected across each slice
-   * (our attribute/style writes must not re-enter its queue) and reconnected after.
+   * Drain the queue in time-sliced slices, yielding between them and rescheduling
+   * until drained. The observer is disconnected across each slice (our
+   * attribute/style writes must not re-enter its queue) and reconnected after.
    */
   private drain(): void {
     if (!this.styleEl || !this.ctx) {
@@ -328,7 +324,7 @@ export class Engine {
 
 /**
  * The single page-wide Engine instance. Shared by the content script and the
- * picker so the engine state and the one `<style id="themeMaker">` are unified
- * across the auto-reapply, popup-apply, and picker paths.
+ * picker so the engine state and the one `<style id="themeMaker">` stay unified
+ * across every theming path.
  */
 export const engine = new Engine();

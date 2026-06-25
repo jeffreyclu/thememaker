@@ -1,10 +1,9 @@
 /**
  * Popup composition root.
  *
- * `App` nests the two providers (`PopupProvider` → `SchemeProvider`) and lays out
- * the connected sections. Each section reads exactly the state + intents it needs
- * from context, so the root does NO prop drilling and reads NO state itself — it's
- * pure composition.
+ * Nests the two providers (`PopupProvider` → `SchemeProvider`) and lays out the
+ * connected sections. Each section reads the state + intents it needs from
+ * context, so the root does no prop drilling and reads no state itself.
  */
 import { PopupProvider } from "./state/PopupProvider";
 import { SchemeProvider } from "./state/SchemeProvider";

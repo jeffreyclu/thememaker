@@ -1,17 +1,15 @@
 /**
- * The popup's SCHEME state machine — the SchemeProvider's single source of truth.
+ * The popup's scheme state machine — the SchemeProvider's source of truth.
  *
- * This module owns the pure parts of the provider's `useReducer`: the scheme
- * state shape, the action union, the reducer, the on-open hydration patch, and the
- * read-only SELECTORS + scheme→view derivations the components render from. It is
- * DOM-free and `chrome.*`-free, so the whole state machine stays unit-testable
- * without React. The provider (`SchemeProvider.tsx`) binds it via `useReducer`;
- * `useScheme` (the actions hook) dispatches these actions and runs the side
- * effects. The pure scheme transforms + read-only view derivations live in the
- * `../lib/scheme` domain.
+ * Owns the pure parts of the provider's `useReducer`: the scheme state shape, the
+ * action union, the reducer, and the on-open hydration patch. It is DOM-free and
+ * `chrome.*`-free, so the state machine stays unit-testable without React. The
+ * provider (`SchemeProvider.tsx`) binds it via `useReducer`; the action hooks
+ * dispatch these actions and run the side effects. The pure scheme transforms +
+ * read-only view derivations live in the `../lib/scheme` domain.
  *
- * The popup's own VIEW state (disclosures / in-flight / save confirmation) lives
- * in a SEPARATE reducer (`popup-reducer.ts`); scheme actions drive that view via
+ * The popup's own view state (disclosures / in-flight / save confirmation) lives
+ * in a separate reducer (`popup-reducer.ts`); scheme actions drive that view via
  * the `usePopup` actions.
  */
 import { dequeueScheme } from "../../lib/storage/history";
@@ -33,7 +31,7 @@ export interface SchemeState {
   intensity: Intensity;
   /** Whether the current/next scheme is flipped light↔dark (Invert toggle). */
   invert: boolean;
-  /** Saved GLOBAL favorites (insertion order). */
+  /** Saved global favorites (insertion order). */
   favorites: Favorite[];
   /** Whether a Thememaker style is applied on the active tab. */
   applied: boolean;
@@ -101,8 +99,8 @@ export const schemeReducer = (
         overrides: action.scheme.schemeDetails.overrides ?? {},
       };
     case "generateSuccess":
-      // A fresh palette starts from a clean custom theme (old picks targeted the
-      // previous palette's roles and no longer apply).
+      // A fresh palette starts from a clean custom theme: prior overrides
+      // targeted the previous palette's roles and no longer apply.
       return {
         ...state,
         current: action.scheme,
@@ -152,8 +150,8 @@ export interface HydrateInputs {
 /**
  * Computes the popup's initial scheme-state patch. Restores this origin's saved
  * theme as `current` (with its saved intensity/overrides) so the
- * slider/details/re-apply work after a reopen on a persisted site — the popup is
- * recreated each open, so without this `current` is null.
+ * slider/details/re-apply work after a reopen on a persisted site; the popup is
+ * recreated each open, so without this `current` would be null.
  */
 export const hydratePartial = (inputs: HydrateInputs): Partial<SchemeState> => {
   const savedScheme = inputs.site.savedScheme ?? null;

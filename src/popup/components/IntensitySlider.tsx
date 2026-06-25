@@ -8,7 +8,7 @@ import { memo } from "react";
 import { MIN_INTENSITY } from "../../types";
 import type { Intensity } from "../../types";
 
-/** The slider's upper bound (the original popup hardcoded `max="100"`). */
+/** The slider's upper bound. */
 const MAX_INTENSITY = 100;
 
 export const IntensitySlider = memo(function IntensitySlider({

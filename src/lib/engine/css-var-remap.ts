@@ -1,27 +1,27 @@
 /**
- * `:root` / `html` CSS custom-property detection + REMAP (the additive var layer).
+ * `:root` / `html` CSS custom-property detection + remap.
  *
- * Many modern sites are "variable-driven": their surfaces and text read off a
- * handful of `--bg`/`--text`/`--border` custom properties declared on `:root`.
- * Repainting per-element can't reach those, so the engine DETECTS the color vars
- * a page declares, classifies each (surface/text/border by name), and emits a
- * `:root { --x: … !important }` block that REMAPS them toward the theme — surface
- * vars crossfade to a mapped surface, text vars route to the matching ROLE color
- * AA-floored against the lightest rendered surface, border vars to the role
- * border. Pure derivation over the detected vars + resolved roles.
+ * Variable-driven sites read their surfaces and text off a handful of
+ * `--bg`/`--text`/`--border` custom properties declared on `:root`, which
+ * per-element repaint can't reach. So the engine detects the color vars a page
+ * declares, classifies each (surface/text/border by name), and emits a
+ * `:root { --x: … !important }` block that remaps them toward the theme — surface
+ * vars blend to a mapped surface, text vars route to the matching role color
+ * AA-floored against the lightest rendered surface, border vars to the role border.
+ * Pure derivation over the detected vars + resolved roles.
  */
 import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
 import { luminanceBucket, luminanceOf, nudgeToAA } from "../color/color";
 import type { ResolvedRoles } from "./engine-roles";
 
-/** A detected `:root` color variable + the role its NAME classifies it as. */
+/** A detected `:root` color variable + the role its name classifies it as. */
 export interface DetectedVar {
   name: string;
   value: string;
   role: string;
 }
 
-/** Classifies a CSS var NAME into a color role by its semantic substring. */
+/** Classifies a CSS var name into a color role by its semantic substring. */
 export const classifyVarName = (
   name: string,
 ): "surface" | "text" | "border" | null => {
@@ -41,7 +41,7 @@ export const classifyVarName = (
 };
 
 /**
- * Walks the page's `:root`/`html` style rules and returns the COLOR custom
+ * Walks the page's `:root`/`html` style rules and returns the color custom
  * properties it declares, each classified (surface/text/border) and normalized to
  * hex. Cross-origin sheets that throw on `.cssRules` are skipped; all detection is
  * best-effort (absence just routes to per-element repaint).
@@ -98,7 +98,7 @@ export const detectRootVars = (): DetectedVar[] => {
   return detectedVars;
 };
 
-/** True when the page declares BOTH surface and text color vars (var-driven). */
+/** True when the page declares both surface and text color vars (var-driven). */
 export const isVariableDriven = (detectedVars: DetectedVar[]): boolean => {
   let hasSurfaceVar = false;
   let hasTextVar = false;
@@ -114,9 +114,9 @@ export const isVariableDriven = (detectedVars: DetectedVar[]): boolean => {
 };
 
 /**
- * Builds the `:root` REMAP declarations for the detected vars. Emitted only when
- * the page is var-driven OR intensity is at the max (`factor >= 1`) — otherwise
- * the per-element repaint already covers the page and remapping vars would
+ * Builds the `:root` remap declarations for the detected vars. Emitted only when
+ * the page is var-driven or intensity is at the max (`factor >= 1`) — otherwise the
+ * per-element repaint already covers the page and remapping vars would
  * double-apply. Returns the `--name: value !important;` strings (or [] for none).
  */
 export const buildVarDecls = (
@@ -139,10 +139,10 @@ export const buildVarDecls = (
   if (!(variableDriven || factor >= 1)) {
     return varDecls;
   }
-  // The RENDERED (blended) value each surface var becomes — what a var-driven
+  // The rendered (blended) value each surface var becomes — what a var-driven
   // element actually paints behind its text. Floor every text/border var against
-  // the LIGHTEST of these (the worst case for dark-ish ink), so a remapped
-  // link/heading/body is AA against WHICHEVER surface var it lands on (e.g. a link
+  // the lightest of these (the worst case for dark-ish ink), so a remapped
+  // link/heading/body is AA against whichever surface var it lands on (e.g. a link
   // inside a card on `--surface`, not just the page `--bg`).
   const renderedSurface = (val: string): string =>
     mixCss(val, surfaceFor(luminanceBucket(val)), factor);
@@ -160,16 +160,16 @@ export const buildVarDecls = (
   }
   for (const v of detectedVars) {
     if (v.role === "surface") {
-      // Blend each surface var from its ORIGINAL value toward the mapped one.
+      // Blend each surface var from its original value toward the mapped one.
       const mapped = surfaceFor(luminanceBucket(v.value));
       varDecls.push(
         `${v.name}: ${mixCss(v.value, mapped, factor)} !important;`,
       );
     } else if (v.role === "text") {
-      // Route text vars to the matching ROLE color so heading/link vars carry
-      // their own accent hue (not all one seed), then AA-nudge against the
-      // lightest RENDERED surface (hue-preserving) so it is readable on any of
-      // the page's remapped surfaces.
+      // Route text vars to the matching role color so heading/link vars carry their
+      // own accent hue (not all one seed), then AA-nudge against the lightest
+      // rendered surface (hue-preserving) so it is readable on any of the page's
+      // remapped surfaces.
       const n = v.name.toLowerCase();
       const seed = /heading|title/.test(n)
         ? roleHeading

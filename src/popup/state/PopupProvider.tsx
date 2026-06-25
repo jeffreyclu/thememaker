@@ -1,14 +1,13 @@
 /**
- * The popup's VIEW-state provider — the outer of the two providers.
+ * The popup's view-state provider, the outer of the two providers.
  *
- * THIN composition: ONE `useReducer` holds the popup's view state (disclosures,
- * in-flight/error flags, just-saved confirmation, pick mode). It publishes the
- * state through `PopupStateContext` and the (stable) dispatch through
- * `PopupStoreContext`; the `usePopup` actions hook reads the store and builds the
- * intents. State + store are separate contexts so action consumers don't re-render
- * from state churn.
+ * One `useReducer` holds the popup's view state (disclosures, in-flight/error
+ * flags, just-saved confirmation, pick mode). Publishes the state through
+ * `PopupStateContext` and the stable dispatch through `PopupStoreContext`; the
+ * `usePopup` actions hook reads the store and builds the intents. State + store
+ * are separate contexts so action consumers don't re-render from state churn.
  *
- * `App` nests `SchemeProvider` INSIDE this provider, so the scheme actions can
+ * `App` nests `SchemeProvider` inside this provider, so the scheme actions can
  * call `usePopup` to drive the view (loading/error, save confirmation).
  */
 import {
@@ -44,7 +43,7 @@ export const PopupProvider = ({
 }): ReactElement => {
   const [state, dispatch] = useReducer(popupReducer, popupInitialState);
 
-  // `dispatch` is stable for the popup's life → a stable deps object.
+  // `dispatch` is stable for the popup's life, so the store is built once.
   const store = useMemo<PopupStore>(() => ({ dispatch }), []);
 
   return (

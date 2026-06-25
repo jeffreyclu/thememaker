@@ -1,14 +1,13 @@
 /**
- * The palette's SWATCH-FOLD logic: turns the derived `roles` into the labeled
- * SOURCE-OF-TRUTH color list the popup shows, folding near-duplicate swatches
+ * The palette's swatch-fold logic: turns the derived `roles` into the labeled
+ * source-of-truth color list the popup shows, folding near-duplicate swatches
  * (same hue family, or both near-neutral) so the count reflects the theme's real
- * number of distinct colors. Split out of `palette.ts` to keep each concern
- * small; pure HSL math, no DOM.
+ * number of distinct colors. Pure HSL math, no DOM.
  */
 import { hexToHsl } from "../color/color";
 import type { PaletteRoles } from "./palette-roles";
 
-/** A labeled theme color: the SOT pairing of a semantic role and its hex. */
+/** A labeled theme color: the pairing of a semantic role and its hex. */
 export interface ThemeColor {
   /** A short, human label for what this color paints (e.g. "primary"). */
   role: string;
@@ -17,17 +16,17 @@ export interface ThemeColor {
 }
 
 /**
- * The theme's SOURCE-OF-TRUTH color list: the DISTINCT DOMINANT colors the
- * engine paints, in display order, with `primary` (the user's ROOT color) first.
- * The popup shows EXACTLY this, so a swatch == a painted color, and the COUNT
+ * The theme's source-of-truth color list: the distinct dominant colors the
+ * engine paints, in display order, with `primary` (the user's root color) first.
+ * The popup shows exactly this, so a swatch == a painted color, and the count
  * reflects the theme's real number of distinct colors:
  *  - a monochrome theme folds to ~1 color (one hue),
  *  - a complement to ~2, a triad to ~3, a quad to ~4,
  * because near-duplicate swatches (same hue family, or both near-neutral) are
  * folded together rather than padded out to six.
  *
- * We surface the ACCENT/identity roles (primary/heading/link/accent/secondary)
- * — the colors that give a theme its character — plus a single representative
+ * Surfaces the accent/identity roles (primary/heading/link/accent/secondary) —
+ * the colors that give a theme its character — plus a single representative
  * neutral (surface). Backgrounds/ink are near-neutral tints that read as "the
  * neutral", so they fold into that one swatch instead of inflating the count.
  */
@@ -47,7 +46,7 @@ export const themeSwatches = (roles: PaletteRoles): ThemeColor[] => {
     { role: "text", color: roles.textPrimary },
     { role: "surface", color: roles.surface },
   ];
-  // Two colors are the "same swatch" if: both near-neutral (low saturation), OR
+  // Two colors are the "same swatch" if both near-neutral (low saturation), or
   // they share a hue family (close hue) at similar saturation. This collapses a
   // monochrome's lightness steps to one swatch and folds tinted neutrals.
   const sameSwatch = (a: string, b: string): boolean => {

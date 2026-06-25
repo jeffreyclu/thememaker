@@ -1,11 +1,11 @@
 /**
- * The popup's SCHEME CLIENT — the transport + apply/persist operations the action
+ * The popup's scheme client — the transport + apply/persist operations the action
  * hooks call to drive the page and persistence. `schemeClient(store, popup)`
  * binds a client to the current scheme store + popup view actions.
  *
- * CRITICAL — React's `dispatch` is DEFERRED: callers that apply a scheme right
- * after dispatching it pass an explicit `LiveScheme` SNAPSHOT, since reading
- * `getState()` after `dispatch` would still see the pre-dispatch scheme.
+ * React's `dispatch` is deferred, so callers that apply a scheme right after
+ * dispatching it pass an explicit `LiveScheme` snapshot; reading `getState()`
+ * after `dispatch` would still see the pre-dispatch scheme.
  */
 import { applyPayloadForScheme, schemeWithIntensity } from "../../lib/scheme";
 import { siteStateReducer } from "../../lib/storage/site-state";
@@ -76,7 +76,7 @@ export const schemeClient = (
   };
 
   // Reuses the palette already on the page (only intensity + live overrides
-  // change — NO new colors). Updates `applied`.
+  // change, no new colors). Updates `applied`.
   const applyCurrentScheme = async (live?: LiveScheme): Promise<void> => {
     const resolved = resolveLive(live);
     if (!resolved) {

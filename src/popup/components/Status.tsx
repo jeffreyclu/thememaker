@@ -1,6 +1,6 @@
 /**
- * Status line. Errors-only (no "applied"/"saved" chatter); the `--error` class
- * is applied only when there is a message. CONNECTED: reads `error` from context.
+ * Status line. Errors-only; the `--error` class is applied only when there is a
+ * message. Connected: reads `error` from context.
  */
 import { memo } from "react";
 

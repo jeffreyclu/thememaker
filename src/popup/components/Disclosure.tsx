@@ -5,10 +5,9 @@
  * (History / Favorites / Details) supply their `show*` / `onToggle*` directly and
  * render their list/detail content as `children`.
  *
- * Ids/classes/aria are kept byte-identical to the original three hand-rolled
- * panels: the toggle is `${id}-toggle`; the panel id defaults to `${id}-panel`
- * with class `disclosure-panel` (History/Favorites), and both are overridable so
- * Details keeps its `details` id + `details` panel class + disabled toggle.
+ * The toggle is `${id}-toggle`; the panel id defaults to `${id}-panel` with class
+ * `disclosure-panel` (History/Favorites), and both are overridable so Details can
+ * use its `details` id + `details` panel class + a disabled toggle.
  * `aria-controls` always points at the panel id.
  */
 import { memo, type ReactNode } from "react";

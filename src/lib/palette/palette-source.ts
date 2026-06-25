@@ -1,11 +1,10 @@
 /**
- * Color SOURCE layer: turns a (seed, mode) request into a `Palette`.
+ * Color source layer: turns a (seed, mode) request into a `Palette`.
  *
  * Two sources:
- *  - LOCAL (default): pure, instant, offline HSL harmony (`generatePalette`).
+ *  - local (default): pure, instant, offline HSL harmony (`generatePalette`).
  *  - API ("surprise me"): `thecolorapi.com`, layered with in-memory +
- *    persistent caching and a REAL fallback to local generation on any failure
- *    (this fixes the legacy swallowed-error → `undefined` crash).
+ *    persistent caching and a fallback to local generation on any failure.
  *
  * Everything here is dependency-injected (fetch + a cache store), so it is fully
  * unit-testable without a network or `chrome.storage`.
@@ -64,11 +63,11 @@ export const paletteFromApiResponse = (
     return null;
   }
 
-  // Build the local palette from the API's FIRST color as the seed (falling back
+  // Build the local palette from the API's first color as the seed (falling back
   // to the requested seed), so the "surprise" drives the actual painted roles.
-  // We deliberately do NOT override `swatches`/`themeColors`: those are the
-  // SOURCE OF TRUTH (the colors the engine paints), so they must stay derived
-  // from the roles — never the raw API harmony, which the engine doesn't paint.
+  // `swatches`/`themeColors` are not overridden: those are the colors the engine
+  // paints, so they stay derived from the roles — never the raw API harmony,
+  // which the engine doesn't paint.
   return generatePalette(hexes[0] ?? seed, mode);
 };
 
@@ -88,7 +87,7 @@ export interface PaletteSourceDeps {
 }
 
 /**
- * Resolves a palette from the LOCAL source. Pure, synchronous, never fails.
+ * Resolves a palette from the local source. Pure, synchronous, never fails.
  */
 export const localPalette = (seed: string, mode: ColorMode): Palette =>
   generatePalette(seed, mode);
@@ -97,11 +96,11 @@ export const localPalette = (seed: string, mode: ColorMode): Palette =>
  * Resolves a palette from the API source with full resilience:
  *  1. in-memory cache hit → return immediately,
  *  2. persistent cache hit → warm memory + return,
- *  3. fetch → parse → cache; on ANY failure (network, bad JSON, malformed
- *     payload) → fall back to LOCAL generation (and do NOT cache the fallback,
+ *  3. fetch → parse → cache; on any failure (network, bad JSON, malformed
+ *     payload) → fall back to local generation (and do not cache the fallback,
  *     so a later online retry can still reach the API).
  *
- * GUARANTEE: always resolves with a valid `Palette`, never `undefined`/throws.
+ * Always resolves with a valid `Palette`, never `undefined`/throws.
  */
 export const apiPalette = async (
   seed: string,
@@ -146,7 +145,7 @@ export const apiPalette = async (
     }
     return palette;
   } catch {
-    // REAL fallback: local generation always succeeds offline.
+    // Fallback: local generation always succeeds offline.
     return localPalette(seed, mode);
   }
 };

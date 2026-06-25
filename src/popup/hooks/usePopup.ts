@@ -1,15 +1,14 @@
 /**
- * `usePopup` — the popup's VIEW actions API the components bind to.
+ * `usePopup` — the popup's view actions API the components bind to.
  *
  * Pure UI intents over the popup-view reducer: open/close the three disclosures,
  * flip the in-flight/error flags, surface the just-saved confirmation (auto-clears
- * after a beat), and toggle pick mode. No `chrome.*`, no async IO — those live in
- * the SCHEME actions, which call THESE actions to drive the view (e.g. generate
+ * after a delay), and toggle pick mode. No `chrome.*`, no async IO — those live in
+ * the scheme actions, which call these actions to drive the view (e.g. generate
  * flips loading/error; save opens favorites + highlights the row).
  *
- * ONE definition: reads the view dispatch from `usePopupStore()` and builds the
- * actions once over the stable dispatch, so consumers get a referentially-stable
- * actions object.
+ * Reads the view dispatch from `usePopupStore()` and builds the actions once over
+ * the stable dispatch, so consumers get a referentially-stable actions object.
  */
 import { useMemo } from "react";
 

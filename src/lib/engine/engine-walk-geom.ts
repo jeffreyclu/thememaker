@@ -1,19 +1,17 @@
 /**
- * Pure DOM-geometry + scheduling helpers for the time-sliced walk.
- *
- * Split out of `engine-walk.ts` so the scheduler stays focused on the queue: this
- * holds the viewport math (above-the-fold prioritization), the subtree flattener
- * (which excludes editable regions), the monotonic clock, and the idle-yield — all
- * pure functions over the DOM with no per-apply state.
+ * Pure DOM-geometry + scheduling helpers for the time-sliced walk: the viewport
+ * math (above-the-fold prioritization), the subtree flattener (which excludes
+ * editable regions), the monotonic clock, and the idle-yield. All pure functions
+ * over the DOM with no per-apply state.
  */
 import { isEditableRoot } from "./role-classify";
 
-// Selector for editable subtrees, EXCLUDED from the walk (typing churns them; their
-// text inherits the right color). Shared by `expand` + the observer's flush.
+// Selector for editable subtrees, excluded from the walk: typing churns them and
+// their text inherits the right color. Shared by `expand` + the observer's flush.
 export const EDITABLE_SEL =
   'input, textarea, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]';
 
-// Observe childList (new nodes) AND class/style attributes (recycled nodes whose
+// Observe childList (new nodes) and class/style attributes (recycled nodes whose
 // bg changes). Shared by the initial observe + every disconnect/reconnect.
 export const OBSERVE_OPTS: MutationObserverInit = {
   childList: true,
@@ -51,9 +49,9 @@ const vw = (): number =>
 export const syncViewportMargin = (): number => vh() * 2;
 
 /**
- * Is `el` (even partially) within the current viewport (+`margin` band)? Theme
- * ABOVE-THE-FOLD content FIRST. In jsdom every rect is 0×0 at (0,0) → in-viewport,
- * so the split is a no-op there (DOM order preserved; unit tests unaffected).
+ * Is `el` (even partially) within the current viewport (+`margin` band)? Themes
+ * above-the-fold content first. In jsdom every rect is 0×0 at (0,0), counting as
+ * in-viewport, so the split is a no-op there (DOM order preserved).
  */
 export const inViewport = (el: HTMLElement, margin = 0): boolean => {
   let r: DOMRect;
@@ -72,7 +70,7 @@ export const inViewport = (el: HTMLElement, margin = 0): boolean => {
   );
 };
 
-/** Flatten a subtree to a list, EXCLUDING editable regions (typing churns them). */
+/** Flatten a subtree to a list, excluding editable regions (typing churns them). */
 export const expand = (rootEl: HTMLElement): HTMLElement[] => {
   if (isEditableRoot(rootEl)) {
     return [];

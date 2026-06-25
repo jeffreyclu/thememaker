@@ -1,6 +1,6 @@
 /**
  * Favorites disclosure panel + list. Each row applies on click and has a delete
- * control; the just-saved row is highlighted via `--saved`. CONNECTED: reads its
+ * control; the just-saved row is highlighted via `--saved`. Connected: reads its
  * own state + intents from context, so the container passes it nothing. The leaf
  * `FavoriteRow` stays pure (one favorite + callbacks).
  */

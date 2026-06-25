@@ -1,15 +1,15 @@
 /**
- * The popup's SCHEME-state provider — the inner of the two providers.
+ * The popup's scheme-state provider, the inner of the two providers.
  *
- * THIN composition: ONE `useReducer` holds ALL scheme-domain state; refs keep
- * `getState` / the active-tab id fresh for the action hooks without rebuilding
- * them. It publishes the state through `SchemeStateContext` and `{getState,
- * dispatch, activeTabId}` through `SchemeStoreContext`; the focused action hooks
- * (`useGenerate`, `useApplyScheme`, `useFavorites`, `useHistory`, `usePersist`)
- * read the store and compose `usePopup()` themselves for view side effects.
+ * One `useReducer` holds all scheme-domain state; refs keep `getState` / the
+ * active-tab id fresh for the action hooks without rebuilding them. Publishes the
+ * state through `SchemeStateContext` and `{getState, dispatch, activeTabId}`
+ * through `SchemeStoreContext`; the action hooks (`useGenerate`, `useApplyScheme`,
+ * `useFavorites`, `useHistory`, `usePersist`) read the store and compose
+ * `usePopup()` for view side effects.
  *
- * It also hydrates its OWN initial state on mount (reading storage + the active
- * tab). No business logic lives in this body; it only wires + renders.
+ * Hydrates its own initial state on mount (reading storage + the active tab). No
+ * business logic lives in this body; it only wires + renders.
  */
 import {
   createContext,
@@ -51,7 +51,7 @@ export const SchemeProvider = ({
 }): ReactElement => {
   const [state, dispatch] = useReducer(schemeReducer, schemeInitialState);
 
-  // `getState` must read the LATEST state (not a render snapshot), since the
+  // `getState` must read the latest state (not a render snapshot), since the
   // async actions read it after `await`s. A ref synced each render gives the
   // built-once actions a stable `getState`.
   const stateRef = useRef(state);
@@ -69,7 +69,7 @@ export const SchemeProvider = ({
     [],
   );
 
-  // On-open HYDRATION. The popup is recreated each open, so this once-on-mount
+  // On-open hydration. The popup is recreated each open, so this once-on-mount
   // effect reads persisted storage + the active tab (settings, history,
   // favorites, this origin's saved theme, and whether a style is already
   // applied), then dispatches a single `hydrate` patch. It also records the
@@ -106,9 +106,9 @@ export const SchemeProvider = ({
       if (cancelled) {
         return;
       }
-      // Storage is the single source of truth for overrides: the in-page picker
-      // writes them onto this origin's saved scheme, which `hydratePartial`
-      // restores into `partial.overrides`.
+      // Storage is the source of truth for overrides: the in-page picker writes
+      // them onto this origin's saved scheme, which `hydratePartial` restores
+      // into `partial.overrides`.
       const partial = hydratePartial({
         settings,
         history,

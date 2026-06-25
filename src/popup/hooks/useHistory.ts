@@ -2,8 +2,8 @@
  * `useHistory` — re-applying a scheme from the persisted history.
  *
  * Selecting an entry makes it current + applied and re-applies it live (its saved
- * overrides become the live overrides). The deferred-dispatch SNAPSHOT rule
- * applies: the picked scheme is read BEFORE dispatching and passed explicitly to
+ * overrides become the live overrides). The deferred-dispatch snapshot rule
+ * applies: the picked scheme is read before dispatching and passed explicitly to
  * `commitCurrent`, since `getState()` right after `dispatch` would still see the
  * pre-dispatch scheme.
  */

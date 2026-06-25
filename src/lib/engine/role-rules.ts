@@ -1,18 +1,18 @@
 /**
- * The ROOT-scoped ROLE-TEXT CSS emitter.
+ * The root-scoped role-text CSS emitter.
  *
- * Text color is delivered by INHERITANCE + tag/role selectors emitted ONCE — NOT
- * per element — so any newly-created or typed `<p>/<a>/<h1>/…` is the right color
- * the instant it exists (no observer round-trip → no per-keystroke flash), and
+ * Text color is delivered by inheritance plus tag/role selectors emitted once (not
+ * per element), so any newly-created or typed `<p>/<a>/<h1>/…` is the right color
+ * the instant it exists (no observer round-trip, so no per-keystroke flash), and
  * the walk/observer never touch text.
  *
- * SPECIFICITY (the real-SPA fix): bare tag selectors are (0,0,1), which a site's
- * single-CLASS `!important` color beats. We SCOPE every role rule under the stable
- * ROOT MARKER attribute on `<html>` (`[data-thememaker]`), lifting page-level
- * rules to (0,1,1) — beating a single site class — while STILL being a descendant
- * selector, so new/typed nodes match instantly. Per-surface variants scope one
- * level deeper (0,2,1). Each rule floors its role seed against a DETERMINISTIC
- * reference surface. Pure string building over the resolved roles.
+ * Specificity: bare tag selectors are (0,0,1), which a site's single-class
+ * `!important` color beats. Every role rule is scoped under the stable root marker
+ * attribute on `<html>` (`[data-thememaker]`), lifting page-level rules to (0,1,1)
+ * to beat a single site class while still being a descendant selector, so
+ * new/typed nodes match instantly. Per-surface variants scope one level deeper
+ * (0,2,1). Each rule floors its role seed against a deterministic reference
+ * surface. Pure string building over the resolved roles.
  */
 import { contrastRatio } from "../color/color";
 import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
@@ -49,19 +49,19 @@ const roleRulesFor = (
 };
 
 /**
- * Builds the FULL set of role-text rules: the page-level rules (floored against
- * the harder of {themedBase, roleSurface} so they're AA on the page base AND any
+ * Builds the full set of role-text rules: the page-level rules (floored against
+ * the harder of {themedBase, roleSurface} so they're AA on the page base and any
  * generic surface), then one scoped variant per tinted surface role (floored
- * against THAT fixed surface).
+ * against that fixed surface).
  */
 export const buildRoleRules = (
   roles: ResolvedRoles,
   surfaceRoleBg: Record<string, string>,
 ): string[] => {
-  // The PAGE-LEVEL role rules must be readable on BOTH the page base AND a generic
+  // The page-level role rules must be readable on both the page base and a generic
   // surface (which lands on `roleSurface`). Floor each page-level seed against
-  // whichever of {themedBase, roleSurface} gives it LOWER contrast (the harder
-  // case) — AA against both endpoints and every blend between them.
+  // whichever of {themedBase, roleSurface} gives it lower contrast (the harder
+  // case), so it's AA against both endpoints and every blend between them.
   const harderRef = (seed: string): string => {
     const a = roles.themedBase;
     const b = roles.roleSurface;

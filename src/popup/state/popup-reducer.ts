@@ -1,14 +1,14 @@
 /**
- * The popup's UI/VIEW state machine — the PopupProvider's single source of truth.
+ * The popup's view state machine — the PopupProvider's source of truth.
  *
- * This module owns the pure parts of the provider's `useReducer` for the popup's
- * own view state (the three disclosures, the in-flight/error flags, the
- * just-saved confirmation, and pick mode). It is DOM-free and `chrome.*`-free, so
- * the whole state machine stays unit-testable without React. The provider
- * (`PopupProvider.tsx`) binds it via `useReducer`; `usePopup` (the actions hook)
- * dispatches these actions; components read state + call the actions.
+ * Owns the pure parts of the provider's `useReducer` for the popup's own view
+ * state (the three disclosures, the in-flight/error flags, the just-saved
+ * confirmation, and pick mode). It is DOM-free and `chrome.*`-free, so the state
+ * machine stays unit-testable without React. The provider (`PopupProvider.tsx`)
+ * binds it via `useReducer`; `usePopup` (the actions hook) dispatches these
+ * actions; components read state + call the actions.
  *
- * The SCHEME domain lives in its own reducer (`scheme-reducer.ts`) so the two
+ * The scheme domain lives in its own reducer (`scheme-reducer.ts`) so the two
  * domains churn independently — view toggles never re-derive scheme state.
  */
 

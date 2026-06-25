@@ -8,20 +8,19 @@ import pkg from "../package.json";
  * build time.
  *
  * Architecture:
- *  - Always-on content script (Phase 3 persistence): an `<all_urls>` content
- *    script runs at `document_start` on EVERY page, reads the saved per-site
- *    theme from `chrome.storage.local`, and AUTO-REAPPLIES it so a reload or
- *    revisit restores the user's look (see `src/content/index.ts`). This is the
- *    accepted trade-off for persistence: it RE-INTRODUCES the "read and change
- *    all your data on all websites" install warning (an explicit product
- *    decision — broad host access in exchange for per-site auto-reapply).
- *  - The popup drives on-demand apply/reset/query by sending messages DIRECTLY
+ *  - Always-on content script: an `<all_urls>` content script runs at
+ *    `document_start` on every page, reads the saved per-site theme from
+ *    `chrome.storage.local`, and auto-reapplies it so a reload or revisit
+ *    restores the user's look (see `src/content/index.ts`). The `<all_urls>`
+ *    match is the trade-off for this persistence: it triggers the "read and
+ *    change all your data on all websites" install warning, accepted in exchange
+ *    for per-site auto-reapply.
+ *  - The popup drives on-demand apply/reset/query by sending messages directly
  *    to that same always-on content script (`chrome.tabs.sendMessage`), which
- *    runs the engine in the page. There is no `chrome.scripting.executeScript`
- *    path anymore — so `scripting` is no longer requested. Both the popup-driven
- *    and auto-reapply paths share the single `<style id="themeMaker">` (no
- *    double-apply). `activeTab` is still needed for active-tab resolution.
- *  - Permissions: `activeTab` + `storage`.
+ *    runs the engine in the page. The popup-driven and auto-reapply paths share
+ *    the single `<style id="themeMaker">` so there is no double-apply.
+ *    `activeTab` is needed for active-tab resolution.
+ *  - Permissions: `activeTab` + `storage`. No `scripting` is requested.
  *  - No `web_accessible_resources`: no path needs any.
  */
 export default defineManifest({

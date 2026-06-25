@@ -1,11 +1,10 @@
 /**
- * Shared element CLASSIFIERS for the theming engine + element picker.
+ * Shared element classifiers for the theming engine + element picker.
  *
  * These are the small, framework-agnostic DOM predicates both the picker
- * (`content/pick-resolve.ts`) and the in-page engine consume. Centralizing them
- * here (D2) means one definition of "is this button-like?" instead of a copy in
- * each consumer. They read only an `Element`'s tag/attributes — no `chrome.*`,
- * no computed styles.
+ * (`content/pick-resolve.ts`) and the in-page engine consume, so "is this
+ * button-like?" has one definition instead of a copy in each consumer. They read
+ * only an `Element`'s tag/attributes — no `chrome.*`, no computed styles.
  */
 
 /** Detects whether an element is button-like (a button, a button role, or a

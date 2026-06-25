@@ -4,7 +4,7 @@
  * Owns the live re-apply paths: the debounced intensity slider (latest value
  * wins, re-applies + persists), the Invert toggle (flips the live palette), the
  * Customize handoff (SHOW_PICKER + close the popup), and Reset (clear the page +
- * per-site state + hide the picker). The deferred-dispatch SNAPSHOT logic lives
+ * per-site state + hide the picker). The deferred-dispatch snapshot logic lives
  * here — these paths pass an explicit `LiveScheme` to `commitCurrent`.
  */
 import { useMemo } from "react";
@@ -40,7 +40,7 @@ export const useApplyScheme = (): ApplyActions => {
     } = schemeClient(store, popup);
 
     // Debounced commit of the intensity slider: persists the new value and, when
-    // a theme is applied, LIVE re-applies the same palette at the new intensity.
+    // a theme is applied, re-applies the same palette live at the new intensity.
     // The latest value always wins. Takes `intensity` explicitly (dispatch is
     // deferred); the current scheme/overrides come from state.
     let intensityTimer: ReturnType<typeof setTimeout> | null = null;

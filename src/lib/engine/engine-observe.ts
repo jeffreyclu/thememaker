@@ -1,16 +1,14 @@
 /**
- * Pure MutationObserver batch PARSING for the Engine's observer loop.
+ * Pure MutationObserver batch parsing for the Engine's observer loop.
  *
- * The Engine owns the live observer (it enqueues into the Engine's own work
- * queue); this module is just the stateless parsing of one mutation batch:
+ * This is the stateless parsing of one mutation batch:
  *  - which added subtrees / recycled (class/style-mutated) elements this batch
  *    touched (the roots to re-theme), and
- *  - which NON-themed elements had their class/style swapped, so their stale
- *    FROZEN original must be re-captured from the new live style (a virtualized
- *    list swapping a row's bg class).
+ *  - which non-themed elements had their class/style swapped, so their stale
+ *    frozen original must be re-captured from the new live style (e.g. a
+ *    virtualized list swapping a row's bg class).
  * It also owns `isOwnElement` (never re-theme the engine's own <style> output)
- * and builds the live observer itself (`createSurfaceObserver`), so the Engine
- * just wires its callbacks in.
+ * and builds the live observer itself (`createSurfaceObserver`).
  */
 import {
   EARLY_STYLE_ID,
@@ -22,7 +20,7 @@ import { OBSERVE_OPTS } from "./engine-walk-geom";
 import type { SurfaceContext } from "./engine-surface";
 import type { OriginalStyle } from "./engine-types";
 
-/** True when `el` is one of the engine's OWN elements — never re-theme our output. */
+/** True when `el` is one of the engine's own elements; never re-theme our output. */
 export const isOwnElement = (el: HTMLElement): boolean =>
   el.id === STYLE_ELEMENT_ID ||
   el.id === OVERRIDE_STYLE_ID ||
@@ -38,7 +36,7 @@ export interface MutationBatch {
  * Parses a mutation batch into the added/recycled roots to re-theme and the
  * recycled (attribute-mutated, not-yet-themed) elements whose frozen original
  * must be dropped. A frozen, already-themed surface (`doneSet`) never changes
- * color, so attribute changes on it are ignored (this also skips our OWN writes).
+ * color, so attribute changes on it are ignored (this also skips our own writes).
  */
 export const parseMutations = (
   mutations: MutationRecord[],
@@ -57,8 +55,8 @@ export const parseMutations = (
       const t = mm.target;
       if (t instanceof HTMLElement && !isOwnElement(t) && !doneSet.has(t)) {
         roots.add(t);
-        // A class/style swap on a NON-themed element means it was RECYCLED — its
-        // original background may now differ. Drop its FROZEN original so it is
+        // A class/style swap on a non-themed element means it was recycled, so its
+        // original background may now differ. Drop its frozen original so it is
         // re-captured from the live (new) computed style.
         recaptured.add(t);
       }
@@ -80,10 +78,10 @@ export interface ObserverDeps {
 }
 
 /**
- * Builds the live MutationObserver: PRE-PAINT in-/near-viewport new + recycled
- * surfaces SYNCHRONOUSLY (no white flash) and DEFER the off-screen remainder.
+ * Builds the live MutationObserver: pre-paints in-/near-viewport new + recycled
+ * surfaces synchronously (no white flash) and defers the off-screen remainder.
  * Disconnects itself across its own pre-paint writes so they don't re-enter its
- * queue, then reconnects. The Engine owns observe()/disconnect() lifecycle.
+ * queue, then reconnects. The Engine owns the observe()/disconnect() lifecycle.
  */
 export const createSurfaceObserver = (deps: ObserverDeps): MutationObserver => {
   const observer = new MutationObserver((mutations) => {

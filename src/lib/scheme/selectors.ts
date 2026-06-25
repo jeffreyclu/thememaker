@@ -1,9 +1,9 @@
 /**
- * Read-only SCHEME selectors + scheme→view-model derivations.
+ * Read-only scheme selectors + scheme→view-model derivations.
  *
  * The pure, DOM-free read side of the scheme domain: it derives what a consumer
  * renders (override rows, details rows, swatches, history labels, the "already
- * saved?" dedupe check) from a `Scheme` (or a minimal snapshot) WITHOUT touching
+ * saved?" dedupe check) from a `Scheme` (or a minimal snapshot) without touching
  * React or any state container. Unit-testable in isolation.
  */
 import { describeColor } from "../color/color-names";
@@ -81,7 +81,7 @@ export interface SavedCheckInput {
 }
 
 /**
- * Whether the current scheme — at the live intensity + overrides — is ALREADY a
+ * Whether the current scheme — at the live intensity + overrides — is already a
  * favorite (by content). Drives the Save button's disabled state.
  */
 export const isCurrentSaved = (snapshot: SavedCheckInput): boolean => {

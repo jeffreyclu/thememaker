@@ -10,7 +10,7 @@ import type { Scheme } from "../../types";
 
 /**
  * Appends `scheme` to a bounded history queue (most-recent at the end),
- * returning a NEW array (pure — no mutation of the input). Oldest entries are
+ * returning a new array (pure — no mutation of the input). Oldest entries are
  * dropped once the queue exceeds `max`.
  */
 export const enqueueScheme = (

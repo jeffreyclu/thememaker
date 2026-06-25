@@ -1,13 +1,11 @@
 /**
  * Typed message contract for the popup → content-script channel.
  *
- * The popup is the control surface; the ALWAYS-ON content script (`<all_urls>`
- * @ `document_start`) owns ALL page-side effects — it holds the single `Engine`
+ * The popup is the control surface; the always-on content script (`<all_urls>`
+ * @ `document_start`) owns all page-side effects — it holds the single `Engine`
  * instance and drives `engine.apply()` / `reset()` / `isApplied()` in the page's
- * isolated world. Apply / reset / query / pick are therefore delivered DIRECTLY to
- * the active tab's content script via `chrome.tabs.sendMessage` (no background
- * hub, no `chrome.scripting.executeScript`). This is why the engine can be
- * ordinary bundled code that `import`s shared modules.
+ * isolated world. Apply / reset / query / pick are delivered to the active tab's
+ * content script via `chrome.tabs.sendMessage`.
  *
  * Every message is discriminated by `type`. `sendToContentWithReply<M>` ties
  * each request type to its response type so callers stay end-to-end typed.
@@ -16,9 +14,9 @@ import type { ApplyOptions, Scheme } from "../types";
 import type { Palette } from "./palette";
 
 /**
- * Apply a generated palette to the active tab. The ADAPTIVE engine runs IN the
+ * Apply a generated palette to the active tab. The adaptive engine runs in the
  * page (only it can see computed styles), so the payload carries the palette +
- * options — NOT a precomputed CSS string. The content script detects
+ * options, not a precomputed CSS string. The content script detects
  * roles/variables, maps onto the palette, enforces AA contrast, and injects the
  * single `<style id="themeMaker">`, replying with whether the apply landed.
  */
@@ -32,7 +30,7 @@ export interface ApplySchemeMessage {
   scheme: Scheme;
 }
 
-/** Remove Thememaker's <style> from the active tab. */
+/** Remove Thememaker's style from the active tab. */
 export interface ResetSchemeMessage {
   type: "RESET_SCHEME";
 }
@@ -43,22 +41,22 @@ export interface QueryStateMessage {
 }
 
 /**
- * Element-picker messages, sent DIRECTLY from the popup to the active tab's
- * CONTENT SCRIPT (`chrome.tabs.sendMessage`), NOT through the background hub:
- * pick mode is an IN-PAGE interaction owned by the always-on content script,
- * driven through an in-page floating control (Shadow DOM panel).
+ * Element-picker messages, sent from the popup to the active tab's content
+ * script (`chrome.tabs.sendMessage`): pick mode is an in-page interaction owned
+ * by the always-on content script, driven through an in-page floating control
+ * (Shadow DOM panel).
  *
- * Flow: the user clicks "Pick element" in the popup → the popup sends
+ * Flow: the user clicks "Pick element" in the popup, the popup sends
  * `SHOW_PICKER` (carrying the live theme so the panel can live-apply + persist
  * its picks) and then closes. The in-page panel handles all picking + recoloring
- * itself; storage is the source of truth. There is NO reply channel and NO
- * detached window — the panel lives on the page.
+ * itself; storage is the source of truth. There is no reply channel — the panel
+ * lives on the page.
  */
 
 /**
  * Show the in-page floating picker control on the active tab. Carries the live
  * theme (palette + intensity + the popup's current overrides) so the content
- * script can apply each pick LIVE in place and persist it into the per-site
+ * script can apply each pick live in place and persist it into the per-site
  * saved scheme. The panel is the source of all picking/recoloring once shown.
  */
 export interface ShowPickerMessage {
@@ -78,8 +76,8 @@ export interface HidePickerMessage {
  * Re-apply the theme in place with the given options (intensity + overrides).
  * Sent from the popup when it changes overrides while the page is themed (e.g.
  * "Clear all"), so the in-page result reflects the popup edit without a reload.
- * The content script drives the SAME `engine.applyWhenReady` in place and keeps
- * its panel rows in sync.
+ * The content script drives `engine.applyWhenReady` in place and keeps its panel
+ * rows in sync.
  */
 export interface ApplyLiveMessage {
   type: "APPLY_LIVE";
@@ -88,9 +86,9 @@ export interface ApplyLiveMessage {
 }
 
 /**
- * Fire-and-forget messages the CONTENT SCRIPT handles (popup → content script,
- * direct). The picker messages need no reply — the in-page panel owns the
- * interaction and storage is the source of truth.
+ * Fire-and-forget messages the content script handles. The picker messages need
+ * no reply — the in-page panel owns the interaction and storage is the source of
+ * truth.
  */
 export type ContentMessage =
   | ShowPickerMessage
@@ -98,7 +96,7 @@ export type ContentMessage =
   | ApplyLiveMessage;
 
 /**
- * Reply-carrying messages the CONTENT SCRIPT handles. The popup awaits the
+ * Reply-carrying messages the content script handles. The popup awaits the
  * response (`applied`/`scheme`) to update its own state, so these go through
  * {@link sendToContentWithReply} (the request/response sibling of the
  * fire-and-forget {@link sendToContent}).
@@ -110,7 +108,7 @@ export type ContentReplyMessage =
 
 /**
  * Fields every response carries. `ok: false` carries a human-readable `error`
- * (errors can come back for ANY request type — the content handler's
+ * (errors can come back for any request type — the content handler's
  * catch/exhaustive guard produces this shape — so it lives on the base every
  * response extends).
  */
@@ -132,7 +130,7 @@ export interface ApplySchemeResponse extends BaseResponse {
 
 /** Response to {@link ResetSchemeMessage}: a reset leaves nothing applied. */
 export interface ResetSchemeResponse extends BaseResponse {
-  /** Always `false` on success — a reset removes the theme. */
+  /** Always false on success — a reset removes the theme. */
   applied?: false;
 }
 
@@ -153,9 +151,9 @@ export type MessageResponse =
   | QueryStateResponse;
 
 /**
- * Maps each request type to the SPECIFIC response it yields (request →
- * response), so a `QUERY_STATE` caller never sees a `scheme?` it can't get and a
- * `RESET_SCHEME` caller sees `applied` typed as the literal `false`.
+ * Maps each request type to the specific response it yields, so a `QUERY_STATE`
+ * caller never sees a `scheme?` it can't get and a `RESET_SCHEME` caller sees
+ * `applied` typed as the literal `false`.
  */
 export interface ResponseFor {
   APPLY_SCHEME: ApplySchemeResponse;
@@ -165,13 +163,13 @@ export interface ResponseFor {
 
 /**
  * Request/response send of a {@link ContentReplyMessage} to a specific tab's
- * CONTENT SCRIPT (`chrome.tabs.sendMessage` WITH a callback). The single apply
- * transport: the content script applies/resets/queries the page and replies.
+ * content script (`chrome.tabs.sendMessage` with a callback). The content script
+ * applies/resets/queries the page and replies.
  *
- * Resolves to a degraded `{ ok: false, applied: false }` (NOT a reject) when the
- * tab has no listener — i.e. a non-injectable page (`chrome://`, the Web Store,
- * `file://` without access). `executeScript` could not run on those pages
- * either, so this is no NEW dead surface; the popup degrades gracefully on them.
+ * Resolves to a degraded `{ ok: false, applied: false }` (not a reject) when the
+ * tab has no listener — a non-injectable page (`chrome://`, the Web Store,
+ * `file://` without access) where no content script runs. The popup degrades
+ * gracefully on them.
  */
 export const sendToContentWithReply = <M extends ContentReplyMessage>(
   tabId: number,
@@ -184,7 +182,7 @@ export const sendToContentWithReply = <M extends ContentReplyMessage>(
     } as ResponseFor[M["type"]];
     try {
       chrome.tabs.sendMessage(tabId, message, (response) => {
-        // "no receiving end" (non-injectable tab) → degrade, never reject.
+        // "no receiving end" (non-injectable tab): degrade, never reject.
         if (chrome.runtime.lastError || response == null) {
           resolve(degraded);
           return;
@@ -197,8 +195,8 @@ export const sendToContentWithReply = <M extends ContentReplyMessage>(
   });
 
 /**
- * Fire-and-forget send of a {@link ContentMessage} to a specific tab's CONTENT
- * SCRIPT (`chrome.tabs.sendMessage`). Used by the popup to drive pick mode.
+ * Fire-and-forget send of a {@link ContentMessage} to a specific tab's content
+ * script (`chrome.tabs.sendMessage`). Used by the popup to drive pick mode.
  * Resolves even if the tab has no listener (a non-injectable tab), swallowing
  * `lastError` so the popup never rejects on a chrome:// tab.
  */

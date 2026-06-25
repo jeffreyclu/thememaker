@@ -1,6 +1,6 @@
 /**
  * History disclosure panel + list. Most-recent first; each entry re-applies on
- * click. CONNECTED: reads its own state + intents from context, so the container
+ * click. Connected: reads its own state + intents from context, so the container
  * passes it nothing. The shared `Disclosure` wraps the toggle + collapsible panel.
  */
 import { memo } from "react";
@@ -18,7 +18,7 @@ export const History = memo(function History() {
   const { showHistory } = usePopupState();
   const { onToggleHistory } = usePopup();
   const { onSelectHistory: onSelect } = useHistory();
-  // Most-recent first for display; keep the ORIGINAL index for re-apply.
+  // Most-recent first for display; keep the original index for re-apply.
   const rows = history.map((scheme, index) => ({ scheme, index })).reverse();
   return (
     <Disclosure

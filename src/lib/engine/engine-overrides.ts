@@ -1,25 +1,25 @@
 /**
- * The per-tag custom OVERRIDE layer — a SEPARATE `<style>` emitted AFTER the main
+ * The per-tag custom override layer: a separate `<style>` emitted after the main
  * theme so it wins.
  *
- * `options.overrides` maps `<tag>|<prop>` → exact hex (no AA floor — overrides are
- * a deliberate manual choice). This builds + installs a sibling
+ * `options.overrides` maps `<tag>|<prop>` to an exact hex (no AA floor, since an
+ * override is a deliberate manual choice). This builds + installs a sibling
  * `<style id="themeMakerOverrides">`:
- *  - BACKGROUND on a real tag → `tag[data-thememaker]` (0,1,1) beats the engine's
+ *  - background on a real tag: `tag[data-thememaker]` (0,1,1) beats the engine's
  *    per-element `[data-thememaker="N"]` (0,1,0).
- *  - TEXT on a real tag → ROOT-SCOPED `[data-thememaker] tag` (mirrors the engine's
- *    role rules) + a per-surface variant, so it TIES the engine's specificity and
- *    WINS by later source order, clearing site single-class colors.
- *  - the `page` sentinel → bare `html, body`; `html`/`body` → bare tag.
+ *  - text on a real tag: root-scoped `[data-thememaker] tag` (mirrors the engine's
+ *    role rules) plus a per-surface variant, so it ties the engine's specificity
+ *    and wins by later source order, clearing site single-class colors.
+ *  - the `page` sentinel: bare `html, body`; `html`/`body`: bare tag.
  *
- * Uses `override-grammar.ts` (D4) to parse the `<tag>|<prop>` key, so the picker,
- * popup, and this emitter all speak ONE grammar.
+ * Parses the `<tag>|<prop>` key via `parseOverrideKey` so the picker, popup, and
+ * this emitter all speak one grammar.
  */
 import { parseOverrideKey } from "../override-keys";
 import { OVERRIDE_STYLE_ID, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
 import type { RoleOverrides } from "../../types";
 
-/** The tinted SEMANTIC surface tokens a text override also scopes a variant for. */
+/** The tinted semantic surface tokens a text override also scopes a variant for. */
 const SURFACE_KEYS = ["card", "code", "banner", "comp"] as const;
 
 /**
