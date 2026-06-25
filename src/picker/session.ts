@@ -1,21 +1,20 @@
 /**
- * In-page floating picker control — the THIN VANILLA SHIM around the React app.
+ * In-page floating picker control — the eager shim around the React app.
  *
- * The popup sends SHOW_PICKER (carrying the live theme) then closes; we lazily
- * mount a React app into a Shadow DOM host. ALL session state (overrides /
- * palette / intensity) and ALL logic (element-pick arming, apply + persist,
- * Esc-to-close) live INSIDE that app (`./main` + the React tree) — this file owns
- * no state, no handlers, and no apply/persist logic. It only:
+ * The popup sends SHOW_PICKER (carrying the live theme) then closes; this lazily
+ * mounts a React app into a Shadow DOM host. The session state (overrides /
+ * palette / intensity) and the logic (element-pick arming, apply + persist,
+ * Esc-to-close) live inside that app (`./main` + the React tree). This file only:
  *   - shows the picker  → lazy `import()` + mount the app with the initial theme;
  *   - hides the picker  → unmount the app;
- *   - applies live      → re-apply via the engine AND re-render the open app with
+ *   - applies live      → re-apply via the engine and re-render the open app with
  *                         the new theme (the popup's "Clear all" etc. re-seeds it).
  *
- * LAZY REACT: the app statically imports React + react-dom. This file runs in the
- * ALWAYS-ON content script (every page), so it `await import`s the app ONLY when
- * the picker is shown, letting Vite code-split React out of the content entry
- * chunk. `PANEL_HOST_ID` is defined HERE (not in the lazy chunk) so the pick
- * session can exclude the host synchronously, without loading React.
+ * The app statically imports React + react-dom. This file runs in the always-on
+ * content script (every page), so it `await import`s the app only when the picker
+ * is shown, letting Vite code-split React out of the content entry chunk.
+ * `PANEL_HOST_ID` is defined here (not in the lazy chunk) so the pick session can
+ * exclude the host synchronously, without loading React.
  */
 import type { PickerAppHandle } from "./main";
 import { engine } from "../lib/engine";
@@ -52,7 +51,7 @@ export const showPicker = (palette: Palette, options: ApplyOptions): void => {
   const props = propsFor(palette, options);
 
   // Lazily load the app chunk (React + the picker tree). When it resolves, mount
-  // it — UNLESS this session was already torn down or replaced meanwhile.
+  // it unless this session was already torn down or replaced meanwhile.
   void import("./main").then(({ mountPickerApp }) => {
     if (generation !== mine) {
       return;

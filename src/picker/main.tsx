@@ -1,16 +1,16 @@
 /**
  * Picker React entry: mounts the app into a Shadow DOM host and returns an
- * imperative handle the vanilla shim drives (`host` / `update` / `destroy`). The
- * host carries {@link PANEL_HOST_ID} and lives on `document.documentElement`
- * (OUTSIDE `<body>`), so the engine's body-walk never reaches it and the page's
- * CSS can't cascade in — same as the vanilla panel.
+ * imperative handle the shim drives (`host` / `update` / `destroy`). The host
+ * carries {@link PANEL_HOST_ID} and lives on `document.documentElement` (outside
+ * `<body>`), so the engine's body-walk never reaches it and the page's CSS can't
+ * cascade in.
  *
- * THIS is the lazy-loaded entry: it statically imports React + `react-dom/client`,
+ * This is the lazy-loaded entry: it statically imports React + `react-dom/client`,
  * so the content script's `await import("./main")` (only when the picker is shown)
- * makes Vite code-split React into a separate chunk that is NEVER in the always-on
+ * makes Vite code-split React into a separate chunk kept out of the always-on
  * content entry bundle.
  *
- * The app owns ALL session state (overrides/palette/intensity) + logic (hooks);
+ * The app owns the session state (overrides/palette/intensity) and logic (hooks);
  * `update` re-renders with new props so the popup's APPLY_LIVE re-seeds the open
  * panel, and `destroy` unmounts (Done / Esc / HIDE_PICKER).
  */
@@ -59,7 +59,7 @@ export const mountPickerApp = (props: PickerAppProps): PickerAppHandle => {
   const reactRoot = document.createElement("div");
   shadow.append(reactRoot);
 
-  // Mount on the documentElement, OUTSIDE <body>, so the engine's body-walk
+  // Mount on the documentElement, outside <body>, so the engine's body-walk
   // never reaches the host and the page theme can't cascade in.
   document.documentElement.appendChild(host);
 

@@ -1,8 +1,7 @@
 /**
  * `usePickerKeys` — Esc-to-close for the panel. Installs a capture-phase keydown
  * listener (so the page can't act first) that swallows Escape and delegates to
- * the host's `onClose` (which hides the picker + ends pick mode). The React home
- * of the vanilla `onPickerKey`.
+ * the host's `onClose` (which hides the picker + ends pick mode).
  */
 import { useEffect } from "react";
 

@@ -1,9 +1,9 @@
 /**
- * The floating-control panel (CONNECTED ROOT of the React app): activates the
+ * The floating-control panel (connected root of the React app): activates the
  * picker's effect hooks (arm element-pick, Esc-to-close), reads the live
  * overrides from context, derives the rows via the pure model, and binds the
- * apply/persist intents. Renders the SAME DOM/classes as the vanilla panel
- * (header, hint, rows list, Clear all / Done) so the migration is byte-identical.
+ * apply/persist intents. Renders the panel chrome (header, hint, rows list,
+ * Clear all / Done).
  *
  * The color input on each row stays uncontrolled (see {@link OverrideRow}), so a
  * color change applies live without re-rendering the input the user is dragging.

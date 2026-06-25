@@ -1,12 +1,12 @@
 /**
- * PURE view derivation for the picker rows: maps the live overrides map to the
+ * Pure view derivation for the picker rows: maps the live overrides map to the
  * rows the panel renders, with the picker's label wording (`<tag> · background`/
  * `· text`, and the `page` sentinel as "Page · background"). Validates/normalizes
  * each stored hex so an invalid value falls back to a neutral swatch.
  *
- * A thin app-folder wrapper over the SHARED `lib/override-keys` primitives (the
- * popup uses the same row/label builders) — distinct from the overrides state
- * MACHINE in `PickerProvider`: this is read-only presentation, not a transition.
+ * A thin wrapper over the shared `lib/override-keys` primitives (the popup uses
+ * the same row/label builders) — distinct from the overrides state machine in
+ * `PickerProvider`: this is read-only presentation, not a transition.
  */
 import {
   labelForOverrideKey,

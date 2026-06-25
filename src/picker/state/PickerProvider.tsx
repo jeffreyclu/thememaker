@@ -1,26 +1,25 @@
 /**
- * The picker's STATE PROVIDER — the single home for the live session state the
- * vanilla `picker` object used to hold: the `overrides` map, the `palette`, and
- * the `intensity`.
+ * The picker's state provider — holds the live session state: the `overrides`
+ * map, the `palette`, and the `intensity`.
  *
- * The override-map transitions (the former `picker-panel-model` —
- * `withPickedRole` / `withRoleColor` / `withoutRole`) ARE the overrides state
- * machine, so they live HERE as the {@link overridesReducer}: a pick seeds a NEW
- * key with the element's current color, clear/clear-all drop keys, and a re-seed
- * replaces the whole map (the popup's APPLY_LIVE). All transitions are immutable.
+ * The override-map transitions (`withPickedRole` / `withRoleColor` /
+ * `withoutRole`) are the overrides state machine, so they live here as the
+ * {@link overridesReducer}: a pick seeds a new key with the element's current
+ * color, clear/clear-all drop keys, and a re-seed replaces the whole map (the
+ * popup's APPLY_LIVE). All transitions are immutable.
  *
- * Split by UPDATE FREQUENCY into two contexts so consumers re-render minimally:
+ * Split by update frequency into two contexts so consumers re-render minimally:
  *  - `PickerStateContext` holds the fast-changing `overrides` map (the rows
  *    re-render as the user picks/clears) plus the host's `onClose`;
- *  - `PickerActionsContext` exposes STABLE writers + a live-theme accessor the
+ *  - `PickerActionsContext` exposes stable writers + a live-theme accessor the
  *    apply/persist hooks use without re-subscribing.
  *
- * Two ways the overrides advance, mirroring the vanilla panel exactly:
- *  - `dispatch` (pick / clear / clear-all / re-seed) → the rows re-render;
- *  - `patchColor` updates ONLY the live ref, NOT state → NO re-render. The row
- *    color input is uncontrolled, so a color drag must not remount it (that would
- *    close the native dialog); the new color still reaches the next apply/persist
- *    through the ref.
+ * Two ways the overrides advance:
+ *  - `dispatch` (pick / clear / clear-all / re-seed) re-renders the rows;
+ *  - `patchColor` updates only the live ref, not state, so it triggers no
+ *    re-render. The row color input is uncontrolled, so a color drag must not
+ *    remount it (that would close the native dialog); the new color still reaches
+ *    the next apply/persist through the ref.
  */
 import {
   createContext,
@@ -45,21 +44,21 @@ export interface PickerTheme {
   overrides: RoleOverrides;
 }
 
-/** An overrides state transition (the former immutable model functions). */
+/** An overrides state transition (immutable). */
 export type OverridesAction =
   | { type: "pick"; key: string; currentColor: string }
   | { type: "clearRole"; key: string }
   | { type: "clearAll" }
   | { type: "reseed"; overrides: RoleOverrides };
 
-/** The overrides state machine — immutable; returns the SAME ref on a no-op. */
+/** The overrides state machine — immutable; returns the same ref on a no-op. */
 export const overridesReducer = (
   state: RoleOverrides,
   action: OverridesAction,
 ): RoleOverrides => {
   switch (action.type) {
     case "pick": {
-      // Seed a NEW key with the element's current color (no jarring jump);
+      // Seed a new key with the element's current color (no jarring jump);
       // re-picking an existing key keeps its value.
       if (action.key in state) {
         return state;
@@ -93,9 +92,9 @@ export const mergeColor = (
   isHexColor(color) ? { ...state, [key]: normalizeHex(color) } : state;
 
 interface PickerActions {
-  /** Apply an overrides transition AND re-render (pick / clear / clear-all). */
+  /** Apply an overrides transition and re-render (pick / clear / clear-all). */
   dispatch: Dispatch<OverridesAction>;
-  /** Advance the live color for apply/persist WITHOUT re-rendering (drag). */
+  /** Advance the live color for apply/persist without re-rendering (drag). */
   patchColor: (key: string, color: string) => void;
   /** The live theme (palette + intensity + latest overrides). */
   getTheme: () => PickerTheme;
@@ -126,9 +125,9 @@ export const PickerProvider = ({
 }): ReactElement => {
   const [overrides, dispatch] = useReducer(overridesReducer, seedOverrides);
 
-  // RE-SEED on prop change (the popup's APPLY_LIVE pushes new overrides). A
-  // render-phase dispatch (React re-renders immediately, no extra commit) keeps
-  // this to the rare re-seed via the identity compare — not every render.
+  // Re-seed on prop change (the popup's APPLY_LIVE pushes new overrides). A
+  // render-phase dispatch (React re-renders immediately, no extra commit), gated
+  // by the identity compare so it fires only on an actual re-seed.
   const seedRef = useRef(seedOverrides);
   if (seedRef.current !== seedOverrides) {
     seedRef.current = seedOverrides;

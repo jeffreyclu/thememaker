@@ -2,12 +2,11 @@
  * One override row: a label, an uncontrolled color input, and a clear (×) button.
  * Pure presentation — props only. Memoized so unchanged rows skip re-render.
  *
- * The color input is UNCONTROLLED (`defaultValue`, no `value`): a controlled value
+ * The color input is uncontrolled (`defaultValue`, no `value`): a controlled value
  * would let React replace the live `<input type="color">` mid-drag, closing the
- * native color dialog — the exact hazard the vanilla panel avoided by not
- * re-rendering on color change. The input shows its own value while dragging; the
- * apply hook applies each `input` event live. The parent supplies a `key` of
- * role+seed so a re-pick (new seed) remounts the input with the fresh color.
+ * native color dialog. The input shows its own value while dragging; the apply
+ * hook applies each `input` event live. The parent supplies a `key` of role+seed
+ * so a re-pick (new seed) remounts the input with the fresh color.
  */
 import { memo } from "react";
 

@@ -4,22 +4,21 @@
  * resulting `<tag>|<prop>` override key, and the element's current color (to seed
  * the row).
  *
- * A small pure helper in the app folder (no React, no `chrome.*`) so the pick
- * hook stays a thin side-effect. The button classifier and the rgb()→hex parser
- * are SHARED with the engine, so they live in `lib/classify.ts` and
- * `lib/color-runtime.ts`; this module imports them rather than re-implementing.
+ * A small pure helper (no React, no `chrome.*`) so the pick hook stays a thin
+ * side-effect. The button classifier and the rgb()→hex parser are shared with
+ * the engine, in `lib/classify.ts` and `lib/color-runtime.ts`; this module
+ * imports them rather than re-implementing.
  */
 import { isButtonLike } from "../../lib/classify";
 import { cssColorToHex } from "../../lib/color/color-runtime";
 import { makeOverrideKey } from "../../lib/override-keys";
 
 /**
- * True when the element renders its OWN non-transparent background.
+ * True when the element renders its own non-transparent background.
  *
  * `getComputedStyle().backgroundColor` is always an `rgb()`/`rgba()` value (or
- * `"transparent"`), and {@link cssColorToHex} already encodes exactly "is this a
- * real, non-transparent color?" — it returns null for `transparent` and for
- * alpha 0. So "has own background" is precisely "that value parses to a color".
+ * `"transparent"`), and {@link cssColorToHex} returns null for `transparent` and
+ * for alpha 0. So "has own background" is precisely "that value parses to a color".
  */
 const hasOwnBackground = (el: Element): boolean => {
   try {
@@ -31,7 +30,7 @@ const hasOwnBackground = (el: Element): boolean => {
 
 /**
  * Tags that can't be meaningfully recolored (media + script/style + SVG
- * internals + void structural tags). EVERYTHING else — containers, toolbars,
+ * internals + void structural tags). Everything else — containers, toolbars,
  * the body, hr/dividers, text — is pickable, since per-tag overrides apply to
  * any tag.
  */
@@ -64,7 +63,7 @@ const NON_PICKABLE_TAGS = new Set([
   "colgroup",
 ]);
 
-/** True when `el` has a DIRECT (immediate) non-whitespace text node child. */
+/** True when `el` has a direct (immediate) non-whitespace text node child. */
 const hasDirectText = (el: Element): boolean => {
   for (const node of Array.from(el.childNodes)) {
     if (node.nodeType === 3 && (node.textContent ?? "").trim().length > 0) {
@@ -80,8 +79,8 @@ export const isPickable = (el: Element): boolean =>
 
 /**
  * The CSS property a pick recolors for `el`: buttons + html/body + any element
- * that owns a background → its BACKGROUND; a text-bearing leaf → its text COLOR;
- * a plain container/wrapper → its BACKGROUND (so toolbars/sections recolor).
+ * that owns a background → its background; a text-bearing leaf → its text color;
+ * a plain container/wrapper → its background (so toolbars/sections recolor).
  */
 export const propForElement = (el: Element): "background" | "color" => {
   const tag = el.tagName.toLowerCase();
@@ -94,27 +93,26 @@ export const propForElement = (el: Element): "background" | "color" => {
   return hasDirectText(el) ? "color" : "background";
 };
 
-/** The per-TAG override key for a clicked element: `<tag>|<background|color>`. */
+/** The per-tag override key for a clicked element: `<tag>|<background|color>`. */
 export const pickKeyFor = (el: Element): string =>
   makeOverrideKey(el.tagName.toLowerCase(), propForElement(el));
 
 /**
- * Seed when NOTHING opaque is found walking up the ancestor chain for a
- * background pick. We assume a default white page — the common case. CAVEAT: on a
- * page whose base is dark via some mechanism we can't read (e.g. a body bg the
- * walk missed), this seeds a too-light starting swatch; the user simply re-picks
- * the color. Never seed black here (a transparent element must not paint a tag
- * black). See {@link cssColorToHex}.
+ * Seed when nothing opaque is found walking up the ancestor chain for a
+ * background pick — assume a default white page. On a page whose base is dark via
+ * a mechanism the walk can't read (e.g. a missed body bg), this seeds a too-light
+ * starting swatch and the user re-picks. Never seed black here, so a transparent
+ * element doesn't paint a tag black. See {@link cssColorToHex}.
  */
 const ASSUMED_PAGE_BG = "#ffffff";
 /** Seed for an unparseable text color or any thrown lookup — a neutral mid-gray. */
 const NEUTRAL_TEXT = "#808080";
 
 /**
- * The element's CURRENT color for `prop`, as `#rrggbb`, to pre-fill the input.
- * For a BACKGROUND on a transparent element we walk UP to the first ancestor
- * with a real (opaque) background, so the picker seeds with what is actually
- * VISIBLE behind the element — never black, and no jarring jump on apply.
+ * The element's current color for `prop`, as `#rrggbb`, to pre-fill the input.
+ * For a background on a transparent element, walks up to the first ancestor with
+ * a real (opaque) background, so the picker seeds with what is visible behind the
+ * element — never black, and no jarring jump on apply.
  */
 export const currentColorFor = (
   el: Element,

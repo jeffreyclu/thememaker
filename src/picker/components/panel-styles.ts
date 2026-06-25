@@ -1,11 +1,10 @@
 /**
  * The floating-control panel's inline stylesheet (injected into the shadow root).
  *
- * Identical to the pre-React vanilla panel's `<style>` so the migrated panel is
- * byte-identical visually. Lives in its own module (a plain string constant, not
- * a fake hook) so the panel component stays a thin view. The page can't see these
- * rules (Shadow encapsulation), and our engine never themes the host (it carries
- * {@link PANEL_HOST_ID} and lives outside `<body>`).
+ * A plain string constant in its own module so the panel component stays a thin
+ * view. The page can't see these rules (Shadow encapsulation), and the engine
+ * never themes the host (it carries {@link PANEL_HOST_ID} and lives outside
+ * `<body>`).
  */
 export const PANEL_STYLES = `
   :host { all: initial; }

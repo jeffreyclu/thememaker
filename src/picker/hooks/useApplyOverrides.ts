@@ -1,15 +1,13 @@
 /**
- * `useApplyOverrides` — the panel's WRITE intents: editing a row's color,
+ * `useApplyOverrides` — the panel's write intents: editing a row's color,
  * clearing a role, or clearing all. Each advances the live overrides, applies the
- * result LIVE through the engine, and persists it onto this origin's saved scheme
- * (SERIALIZED, so overlapping color-drag writes can't lose an update). This is the
- * React home of the vanilla `applyAndPersist` + the `panelHandlers` color/clear.
+ * result live through the engine, and persists it onto this origin's saved scheme
+ * (serialized, so overlapping color-drag writes can't lose an update).
  *
- * `onColorChange` uses `patchColor` (live ref, NO re-render): the row color input
+ * `onColorChange` uses `patchColor` (live ref, no re-render): the row color input
  * is uncontrolled, so a drag must not remount it. `onClearRole`/`onClearAll`
- * `dispatch` so the rows repaint, exactly like the vanilla `render`. The reducer
- * derives the resulting map (single source of truth) so apply/persist see the
- * exact same state React commits.
+ * `dispatch` so the rows repaint. The reducer derives the resulting map (single
+ * source of truth) so apply/persist see the exact same state React commits.
  */
 import { useMemo } from "react";
 

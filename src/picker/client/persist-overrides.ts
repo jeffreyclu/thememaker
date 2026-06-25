@@ -1,17 +1,17 @@
 /**
- * SERIALIZED persistence of the picker's live theme onto this origin's saved
+ * Serialized persistence of the picker's live theme onto this origin's saved
  * scheme — framework-agnostic IO the `useApplyOverrides` hook calls.
  *
  * Storage is the single source of truth: overrides + palette + intensity live on
  * the per-site `savedScheme`, so a reload restores the exact custom theme via
- * `loadDecision`. Writes are SERIALIZED through a tail promise (`persistQueue`)
+ * `loadDecision`. Writes are serialized through a tail promise (`persistQueue`)
  * so the read-modify-write cycles never interleave: a fast color-drag (each
  * `input` event → a persist) could otherwise fire overlapping read→merge→write
- * cycles and lose an update (last-writer-wins on a STALE read). Chaining makes
- * each persist read AFTER the previous one's write committed.
+ * cycles and lose an update (last-writer-wins on a stale read). Chaining makes
+ * each persist read after the previous one's write committed.
  *
- * This is a plain module-level queue (not React state): it is process-wide IO
- * ordering, deliberately decoupled from any component lifecycle.
+ * A plain module-level queue (not React state): it is process-wide IO ordering,
+ * decoupled from any component lifecycle.
  */
 import { readSiteState, writeSiteState } from "../../content/site-storage";
 import type { Palette } from "../../lib/palette";
@@ -29,7 +29,7 @@ const persistOnce = async (input: PersistInput): Promise<void> => {
   const origin = location.origin;
   const site = (await readSiteState(origin)) ?? { enabled: false };
   // Drop any previously-saved `overrides` here so it can't linger: "no
-  // overrides" is the ABSENCE of the key, re-added below only when there are some.
+  // overrides" is the absence of the key, re-added below only when there are some.
   const { overrides: _prevOverrides, ...prevDetails } =
     site.savedScheme?.schemeDetails ??
     ({
@@ -57,7 +57,7 @@ const persistOnce = async (input: PersistInput): Promise<void> => {
 let persistQueue: Promise<void> = Promise.resolve();
 
 /**
- * Persists the live theme onto this origin's saved scheme, SERIALIZED via the
+ * Persists the live theme onto this origin's saved scheme, serialized via the
  * tail promise so overlapping edits can't lose an update. A failed persist must
  * not break the chain for the next one.
  */

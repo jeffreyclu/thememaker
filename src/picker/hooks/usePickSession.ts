@@ -1,17 +1,16 @@
 /**
- * `usePickSession` — the in-page ELEMENT PICK session, folded into one effect.
+ * `usePickSession` — the in-page element-pick session, as one effect.
  *
- * This is the React home of the former vanilla `pick.ts`: while the panel is
- * mounted it installs CAPTURE-PHASE listeners (so the page can't act first) and a
- * hover OVERLAY tracking the element under the cursor, and RE-ARMS — each click
- * resolves a `<tag>|<prop>` key + the element's current color (the pure
+ * While the panel is mounted it installs capture-phase listeners (so the page
+ * can't act first) and a hover overlay tracking the element under the cursor.
+ * Each click resolves a `<tag>|<prop>` key + the element's current color (the
  * `pick-resolve` helpers), dispatches a `pick` (re-rendering the rows), and
  * applies + persists the result live. The panel host (and its shadow root) is
- * EXCLUDED so the control never highlights/recolors itself. Cleanup removes every
- * listener + the overlay (the vanilla `stop()` / `hidePicker` teardown).
+ * excluded so the control never highlights/recolors itself. Cleanup removes every
+ * listener + the overlay.
  *
- * Empty-ish deps: the listeners install ONCE and read live state through the
- * stable `getTheme` accessor + `dispatch`, so re-picks never re-arm.
+ * The listeners install once and read live state through the stable `getTheme`
+ * accessor + `dispatch`, so re-picks don't re-install them.
  */
 import { useEffect } from "react";
 
@@ -27,7 +26,7 @@ import { overridesReducer, usePickerActions } from "../state/PickerProvider";
 import { engine } from "../../lib/engine";
 import { PANEL_HOST_ID } from "../session";
 
-/** The hover-overlay id (kept distinct from the engine's `<style>`/attrs). */
+/** The hover-overlay id (distinct from the engine's `<style>`/attrs). */
 const OVERLAY_ID = "themeMakerPickOverlay";
 
 export const usePickSession = (): void => {
@@ -44,8 +43,8 @@ export const usePickSession = (): void => {
       }
       const el = document.createElement("div");
       el.id = OVERLAY_ID;
-      // Inline styles only (isolated): a SUBTLE 1px outline highlight, NO fill,
-      // no pointer events (hover/click target the element underneath), max z.
+      // Inline styles only (isolated): a 1px outline highlight, no fill, no
+      // pointer events (hover/click target the element underneath), max z.
       el.style.cssText = [
         "position: fixed",
         "z-index: 2147483647",
@@ -109,8 +108,8 @@ export const usePickSession = (): void => {
       if (!isPickable(target)) {
         return;
       }
-      // RE-ARM: record the tag override seeded with its current color, then apply
-      // + persist. The reducer derives the next map (single source of truth).
+      // Record the tag override seeded with its current color, then apply +
+      // persist. The reducer derives the next map (single source of truth).
       const prop = propForElement(target);
       const key = pickKeyFor(target);
       const action = {
