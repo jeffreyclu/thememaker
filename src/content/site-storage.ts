@@ -3,11 +3,11 @@
  * used at `document_start` (auto-reapply) and by the in-page picker's persist.
  *
  * These keep a minimal surface (a single get/set with `lastError` swallowed)
- * rather than pulling the full `storage.ts` facade into the content script's
+ * rather than pulling the full `Storage` facade into the content script's
  * hot path; both wrappers resolve (never reject) so a torn-down extension
  * context is a no-op, not an unhandled rejection.
  */
-import { KEYS, type SiteState } from "../lib/storage/storage";
+import { KEYS, type SiteState } from "../lib/storage";
 
 /** Promise-wraps the single per-site read; resolves `undefined` on any error. */
 export const readSiteState = (origin: string): Promise<SiteState | undefined> =>

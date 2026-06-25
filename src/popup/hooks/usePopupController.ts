@@ -15,7 +15,7 @@ import { makeActions, type PopupActions } from "../actions/actions";
 import type { ActionDeps } from "../actions/deps";
 import { useHydrate } from "./useHydrate";
 import { sendToContent, sendToContentWithReply } from "../../lib/messaging";
-import { createChromeStorage } from "../../lib/storage/storage";
+import { createChromeStorage } from "../../lib/storage";
 
 export interface PopupController {
   state: PopupState;

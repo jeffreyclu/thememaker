@@ -4,7 +4,7 @@
  */
 import { clampIntensity } from "../../types";
 import type { Scheme } from "../../types";
-import type { Favorite, Settings, SiteState } from "../../lib/storage/storage";
+import type { Favorite, Settings, SiteState } from "../../lib/storage";
 import type { PopupState } from "./index";
 
 /** Inputs for {@link hydratePartial}: persisted storage + active-tab state. */

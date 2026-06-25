@@ -133,7 +133,7 @@ export const originFromUrl = (url: string | undefined): string | null => {
  * The application storage facade. Both areas are injected so tests can supply
  * fakes; production wires `chromeArea(chrome.storage.local|sync)`.
  */
-export class ThememakerStorage {
+export class Storage {
   constructor(
     private readonly local: StorageArea,
     private readonly sync: StorageArea,
@@ -245,8 +245,8 @@ export class ThememakerStorage {
 }
 
 /** Production-wired storage backed by real `chrome.storage`. */
-export const createChromeStorage = (): ThememakerStorage =>
-  new ThememakerStorage(
+export const createChromeStorage = (): Storage =>
+  new Storage(
     chromeArea(chrome.storage.local),
     chromeArea(chrome.storage.sync),
   );

@@ -13,10 +13,7 @@
  */
 import { beforeEach, describe, expect, it } from "vitest";
 
-import {
-  ThememakerStorage,
-  type StorageArea,
-} from "../src/lib/storage/storage";
+import { Storage, type StorageArea } from "../src/lib/storage";
 import { loadDecision, siteStateReducer } from "../src/lib/storage/site-state";
 import { schemeFromPalette, schemeWithIntensity } from "../src/popup/schemes";
 import { generatePalette } from "../src/lib/palette/palette";
@@ -38,10 +35,10 @@ const memoryArea = (): StorageArea => {
 const ORIGIN = "https://github.com";
 
 describe("per-site persistence wiring", () => {
-  let storage: ThememakerStorage;
+  let storage: Storage;
 
   beforeEach(() => {
-    storage = new ThememakerStorage(memoryArea(), memoryArea());
+    storage = new Storage(memoryArea(), memoryArea());
   });
 
   /** Replays the popup's "enable toggle" with the live scheme + intensity. */

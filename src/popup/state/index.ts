@@ -14,7 +14,7 @@ import {
 } from "./scheme-view-model";
 import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
 import type { ColorMode, Intensity, RoleOverrides, Scheme } from "../../types";
-import type { Favorite } from "../../lib/storage/storage";
+import type { Favorite } from "../../lib/storage";
 
 export { hydratePartial, type HydrateInputs } from "./hydrate";
 

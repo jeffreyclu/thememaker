@@ -19,7 +19,7 @@ import {
 } from "@testing-library/react";
 
 import { App } from "../src/popup/App";
-import { KEYS } from "../src/lib/storage/storage";
+import { KEYS } from "../src/lib/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockScheme } from "./mocks";
 import type { MessageResponse } from "../src/lib/messaging";

@@ -4,13 +4,13 @@ import {
   DEFAULT_SETTINGS,
   KEYS,
   MAX_FAVORITES,
-  ThememakerStorage,
+  Storage,
   chromeArea,
   createChromeStorage,
   originFromUrl,
   type Favorite,
   type StorageArea,
-} from "../src/lib/storage/storage";
+} from "../src/lib/storage";
 import { getChromeMock } from "./chrome-mock";
 import { mockPalette, mockScheme, mockScheme2 } from "./mocks";
 
@@ -40,15 +40,15 @@ describe("originFromUrl", () => {
   });
 });
 
-describe("ThememakerStorage", () => {
+describe("Storage", () => {
   let local: StorageArea;
   let sync: StorageArea;
-  let storage: ThememakerStorage;
+  let storage: Storage;
 
   beforeEach(() => {
     local = memoryArea();
     sync = memoryArea();
-    storage = new ThememakerStorage(local, sync);
+    storage = new Storage(local, sync);
   });
 
   it("returns an empty history by default", async () => {

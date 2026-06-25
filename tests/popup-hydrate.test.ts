@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { hydratePartial } from "../src/popup/state";
-import type { Settings, SiteState } from "../src/lib/storage/storage";
+import type { Settings, SiteState } from "../src/lib/storage";
 import type { Scheme } from "../src/types";
 
 const settings: Settings = {

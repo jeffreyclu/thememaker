@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { siteStateReducer } from "../src/lib/storage/site-state";
-import { DEFAULT_SITE_STATE, type SiteState } from "../src/lib/storage/storage";
+import { DEFAULT_SITE_STATE, type SiteState } from "../src/lib/storage";
 import { mockScheme } from "./mocks";
 
 describe("siteStateReducer", () => {

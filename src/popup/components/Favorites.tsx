@@ -9,7 +9,7 @@ import { memo } from "react";
 import { ApplyButton } from "./ApplyButton";
 import { usePopupActions, usePopupState } from "../hooks/usePopupContext";
 import { schemeSwatches } from "../state/scheme-view-model";
-import type { Favorite } from "../../lib/storage/storage";
+import type { Favorite } from "../../lib/storage";
 
 const FavoriteRow = memo(function FavoriteRow({
   favorite,

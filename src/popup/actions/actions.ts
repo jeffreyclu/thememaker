@@ -18,7 +18,7 @@ import { dequeueScheme } from "../../lib/storage/history";
 import type { Commit } from "./commit";
 import type { ActionDeps } from "./deps";
 import type { Palette } from "../../lib/palette/palette";
-import type { Favorite } from "../../lib/storage/storage";
+import type { Favorite } from "../../lib/storage";
 import { clampIntensity, type Intensity } from "../../types";
 
 /** The intents the popup UI binds to. */

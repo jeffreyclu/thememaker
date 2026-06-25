@@ -12,7 +12,7 @@ import { useEffect, type MutableRefObject } from "react";
 import { hydratePartial, type PopupAction } from "../state";
 import type { PopupStorage } from "../actions/deps";
 import { sendToContentWithReply } from "../../lib/messaging";
-import { originFromUrl, DEFAULT_SITE_STATE } from "../../lib/storage/storage";
+import { originFromUrl, DEFAULT_SITE_STATE } from "../../lib/storage";
 
 export const useHydrate = (
   storage: PopupStorage,

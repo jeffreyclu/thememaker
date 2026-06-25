@@ -14,7 +14,7 @@ import type {
   ContentReplyMessage,
   ResponseFor,
 } from "../../lib/messaging";
-import type { createChromeStorage } from "../../lib/storage/storage";
+import type { createChromeStorage } from "../../lib/storage";
 
 export type PopupStorage = ReturnType<typeof createChromeStorage>;
 

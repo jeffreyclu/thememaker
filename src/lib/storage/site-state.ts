@@ -2,7 +2,7 @@
  * Pure per-site state reducer + content-script load decision.
  *
  * The per-site toggle is wired in the popup and persisted in `chrome.storage`
- * (see `ThememakerStorage.getSiteState`/`setSiteState`). Phase 3 consumes the
+ * (see `Storage.getSiteState`/`setSiteState`). Phase 3 consumes the
  * `enabled` flag + `savedScheme` for AUTO-REAPPLY on every page load via the
  * always-on content script (`src/content/index.ts`), which calls
  * `loadDecision` to decide whether to paint and with what palette/options.
@@ -13,7 +13,7 @@
 import type { ApplyOptions, Scheme } from "../../types";
 import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
 import type { Palette } from "../palette/palette";
-import type { SiteState } from "./storage";
+import type { SiteState } from ".";
 
 // `enable` is the only transition the app dispatches. The popup owns the "full
 // reset" (off + forget) and writes that state directly (see popup `onReset`), so
