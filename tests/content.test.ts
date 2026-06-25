@@ -29,10 +29,11 @@ import { getChromeMock } from "./chrome-mock";
 import { mockPalette } from "./mocks";
 import { DEFAULT_INTENSITY, MIN_INTENSITY } from "../src/types";
 
-// Spy on the engine so the flow tests assert WHAT is applied without running
-// the heavy DOM-walk. The content script imports this symbol, so the spy here
-// is the same binding it calls.
-import * as inject from "../src/lib/inject";
+// Spy on the engine + style helpers so the flow tests assert WHAT is applied
+// without running the heavy DOM-walk. The content script imports these symbols
+// from these modules, so the spies here are the same bindings it calls.
+import * as engine from "../src/lib/engine";
+import * as themeStyle from "../src/lib/theme-style";
 
 const savedSiteState = (intensity: number): SiteState => ({
   enabled: true,
@@ -107,8 +108,8 @@ describe("runContentScript (auto-reapply flow)", () => {
     document.head.innerHTML = "";
     document.body.innerHTML = "";
     document.documentElement.removeAttribute("style");
-    document.getElementById(inject.STYLE_ELEMENT_ID)?.remove();
-    applySpy = vi.spyOn(inject, "applyAdaptiveScheme").mockReturnValue(true);
+    document.getElementById(themeStyle.STYLE_ELEMENT_ID)?.remove();
+    applySpy = vi.spyOn(engine, "applyAdaptiveScheme").mockReturnValue(true);
     // location.origin in jsdom defaults to a real http origin.
     Object.defineProperty(window, "location", {
       value: new URL("https://example.com/page"),
@@ -236,9 +237,9 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
 
   beforeEach(() => {
     document.body.innerHTML = "<p>hi</p>"; // body present → engine runs sync.
-    applySpy = vi.spyOn(inject, "applyAdaptiveScheme").mockReturnValue(true);
-    removeSpy = vi.spyOn(inject, "removeSchemeStyle").mockReturnValue(true);
-    appliedSpy = vi.spyOn(inject, "isSchemeApplied").mockReturnValue(false);
+    applySpy = vi.spyOn(engine, "applyAdaptiveScheme").mockReturnValue(true);
+    removeSpy = vi.spyOn(themeStyle, "removeSchemeStyle").mockReturnValue(true);
+    appliedSpy = vi.spyOn(themeStyle, "isSchemeApplied").mockReturnValue(false);
     (
       window as unknown as { __THEMEMAKER_TEST__?: boolean }
     ).__THEMEMAKER_TEST__ = true;

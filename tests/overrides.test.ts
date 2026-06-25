@@ -23,11 +23,8 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  STYLE_ELEMENT_ID,
-  applyAdaptiveScheme,
-  removeSchemeStyle,
-} from "../src/lib/inject";
+import { applyAdaptiveScheme } from "../src/lib/engine";
+import { STYLE_ELEMENT_ID, removeSchemeStyle } from "../src/lib/theme-style";
 import { generatePalette } from "../src/lib/palette";
 import {
   FALLBACK_COLOR,

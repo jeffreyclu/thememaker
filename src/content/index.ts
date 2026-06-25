@@ -37,11 +37,8 @@
  * falls back to the palette-derived base; every subsequent reload is flash-free.
  * A reset/disable clears the cache so a disabled site never early-paints stale.
  */
-import {
-  STYLE_ELEMENT_ID,
-  baseBackgroundFor,
-  readBaseCache,
-} from "../lib/inject";
+import { STYLE_ELEMENT_ID } from "../lib/theme-style";
+import { baseBackgroundFor, readBaseCache } from "../lib/base-cache";
 import { loadDecision } from "../lib/site-state";
 import {
   applyWhenReady,

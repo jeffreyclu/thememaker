@@ -3,14 +3,11 @@
  * and luminance bucketing.
  *
  * NOTHING here touches the DOM or `chrome.*`; it is fully unit-testable. This is
- * the color math for the popup/palette path (`palette.ts`, `color-source.ts`).
- *
- * The in-page engine (`inject.ts`) carries its OWN self-contained copy of the
- * contrast/bucket math: it runs as a serialized `executeScript` payload and
- * cannot import across that boundary, so it is the single source of truth for
- * the page-side path and is tested directly (`tests/inject.test.ts`,
- * `tests/overrides.test.ts`). The two copies are not mechanically coupled; a
- * change to the contrast strategy must be made in both deliberately.
+ * THE single source of truth for color math across the whole extension: both the
+ * popup/palette path (`palette.ts`, `color-source.ts`) AND the in-page adaptive
+ * engine import this core (the engine's tolerant runtime layer, `color-runtime.ts`,
+ * wraps it for parsing computed `rgb()`/`rgba()` values). There is no longer a
+ * hand-ported copy — the engine is bundled code that imports this directly.
  */
 
 export interface RGB {

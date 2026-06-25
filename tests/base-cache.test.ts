@@ -10,16 +10,15 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { applyAdaptiveScheme } from "../src/lib/engine";
 import {
   BASE_CACHE_KEY,
-  STYLE_ELEMENT_ID,
-  applyAdaptiveScheme,
   baseBackgroundFor,
   clearBaseCache,
   readBaseCache,
-  removeSchemeStyle,
   writeBaseCache,
-} from "../src/lib/inject";
+} from "../src/lib/base-cache";
+import { STYLE_ELEMENT_ID, removeSchemeStyle } from "../src/lib/theme-style";
 import { generatePalette } from "../src/lib/palette";
 import type { ApplyOptions } from "../src/types";
 

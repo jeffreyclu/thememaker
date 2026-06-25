@@ -13,15 +13,14 @@
  * APPLY message handler (`message-apply.ts`) so all page-side applies go through
  * one runner.
  */
-import { applyAdaptiveScheme } from "../lib/inject";
+import { applyAdaptiveScheme } from "../lib/engine";
+import { EARLY_STYLE_ID } from "../lib/theme-dom-constants";
 import type { Palette } from "../lib/palette";
 import type { ApplyOptions } from "../types";
 
-/**
- * Marker `<style>` id for the early base paint — distinct from the engine's
- * `<style id="themeMaker">` so they never collide.
- */
-export const EARLY_STYLE_ID = "themeMakerEarly";
+// Re-exported so `content/index.ts` (and its consumers) keep importing the
+// early-paint id from here. Canonical home is `theme-dom-constants.ts` (D8).
+export { EARLY_STYLE_ID };
 
 /**
  * Paints a base background `hex` onto `<html>` immediately, before the body

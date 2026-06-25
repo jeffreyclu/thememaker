@@ -14,7 +14,7 @@
  * `onMessage` reply channel always resolves (the popup awaits it). Failures
  * become `{ ok: false, error }` rather than rejecting the channel.
  */
-import { removeSchemeStyle, isSchemeApplied } from "../lib/inject";
+import { removeSchemeStyle, isSchemeApplied } from "../lib/theme-style";
 import type {
   ApplySchemeResponse,
   QueryStateResponse,

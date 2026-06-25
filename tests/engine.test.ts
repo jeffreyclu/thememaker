@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 
+import { applyAdaptiveScheme } from "../src/lib/engine";
 import {
   STYLE_ELEMENT_ID,
-  applyAdaptiveScheme,
   applySchemeStyle,
   isSchemeApplied,
   removeSchemeStyle,
-} from "../src/lib/inject";
+} from "../src/lib/theme-style";
 import { generatePalette } from "../src/lib/palette";
 import { contrastRatio, hexToHsl } from "../src/lib/color";
 import type { ApplyOptions } from "../src/types";
