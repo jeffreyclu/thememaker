@@ -12,21 +12,13 @@
  *  - `frozenOriginal` is each surface's original bg captured once in the
  *    `originals` WeakMap and frozen; it only feeds the blend.
  *
- * All page state lives on private instance fields (the `originals` WeakMap, the
- * `doneSet` WeakSet, the id/count/cap `state`, the `observer`, the `<style>`
- * handle, the work `queue`, the `draining` flag). The content script holds one
- * long-lived `Engine`, so re-applies and slider drags reuse the frozen originals.
- *
- * The Engine owns one scheduler: `apply()` and the MutationObserver both enqueue
- * work; a single `drain` loop processes the queue in time-sliced slices
- * (requestIdleCallback) and reschedules itself until drained. The observer's
- * pre-paint path themes in-viewport nodes synchronously before paint.
- *
- * Heavy per-element logic lives in the helper modules it composes (`engine-apply`
- * resolves the palette into base CSS + paint context; `engine-walk` is the
- * stateless slice body; `engine-surface` is the per-element painter;
- * `engine-observe` parses mutation batches; `engine-overrides` is the per-tag
- * layer); this class is the thin scheduler that wires them together.
+ * This class is the orchestrator: it owns the page state (the `originals` WeakMap,
+ * the `doneSet`, the id/count/cap `state`, the MutationObserver, the `<style>`
+ * handle) and the lifecycle (apply / reset / flash). The heavy per-step logic
+ * lives in the sub-domains it composes — `roles/` resolves + classifies, `paint/`
+ * paints surfaces and runs the time-sliced {@link PaintScheduler}, `dom/` owns the
+ * style element + flash. `apply()` and the observer both feed roots to the one
+ * scheduler; the observer pre-paints in-viewport nodes synchronously before paint.
  */
 import {
   OVERRIDE_STYLE_ID,
@@ -36,26 +28,19 @@ import {
 import {
   baseBackgroundFor,
   clearBaseCache,
+  clearEarlyBaseStyle,
+  paintEarlyBaseStyle,
   readBaseCache,
 } from "./dom/early-paint";
 import { ensureStyleEl } from "./dom/style-element";
 import { resolveApply } from "./apply-resolution";
-import { clearEarlyBaseStyle, paintEarlyBaseStyle } from "./dom/early-paint";
-import {
-  drainSlice,
-  enqueueInto,
-  EDITABLE_SEL,
-  type WorkItem,
-} from "./paint/surface-walk";
-import { OBSERVE_OPTS, yieldThen } from "./paint/viewport-geometry";
-import { createSurfaceObserver, isOwnElement } from "./paint/mutation-parser";
+import { OBSERVE_OPTS } from "./paint/viewport-geometry";
+import { createSurfaceObserver } from "./paint/mutation-parser";
+import { PaintScheduler } from "./paint/paint-scheduler";
 import { applyOverrideLayer } from "./paint/override-layer";
-import type { SurfaceContext } from "./paint";
 import type { EngineState, OriginalStyle } from "./value-types";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
-
-const DEBOUNCE_MS = 250;
 
 /**
  * The adaptive theming engine. ONE long-lived instance owns ALL page state and is
@@ -83,18 +68,21 @@ export class Engine {
 
   // The live MutationObserver (so reset can disconnect it).
   private observer: MutationObserver | null = null;
-
-  // The scheduler's state: the single `<style>`, the work queue, the draining flag,
-  // the active surface context, and the debounced-observer flush state.
-  private styleEl: HTMLStyleElement | null = null;
-  private ctx: SurfaceContext | null = null;
-  private queue: WorkItem[] = [];
-  private draining = false;
-  private pending = new Set<HTMLElement>();
-  private flushTimer: ReturnType<typeof setTimeout> | null = null;
   // Whether the reload-flash placeholder is currently showing this load (so the
   // body-ready apply only paints a fallback base when none was restored).
   private flashPlaceholderShown = false;
+
+  // The time-sliced paint pump: it reads the live done-set and pauses/resumes the
+  // observer around each slice (our writes must not re-enter the observer's queue).
+  private scheduler = new PaintScheduler(
+    () => this.doneSet,
+    () => this.observer?.disconnect(),
+    () => {
+      if (this.observer && document.body) {
+        this.observer.observe(document.body, OBSERVE_OPTS);
+      }
+    },
+  );
 
   /**
    * Apply the theme: resolve the palette + options, write the base rules in place
@@ -116,15 +104,12 @@ export class Engine {
       this.originals,
       this.doneSet,
     );
-    this.ctx = surfaceCtx;
 
     // The single <style id="themeMaker">, reused in place (never removed then
-    // re-appended). Each apply rebuilds it: start empty, write base, stream
-    // surfaces.
+    // re-appended). Each apply rebuilds it: start empty, write base, stream surfaces.
     const head = document.head || document.documentElement;
     const style = ensureStyleEl(STYLE_ELEMENT_ID);
     style.textContent = "";
-    this.styleEl = style;
     // A bare presence attr on <html> every role-text rule is scoped under, so the
     // engine's text colors clear site single-class specificity.
     if (!document.documentElement.hasAttribute(ROOT_MARKER_ATTR)) {
@@ -132,17 +117,15 @@ export class Engine {
     }
 
     // Write the base rules now, then kick off the surface walk (above-the-fold
-    // first). The first slice runs synchronously inside this call.
-    this.appendRules(baseParts);
+    // first; the first slice runs synchronously inside `enqueue`).
+    this.scheduler.begin(style, surfaceCtx);
+    this.scheduler.append(baseParts);
     if (document.body) {
-      enqueueInto(this.queue, this.doneSet, document.body, true);
-      if (!this.draining) {
-        this.drain();
-      }
+      this.scheduler.enqueue(document.body);
     }
     // Per-tag overrides: a sibling <style> emitted after the main one so it wins.
     applyOverrideLayer(options.overrides, head);
-    // Observe SPA/lazy content (it enqueues into our queue).
+    // Observe SPA/lazy content (it feeds roots to the same scheduler).
     this.installObserver();
     // The full theme owns the html/body base now; retire the flash placeholder so
     // there is a single source of truth for the page base.
@@ -211,7 +194,6 @@ export class Engine {
     const old = document.getElementById(STYLE_ELEMENT_ID);
     if (old) {
       old.remove();
-      this.styleEl = null;
       return true;
     }
     return false;
@@ -223,13 +205,7 @@ export class Engine {
       this.observer.disconnect();
       this.observer = null;
     }
-    if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
-      this.flushTimer = null;
-    }
-    this.queue = [];
-    this.pending = new Set<HTMLElement>();
-    this.draining = false;
+    this.scheduler.dispose();
   }
 
   /** Paint the reload-flash placeholder + remember it is showing. */
@@ -238,75 +214,10 @@ export class Engine {
     this.flashPlaceholderShown = true;
   }
 
-  /** Append themed rules onto the live <style> (no-op for an empty list). */
-  private appendRules(rules: string[]): void {
-    if (rules.length === 0 || !this.styleEl) {
-      return;
-    }
-    const existing = this.styleEl.textContent ?? "";
-    this.styleEl.textContent = existing
-      ? `${existing}\n${rules.join("\n")}`
-      : rules.join("\n");
-  }
-
-  /**
-   * Drain the queue in time-sliced slices, yielding between them and rescheduling
-   * until drained. The observer is disconnected across each slice (our
-   * attribute/style writes must not re-enter its queue) and reconnected after.
-   */
-  private drain(): void {
-    if (!this.styleEl || !this.ctx) {
-      return;
-    }
-    this.draining = true;
-    const obs = this.observer;
-    if (obs) {
-      obs.disconnect();
-    }
-    drainSlice(this.queue, this.ctx, (r) => this.appendRules(r));
-    if (obs && document.body) {
-      obs.observe(document.body, OBSERVE_OPTS);
-    }
-    this.draining = false;
-    if (this.queue.length > 0) {
-      yieldThen(() => {
-        if (this.queue.length > 0) {
-          this.drain();
-        }
-      });
-    }
-  }
-
-  /** Queue the observer's off-screen remainder behind a debounce, then drain it. */
-  private deferOffscreen(roots: HTMLElement[]): void {
-    for (const el of roots) {
-      this.pending.add(el);
-    }
-    if (this.flushTimer !== null) {
-      clearTimeout(this.flushTimer);
-    }
-    this.flushTimer = setTimeout(() => this.flush(), DEBOUNCE_MS);
-  }
-
-  /** Flush the debounced off-screen remainder into the queue + drain it. */
-  private flush(): void {
-    this.flushTimer = null;
-    for (const el of this.pending) {
-      if (!el.isConnected || isOwnElement(el) || el.closest(EDITABLE_SEL)) {
-        continue;
-      }
-      enqueueInto(this.queue, this.doneSet, el, true);
-    }
-    this.pending = new Set<HTMLElement>();
-    if (this.queue.length > 0 && !this.draining) {
-      this.drain();
-    }
-  }
-
   /**
    * Install the surface MutationObserver (any prior one is disconnected) and begin
-   * observing the body. The observer pre-paints in-viewport mutations and hands
-   * the off-screen remainder to {@link deferOffscreen}.
+   * observing the body. The observer pre-paints in-viewport mutations and hands the
+   * off-screen remainder to the scheduler's debounced defer.
    */
   private installObserver(): void {
     if (this.observer) {
@@ -315,9 +226,9 @@ export class Engine {
     const observer = createSurfaceObserver({
       doneSet: this.doneSet,
       originals: this.originals,
-      getCtx: () => this.ctx,
-      appendRules: (r) => this.appendRules(r),
-      deferOffscreen: (roots) => this.deferOffscreen(roots),
+      getCtx: () => this.scheduler.context,
+      appendRules: (r) => this.scheduler.append(r),
+      deferOffscreen: (roots) => this.scheduler.deferOffscreen(roots),
     });
     if (document.body) {
       observer.observe(document.body, OBSERVE_OPTS);
