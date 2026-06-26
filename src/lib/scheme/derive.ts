@@ -1,5 +1,5 @@
 /**
- * Read-only scheme selectors + scheme→view-model derivations.
+ * Read-only scheme → view-model derivations (labels, rows, swatches).
  *
  * The pure, DOM-free read side of the scheme domain: it derives what a consumer
  * renders (override rows, details rows, swatches, history labels, the "already

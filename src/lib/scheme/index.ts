@@ -9,4 +9,4 @@
  */
 export * from "./mode";
 export * from "./transforms";
-export * from "./selectors";
+export * from "./derive";

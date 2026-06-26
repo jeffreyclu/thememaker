@@ -35,7 +35,7 @@ import {
 import {
   mergeColor,
   overridesReducer,
-} from "../src/picker/state/PickerProvider";
+} from "../src/picker/state/picker-reducer";
 
 // The picker's row label config (mirrors Panel's `roleLabel`).
 const roleLabel = (key: string): string =>

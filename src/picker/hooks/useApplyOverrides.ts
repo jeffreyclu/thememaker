@@ -12,12 +12,12 @@
  */
 import { useMemo } from "react";
 
+import { usePickerActions } from "../state/PickerProvider";
 import {
   mergeColor,
   overridesReducer,
-  usePickerActions,
   type OverridesAction,
-} from "../state/PickerProvider";
+} from "../state/picker-reducer";
 import { engine } from "../../lib/engine";
 import { persistOverrides } from "../../lib/storage/persist-overrides";
 import type { ApplyOptions, RoleOverrides } from "../../types";
