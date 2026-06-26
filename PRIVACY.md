@@ -1,6 +1,6 @@
 # Thememaker — Privacy Policy
 
-_Last updated: 2026-06-24_
+_Last updated: 2026-06-26_
 
 Thememaker is a browser extension that applies a custom color scheme to websites
 you choose. We designed it to keep your data on your own device. This policy
@@ -51,10 +51,12 @@ We are not affiliated with thecolorapi.com; see their site for their own terms.
 ## Permissions and why they are needed
 
 - **`storage`** — to save your themes and settings (above).
-- **`scripting`** + host access (`<all_urls>`) — to inject the color-only CSS
-  that themes a page. The content script reads a page's computed colors **on
-  your device** to decide what to recolor; nothing about the page leaves the
-  device.
+- **Host access (`<all_urls>`)** — Thememaker's content script runs on the pages
+  you visit so it can apply the color-only CSS that themes a site. It reads a
+  page's computed colors **on your device** to decide what to recolor; nothing
+  about the page leaves the device, and it only themes sites you have enabled.
+  (Thememaker does **not** request the `scripting` permission — the theming runs
+  entirely from the bundled content script.)
 - **`activeTab`** — to act on the tab you are currently using.
 
 Theming applies only on sites you enable; broad host access exists so the
