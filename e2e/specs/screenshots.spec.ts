@@ -15,7 +15,7 @@ import {
   openExtensionPage,
   waitForThemeApplied,
 } from "../support/apply";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 test.skip(!process.env.SHOTS, "store-screenshot capture — run with SHOTS=1");
@@ -73,4 +73,31 @@ test("capture store screenshots", async ({ context, extensionId, server }) => {
   await popup.waitForTimeout(800);
   await popup.screenshot({ path: resolve(OUT, "popup.png") });
   await popup.close();
+
+  // Store-ready 1280x800: frame the popup over a themed page (the panel in
+  // context, top-right like a real toolbar popup). The raw popup.png is the wrong
+  // aspect ratio for the store; this composite is exactly 1280x800.
+  writeFileSync(
+    resolve(OUT, "frame.html"),
+    `<!doctype html><html><head><meta charset="utf-8" /><style>
+      html, body { margin: 0; }
+      .stage { position: relative; width: 1280px; height: 800px; overflow: hidden; }
+      .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      .pop { position: absolute; top: 44px; right: 52px; width: 318px;
+        border-radius: 12px; box-shadow: 0 20px 56px rgba(0,0,0,.5); }
+    </style></head><body>
+      <div class="stage"><img class="bg" src="dark-dashboard.png" /><img class="pop" src="popup.png" /></div>
+    </body></html>`,
+  );
+  const framed = await context.newPage();
+  await framed.setViewportSize(SIZE);
+  await framed.goto(`file://${resolve(OUT, "frame.html")}`, {
+    waitUntil: "networkidle",
+  });
+  await framed.waitForTimeout(300);
+  await framed.screenshot({
+    path: resolve(OUT, "popup-framed.png"),
+    clip: { x: 0, y: 0, width: 1280, height: 800 },
+  });
+  await framed.close();
 });
