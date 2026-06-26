@@ -14,9 +14,9 @@
  * (0,2,1). Each rule floors its role seed against a deterministic reference
  * surface. Pure string building over the resolved roles.
  */
-import { contrastRatio } from "../color";
-import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
-import type { ResolvedRoles } from "./engine-roles";
+import { contrastRatio } from "../../color";
+import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "../dom/owned-attributes";
+import type { ResolvedRoles } from "./index";
 
 /**
  * Builds the role-text rules for one reference-surface strategy + scope. `refFor`

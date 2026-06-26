@@ -14,11 +14,11 @@ import {
   EARLY_STYLE_ID,
   OVERRIDE_STYLE_ID,
   STYLE_ELEMENT_ID,
-} from "./theme-dom-constants";
-import { paintViewport } from "./engine-walk";
-import { OBSERVE_OPTS } from "./engine-walk-geom";
-import type { SurfaceContext } from "./engine-surface";
-import type { OriginalStyle } from "./engine-types";
+} from "../dom/owned-attributes";
+import { paintViewport } from "./surface-walk";
+import { OBSERVE_OPTS } from "./viewport-geometry";
+import type { SurfaceContext } from "./index";
+import type { OriginalStyle } from "../value-types";
 
 /** True when `el` is one of the engine's own elements; never re-theme our output. */
 export const isOwnElement = (el: HTMLElement): boolean =>

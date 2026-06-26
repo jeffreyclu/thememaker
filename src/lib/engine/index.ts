@@ -32,26 +32,26 @@ import {
   OVERRIDE_STYLE_ID,
   ROOT_MARKER_ATTR,
   STYLE_ELEMENT_ID,
-} from "./theme-dom-constants";
+} from "./dom/owned-attributes";
 import {
   baseBackgroundFor,
   clearBaseCache,
   readBaseCache,
-} from "../storage/base-cache";
-import { ensureStyleEl } from "./theme-style";
-import { resolveApply } from "./engine-apply";
-import { clearEarlyBaseStyle, paintEarlyBaseStyle } from "./engine-early";
+} from "./dom/early-paint";
+import { ensureStyleEl } from "./dom/style-element";
+import { resolveApply } from "./apply-resolution";
+import { clearEarlyBaseStyle, paintEarlyBaseStyle } from "./dom/early-paint";
 import {
   drainSlice,
   enqueueInto,
   EDITABLE_SEL,
   type WorkItem,
-} from "./engine-walk";
-import { OBSERVE_OPTS, yieldThen } from "./engine-walk-geom";
-import { createSurfaceObserver, isOwnElement } from "./engine-observe";
-import { applyOverrideLayer } from "./engine-overrides";
-import type { SurfaceContext } from "./engine-surface";
-import type { EngineState, OriginalStyle } from "./engine-types";
+} from "./paint/surface-walk";
+import { OBSERVE_OPTS, yieldThen } from "./paint/viewport-geometry";
+import { createSurfaceObserver, isOwnElement } from "./paint/mutation-parser";
+import { applyOverrideLayer } from "./paint/override-layer";
+import type { SurfaceContext } from "./paint";
+import type { EngineState, OriginalStyle } from "./value-types";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 

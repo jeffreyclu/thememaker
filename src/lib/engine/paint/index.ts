@@ -9,7 +9,7 @@
  * `data-tm-surf` token; once in `doneSet` it is never re-walked.
  *
  * Text is not colored per-element: role colors come from the root-scoped tag rules
- * (`role-rules.ts`), so newly created/typed text is instantly correct. This painter
+ * (`roles/role-stylesheet`), so newly created/typed text is instantly correct. This painter
  * only emits a surface's background + its inherited subtree color + the box-shadow
  * softening, preserving real image backgrounds and alpha.
  */
@@ -19,12 +19,12 @@ import {
   parseCssColor,
   rgbTupleToHex,
   withAlpha,
-} from "../color/css-color";
-import { hasImageBackground, isSkippable } from "./role-classify";
-import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
-import type { ResolvedRoles } from "./engine-roles";
-import type { EngineState, OriginalStyle } from "./engine-types";
-import type { SurfaceFill } from "./role-classify";
+} from "../../color/css-color";
+import { hasImageBackground, isSkippable } from "../roles/element-classifier";
+import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "../dom/owned-attributes";
+import type { ResolvedRoles } from "../roles";
+import type { EngineState, OriginalStyle } from "../value-types";
+import type { SurfaceFill } from "../roles/element-classifier";
 
 /** Hard cap on total themed surfaces so the <style> + work can't grow unbounded. */
 export const MAX_THEMED = 12000;

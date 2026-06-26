@@ -23,7 +23,7 @@ import type { ApplyOptions } from "../src/types";
 import type { Palette } from "../src/lib/palette";
 
 import { loadDecision } from "../src/lib/scheme/site-state";
-import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
+import { STYLE_ELEMENT_ID } from "../src/lib/engine/dom/owned-attributes";
 import { schemeFromPalette } from "../src/lib/scheme";
 import { KEYS, type SiteState } from "../src/lib/storage";
 import { getChromeMock } from "./chrome-mock";

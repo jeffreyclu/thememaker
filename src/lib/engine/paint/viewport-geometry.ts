@@ -4,7 +4,7 @@
  * editable regions), the monotonic clock, and the idle-yield. All pure functions
  * over the DOM with no per-apply state.
  */
-import { isEditableRoot } from "./role-classify";
+import { isEditableRoot } from "../roles/element-classifier";
 
 // Selector for editable subtrees, excluded from the walk: typing churns them and
 // their text inherits the right color. Shared by `expand` + the observer's flush.

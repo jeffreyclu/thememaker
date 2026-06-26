@@ -10,17 +10,17 @@
  * live on the Engine.
  */
 import { mixCss } from "../color/css-color";
-import { writeBaseCache } from "../storage/base-cache";
-import { resolveRoles } from "./engine-roles";
-import { buildVarDecls, detectRootVars } from "../color/css-var-remap";
-import { buildRoleRules } from "./role-rules";
+import { writeBaseCache } from "./dom/early-paint";
+import { resolveRoles } from "./roles";
+import { buildVarDecls, detectRootVars } from "./roles/css-variable-remap";
+import { buildRoleRules } from "./roles/role-stylesheet";
 import {
   buildButtonOrder,
   makeSurfaceFillFor,
   surfaceRoleBg,
-} from "./role-classify";
-import { originalStyleOf, type SurfaceContext } from "./engine-surface";
-import type { EngineState, OriginalStyle } from "./engine-types";
+} from "./roles/element-classifier";
+import { originalStyleOf, type SurfaceContext } from "./paint";
+import type { EngineState, OriginalStyle } from "./value-types";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 

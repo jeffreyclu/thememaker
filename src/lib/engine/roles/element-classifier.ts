@@ -7,14 +7,14 @@
  * theme color is a pure function of its role, never of its original-bg luminance.
  * That decoupling is what lets recycled/restyled nodes and identical rows share
  * one color on SPAs. Text role classification lives in the root-scoped tag rules
- * (`role-rules.ts`), so these classifiers only ever decide surfaces.
+ * (`roles/role-stylesheet`), so these classifiers only ever decide surfaces.
  *
  * The shared `isButtonLike` lives in `lib/overrides`; this module adds the engine's
  * surface-only classifiers. Pure decisions over an element + resolved roles;
  * `getComputedStyle` reads stay in the walk, not here.
  */
-import { isButtonLike } from "../overrides";
-import type { ResolvedRoles } from "./engine-roles";
+import { isButtonLike } from "../../overrides";
+import type { ResolvedRoles } from "./index";
 
 /** The surface fixed-theme fill for an element: bg, label seed, optional token. */
 export interface SurfaceFill {

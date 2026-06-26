@@ -1,29 +1,39 @@
 /**
- * The synchronous, same-origin base-color cache for flash elimination.
+ * Flash elimination: the early-paint DOM primitives + the synchronous base cache.
  *
- * `chrome.storage` is async, so at `document_start` we can't know the theme before
- * the browser paints the site's original background. The reload flash is avoided by
- * caching the base background the engine painted onto html/body, in the page's own
- * `localStorage` (synchronous, same-origin). At the top of `document_start`, before
- * any async read, the content script reads this and early-paints that exact hex
- * onto `<html>`, so the first frame is already themed.
+ * `chrome.storage` is async, so at `document_start` the content script can't know
+ * the theme before the browser paints the site's original background. The fix:
+ * cache the base background the engine painted (in the page's own `localStorage`,
+ * synchronous + same-origin), then at the top of `document_start` read it and
+ * synchronously tint `<html>` with a stand-in `<style>` before any async read — so
+ * the very first frame is already the themed base. The full `apply()` later
+ * overwrites the html/body rule with the precise (body-aware) base, and
+ * `clearEarlyBaseStyle` drops the stand-in.
  *
- * `baseBackgroundFor` is the fallback base when no per-origin cache exists yet (the
- * first themed load): for the common default-white body it equals what the engine
- * paints, so the early paint matches the final paint. No `chrome.*` here.
+ * Pure DOM + `localStorage`, no `chrome.*`.
  */
-import { isHexColor, normalizeHex } from "../color";
-/**
- * Namespaced page `localStorage` key under which the engine caches the exact base
- * background it painted onto html/body for the current origin (read synchronously
- * at `document_start` to early-paint the themed base — no reload flash).
- */
-const BASE_CACHE_KEY = "__thememaker_base__";
-import type { Palette } from "../palette";
-import type { ApplyOptions } from "../../types";
+import { EARLY_STYLE_ID } from "./owned-attributes";
+import { ensureStyleEl } from "./style-element";
+import { isHexColor, normalizeHex } from "../../color";
+import type { Palette } from "../../palette";
+import type { ApplyOptions } from "../../../types";
 
-// Re-exported so existing consumers keep importing the cache key from here too.
-export { BASE_CACHE_KEY };
+/** The page `localStorage` key for this origin's cached base background. */
+export const BASE_CACHE_KEY = "__thememaker_base__";
+
+/**
+ * Paints a base background `hex` onto `<html>` immediately (a stand-in `<style>`),
+ * before the body exists, to remove the reload flash.
+ */
+export const paintEarlyBaseStyle = (hex: string): void => {
+  ensureStyleEl(EARLY_STYLE_ID).textContent =
+    `html { background-color: ${hex} !important; }`;
+};
+
+/** Removes the early-base stand-in `<style>` once the full engine has painted. */
+export const clearEarlyBaseStyle = (): void => {
+  document.getElementById(EARLY_STYLE_ID)?.remove();
+};
 
 /**
  * The themed page background (html/body base surface) a palette resolves to when
@@ -56,8 +66,8 @@ export const baseBackgroundFor = (
 
 /**
  * Reads the cached base background hex for the current origin from the page's own
- * `localStorage` (synchronous, same-origin). Returns `null` when absent or when
- * `localStorage` is unavailable / throws (private-mode, blocked, etc.).
+ * `localStorage`. Returns `null` when absent or when `localStorage` is unavailable
+ * / throws (private-mode, blocked, etc.).
  */
 export const readBaseCache = (): string | null => {
   try {
@@ -72,8 +82,8 @@ export const writeBaseCache = (hex: string): void => {
   try {
     window.localStorage.setItem(BASE_CACHE_KEY, hex);
   } catch {
-    // localStorage unavailable / quota / blocked — early paint just won't have a
-    // cache next load; not fatal.
+    // localStorage unavailable / quota / blocked — the early paint just won't have
+    // a cache next load; not fatal.
   }
 };
 

@@ -6,18 +6,14 @@
  * budgeted slice from the queue (`drainSlice`), and the observer's synchronous
  * pre-paint pass (`paintViewport`). Each takes the Engine's queue/state explicitly.
  */
-import {
-  processElement,
-  MAX_THEMED,
-  type SurfaceContext,
-} from "./engine-surface";
+import { processElement, MAX_THEMED, type SurfaceContext } from "./index";
 import {
   EDITABLE_SEL,
   expand,
   inViewport,
   now,
   syncViewportMargin,
-} from "./engine-walk-geom";
+} from "./viewport-geometry";
 
 // Re-exported so the Engine keeps one import surface for the walk constants.
 export { EDITABLE_SEL };
