@@ -115,9 +115,17 @@ export class Storage {
    * `globalThis.chrome` each `beforeEach`) take effect.
    */
   private static chromeArea(name: "local" | "sync"): StorageArea {
-    // Each call swallows `chrome.runtime.lastError` and resolves (never rejects),
-    // so a torn-down extension context (e.g. an in-page read at document_start)
-    // is a no-op rather than an unhandled rejection.
+    // Reads swallow `chrome.runtime.lastError` and degrade to `undefined` (a
+    // torn-down context at document_start is a no-op, not an unhandled rejection).
+    // Writes still resolve (callers don't expect a reject) but log on failure —
+    // quota-exceeded / torn-down — so a lost persist is diagnosable, not silent.
+    const warnWrite = (op: string, key: string): void => {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`thememaker: storage.${name}.${op}(${key}) failed:`, err);
+      }
+    };
     return {
       get: <T>(key: string) =>
         new Promise<T | undefined>((done) => {
@@ -134,7 +142,7 @@ export class Storage {
         new Promise<void>((done) => {
           try {
             chrome.storage[name].set({ [key]: value }, () => {
-              void chrome.runtime.lastError;
+              warnWrite("set", key);
               done();
             });
           } catch {
@@ -145,7 +153,7 @@ export class Storage {
         new Promise<void>((done) => {
           try {
             chrome.storage[name].remove(key, () => {
-              void chrome.runtime.lastError;
+              warnWrite("remove", key);
               done();
             });
           } catch {

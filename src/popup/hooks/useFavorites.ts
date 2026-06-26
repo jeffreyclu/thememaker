@@ -48,9 +48,13 @@ export const useFavorites = (): FavoriteActions => {
           name: defaultFavoriteName(s.current),
           scheme: schemeWithIntensity(s.current, s.intensity, s.overrides),
         };
-        const favorites = await storage.saveFavorite(favorite);
-        dispatch({ type: "setFavorites", favorites });
-        popup.setSavedFavoriteId(favorite.id);
+        try {
+          const favorites = await storage.saveFavorite(favorite);
+          dispatch({ type: "setFavorites", favorites });
+          popup.setSavedFavoriteId(favorite.id);
+        } catch (e) {
+          popup.setError(e instanceof Error ? e.message : "save failed");
+        }
       },
 
       onSelectFavorite: async (id: string): Promise<void> => {
@@ -71,8 +75,12 @@ export const useFavorites = (): FavoriteActions => {
       },
 
       onDeleteFavorite: async (id: string): Promise<void> => {
-        const favorites = await storage.deleteFavorite(id);
-        dispatch({ type: "setFavorites", favorites });
+        try {
+          const favorites = await storage.deleteFavorite(id);
+          dispatch({ type: "setFavorites", favorites });
+        } catch (e) {
+          popup.setError(e instanceof Error ? e.message : "delete failed");
+        }
       },
     };
     // `store`/`popup` are stable for the popup's life → build the actions once.

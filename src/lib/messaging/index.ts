@@ -274,6 +274,10 @@ const routeControl = (
     handlers.hidePicker();
   } else if (message.type === "APPLY_LIVE") {
     handlers.applyLive(message.palette, message.options);
+  } else {
+    // Exhaustive: adding a ContentMessage type without a branch is a type error.
+    const _exhaustive: never = message;
+    void _exhaustive;
   }
 };
 

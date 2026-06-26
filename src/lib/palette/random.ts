@@ -13,7 +13,7 @@ const randomInt = (min: number, max: number): number =>
 
 /** @returns a random color as a normalized `#rrggbb` hex string. */
 export const randomHexColor = (): string =>
-  `#${Math.floor(Math.random() * 16777215)
+  `#${Math.floor(Math.random() * 16777216)
     .toString(16)
     .padStart(6, "0")}`;
 

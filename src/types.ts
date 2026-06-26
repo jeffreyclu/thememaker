@@ -54,25 +54,17 @@ export const clampIntensity = (n: number): Intensity =>
   );
 
 /**
- * A `<tag>|<prop>` override key produced by the element picker, e.g.
- * `div|background`, `p|color`, or the special `page|background`. The part before
- * `|` is a lowercase HTML tag name (or `page`/`html`/`body`); the part after is
- * the CSS aspect being overridden. This is the single override grammar the live
- * engine speaks; it parses these keys into a CSS rule.
- */
-export type TagPropKey = `${string}|background` | `${string}|color`;
-
-/**
  * A custom-theme override map: `<tag>|<prop>` key → exact hex color. Keys are
- * {@link TagPropKey}s emitted by the in-page element picker (e.g.
- * `div|background`, `p|color`, `page|background`). An override paints that exact
- * color as a CSS layer on top of the generated theme; tags/props absent from the
- * map keep their generated colors.
+ * `<tag>|<prop>` strings the in-page element picker emits (e.g. `div|background`,
+ * `p|color`, `page|background`) — `<tag>` is a lowercase HTML tag or the
+ * `page`/`html`/`body` sentinels, `<prop>` is `background` or `color`. An override
+ * paints that exact color as a CSS layer on top of the generated theme; tags/props
+ * absent from the map keep their generated colors.
  *
- * The key type is widened to `string` (not the strict `TagPropKey` template
- * literal) because the keys are produced at runtime from arbitrary clicked DOM
- * elements and flow through `Object.entries`/storage as plain string keys; the
- * engine validates the tag name and prop defensively.
+ * Kept as plain `string` keys (not a strict template-literal type): they're
+ * produced at runtime from arbitrary clicked DOM elements and flow through
+ * `Object.entries`/storage as strings, so the engine validates the tag + prop
+ * defensively.
  */
 export type RoleOverrides = Record<string, string>;
 

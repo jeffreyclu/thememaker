@@ -130,6 +130,9 @@ export const apiPalette = async (
 
   try {
     const resp = await fetchImpl(apiSchemeUrl(seed, mode));
+    if (!resp.ok) {
+      throw new Error(`color api ${resp.status}`);
+    }
     const data = (await resp.json()) as ColorApiScheme;
     const palette = paletteFromApiResponse(seed, mode, data);
     if (!palette) {

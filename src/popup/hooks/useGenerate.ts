@@ -63,10 +63,13 @@ export const useGenerate = (): GenerateActions => {
           }
           const history = await storage.pushHistory(result.scheme);
           dispatch({ type: "generateSuccess", scheme: result.scheme, history });
-          popup.setLoading(false);
           await persist();
         } catch (e) {
           popup.setError(e instanceof Error ? e.message : "generate failed");
+        } finally {
+          // Always clear loading — an apply-failure return or a throw must not
+          // leave the popup stuck spinning.
+          popup.setLoading(false);
         }
       },
 

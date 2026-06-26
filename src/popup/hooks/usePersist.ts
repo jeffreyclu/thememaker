@@ -29,7 +29,7 @@ export const usePersist = (): PersistActions => {
         try {
           await persistTheme(live);
         } catch (e) {
-          popup.setError(e instanceof Error ? e.message : "apply failed");
+          popup.setError(e instanceof Error ? e.message : "persist failed");
         }
       },
     };

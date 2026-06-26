@@ -6,7 +6,6 @@
  * Engine instance; picker control delegates to the in-page picker app.
  */
 import { engine } from "../lib/engine";
-import { STYLE_ELEMENT_ID } from "../lib/engine/theme-dom-constants";
 import { loadDecision } from "../lib/scheme/site-state";
 import { storage } from "../lib/storage";
 import { installMessageRouter } from "../lib/messaging";
@@ -92,5 +91,3 @@ if (typeof window === "undefined" || !(window as Window).__THEMEMAKER_TEST__) {
     applyLive,
   });
 }
-
-export { STYLE_ELEMENT_ID };

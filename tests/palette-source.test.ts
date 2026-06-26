@@ -13,6 +13,7 @@ import type { Palette } from "../src/lib/palette";
 
 const okResponse = (colors: string[]) =>
   ({
+    ok: true,
     json: async () => ({
       colors: colors.map((value) => ({ hex: { value } })),
       seed: { name: { value: "Test" } },

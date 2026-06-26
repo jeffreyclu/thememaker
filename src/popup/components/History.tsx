@@ -32,7 +32,10 @@ export const History = memo(function History() {
           <li className="history__empty">No history yet. Generate a scheme.</li>
         ) : (
           rows.map(({ scheme, index }) => (
-            <li key={index}>
+            // Key on the scheme's colors, not the array index — the bounded queue
+            // shifts indices as new schemes push in, which an index key would
+            // reconcile wrongly. `index` is still the re-apply position.
+            <li key={schemeSwatches(scheme).join("|")}>
               <ApplyButton
                 buttonClass="history__item"
                 labelClass="history__label"

@@ -7,7 +7,7 @@
  * per-site state + hide the picker). The deferred-dispatch snapshot logic lives
  * here — these paths pass an explicit `LiveScheme` to `commitCurrent`.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { applyPayloadForScheme, invertScheme } from "../../lib/scheme";
 import { schemeClient } from "../client/scheme-client";
@@ -30,6 +30,18 @@ export const useApplyScheme = (): ApplyActions => {
   const popup = usePopup();
   const { getState, dispatch, activeTabId } = store;
 
+  // The debounced intensity timer, in a ref so unmount can clear a pending commit
+  // (otherwise a late `setTimeout` calls `setError` on an unmounted popup).
+  const intensityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (intensityTimer.current !== null) {
+        clearTimeout(intensityTimer.current);
+      }
+    },
+    [],
+  );
+
   return useMemo<ApplyActions>(() => {
     const {
       send,
@@ -43,13 +55,12 @@ export const useApplyScheme = (): ApplyActions => {
     // a theme is applied, re-applies the same palette live at the new intensity.
     // The latest value always wins. Takes `intensity` explicitly (dispatch is
     // deferred); the current scheme/overrides come from state.
-    let intensityTimer: ReturnType<typeof setTimeout> | null = null;
     const scheduleIntensityCommit = (intensity: Intensity): void => {
-      if (intensityTimer !== null) {
-        clearTimeout(intensityTimer);
+      if (intensityTimer.current !== null) {
+        clearTimeout(intensityTimer.current);
       }
-      intensityTimer = setTimeout(() => {
-        intensityTimer = null;
+      intensityTimer.current = setTimeout(() => {
+        intensityTimer.current = null;
         void (async () => {
           try {
             const s = getState();

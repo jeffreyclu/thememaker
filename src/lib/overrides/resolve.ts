@@ -6,7 +6,7 @@
  *
  * A small pure helper (no React, no `chrome.*`) so the pick hook stays a thin
  * side-effect. The button classifier and the rgb()→hex parser are shared with
- * the engine, in `./classify` and `../color/color-runtime`; this module
+ * the engine, in `./classify` and `../color/css-color`; this module
  * imports them rather than re-implementing.
  */
 import { isButtonLike } from "./classify";
