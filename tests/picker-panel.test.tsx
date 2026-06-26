@@ -41,7 +41,7 @@ vi.mock("../src/lib/engine", () => ({
     applyWhenReady: (...args: unknown[]) => applyWhenReady(...args),
   },
 }));
-vi.mock("../src/lib/storage/persist-overrides", () => ({
+vi.mock("../src/lib/scheme/persist-overrides", () => ({
   persistOverrides: (...args: unknown[]) => persistOverrides(...args),
 }));
 

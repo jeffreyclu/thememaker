@@ -19,7 +19,7 @@ import {
   type OverridesAction,
 } from "../state/picker-reducer";
 import { engine } from "../../lib/engine";
-import { persistOverrides } from "../../lib/storage/persist-overrides";
+import { persistOverrides } from "../../lib/scheme/persist-overrides";
 import type { ApplyOptions, RoleOverrides } from "../../types";
 
 /** Engine options from the live theme: `overrides` only when non-empty (its

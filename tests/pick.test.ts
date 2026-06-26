@@ -36,7 +36,7 @@ const applyWhenReady = vi.fn();
 vi.mock("../src/lib/engine", () => ({
   engine: { applyWhenReady: (...a: unknown[]) => applyWhenReady(...a) },
 }));
-vi.mock("../src/lib/storage/persist-overrides", () => ({
+vi.mock("../src/lib/scheme/persist-overrides", () => ({
   persistOverrides: vi.fn(),
 }));
 
