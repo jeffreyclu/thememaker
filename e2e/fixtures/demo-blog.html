@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Field Notes — a blog about building things</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        color: #1f2330;
+        background: #f6f7f9;
+        line-height: 1.6;
+      }
+      a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+      .nav {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+        padding: 16px 40px;
+        background: #ffffff;
+        border-bottom: 1px solid #e6e8ec;
+        position: sticky;
+        top: 0;
+      }
+      .brand {
+        font-weight: 800;
+        font-size: 18px;
+        letter-spacing: -0.02em;
+      }
+      .brand span {
+        color: #2563eb;
+      }
+      .nav a {
+        color: #4b5160;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .nav .spacer {
+        flex: 1;
+      }
+      .btn {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid #d4d7dd;
+        background: #fff;
+        color: #1f2330;
+        cursor: pointer;
+      }
+      .btn--primary {
+        background: #2563eb;
+        border-color: #2563eb;
+        color: #fff;
+      }
+      .wrap {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 36px 40px 64px;
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 36px;
+      }
+      .article {
+        background: #fff;
+        border: 1px solid #e6e8ec;
+        border-radius: 16px;
+        overflow: hidden;
+      }
+      .hero {
+        height: 220px;
+        background: linear-gradient(135deg, #93c5fd, #c4b5fd 60%, #fbcfe8);
+      }
+      .article-body {
+        padding: 32px 36px 40px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #2563eb;
+        background: #eef2ff;
+        padding: 5px 10px;
+        border-radius: 999px;
+      }
+      h1 {
+        font-size: 34px;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+        margin: 14px 0 10px;
+      }
+      .meta {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 24px;
+      }
+      .avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: #34d399;
+      }
+      p {
+        margin: 0 0 18px;
+      }
+      blockquote {
+        margin: 24px 0;
+        padding: 14px 22px;
+        border-left: 4px solid #2563eb;
+        background: #f8fafc;
+        color: #374151;
+        font-style: italic;
+        border-radius: 0 10px 10px 0;
+      }
+      .aside h3 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6b7280;
+        margin: 0 0 14px;
+      }
+      .card {
+        background: #fff;
+        border: 1px solid #e6e8ec;
+        border-radius: 14px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+      }
+      .card .swatch {
+        width: 100%;
+        height: 84px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+      }
+      .card h4 {
+        margin: 0 0 4px;
+        font-size: 15px;
+      }
+      .card small {
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav">
+      <div class="brand">Field<span>Notes</span></div>
+      <a href="#">Articles</a>
+      <a href="#">Guides</a>
+      <a href="#">About</a>
+      <span class="spacer"></span>
+      <button class="btn">Sign in</button>
+      <button class="btn btn--primary">Subscribe</button>
+    </nav>
+
+    <div class="wrap">
+      <article class="article">
+        <div class="hero"></div>
+        <div class="article-body">
+          <span class="tag">Engineering</span>
+          <h1>
+            Designing software that reads like it was written by one person
+          </h1>
+          <div class="meta">
+            <span class="avatar"></span> Dana Whitfield · 8 min read · Today
+          </div>
+          <p>
+            The hardest part of a growing codebase isn't the code that's hard to
+            write — it's the code that's hard to <em>read</em> six months later.
+            Consistency is a feature. When every module follows the same shape,
+            the next change is obvious instead of archaeological.
+          </p>
+          <blockquote>
+            A new file should feel inevitable: the same names, the same
+            layering, the same small set of moves, repeated until they're
+            invisible.
+          </blockquote>
+          <p>
+            Start with the boundaries. Decide what a "domain" is and give each
+            one a single entry point. Keep the framework at the edges and the
+            logic in the middle, where it can be tested without a browser. Then
+            enforce it — a rule nobody runs is a rule nobody follows.
+          </p>
+          <p>
+            The payoff isn't elegance for its own sake. It's that a reader can
+            hold the whole shape in their head, so they spend their attention on
+            the problem instead of the plumbing.
+          </p>
+          <button class="btn btn--primary">Read the full guide →</button>
+        </div>
+      </article>
+
+      <aside class="aside">
+        <h3>Popular this week</h3>
+        <div class="card">
+          <div class="swatch" style="background: #fca5a5"></div>
+          <h4>The cost of a clever abstraction</h4>
+          <small>5 min read</small>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background: #6ee7b7"></div>
+          <h4>Tests as a design tool, not a chore</h4>
+          <small>7 min read</small>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background: #fcd34d"></div>
+          <h4>Naming things so you can find them</h4>
+          <small>4 min read</small>
+        </div>
+      </aside>
+    </div>
+  </body>
+</html>

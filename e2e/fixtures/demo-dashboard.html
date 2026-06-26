@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Northwind — Analytics</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        color: #1f2330;
+        background: #f4f5f7;
+        display: flex;
+        min-height: 100vh;
+      }
+      .sidebar {
+        width: 232px;
+        background: #ffffff;
+        border-right: 1px solid #e6e8ec;
+        padding: 22px 16px;
+        flex-shrink: 0;
+      }
+      .logo {
+        font-weight: 800;
+        font-size: 18px;
+        padding: 6px 12px 22px;
+        letter-spacing: -0.02em;
+      }
+      .logo span {
+        color: #16a34a;
+      }
+      .navitem {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: 9px;
+        color: #4b5160;
+        font-size: 14px;
+        font-weight: 500;
+        margin-bottom: 2px;
+      }
+      .navitem.active {
+        background: #ecfdf3;
+        color: #15803d;
+        font-weight: 600;
+      }
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #cbd2da;
+      }
+      .navitem.active .dot {
+        background: #16a34a;
+      }
+      .main {
+        flex: 1;
+        padding: 26px 34px;
+      }
+      .topbar {
+        display: flex;
+        align-items: center;
+        margin-bottom: 26px;
+      }
+      .topbar h1 {
+        font-size: 24px;
+        letter-spacing: -0.02em;
+        margin: 0;
+      }
+      .topbar .spacer {
+        flex: 1;
+      }
+      .btn {
+        padding: 9px 16px;
+        border-radius: 9px;
+        font-size: 14px;
+        font-weight: 600;
+        border: 1px solid #d4d7dd;
+        background: #fff;
+        cursor: pointer;
+      }
+      .btn--primary {
+        background: #16a34a;
+        border-color: #16a34a;
+        color: #fff;
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+        margin-bottom: 22px;
+      }
+      .stat {
+        background: #fff;
+        border: 1px solid #e6e8ec;
+        border-radius: 14px;
+        padding: 18px 20px;
+      }
+      .stat .label {
+        color: #6b7280;
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .stat .value {
+        font-size: 28px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .stat .delta {
+        font-size: 13px;
+        font-weight: 600;
+        color: #16a34a;
+      }
+      .stat .delta.down {
+        color: #dc2626;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1.6fr 1fr;
+        gap: 18px;
+      }
+      .panel {
+        background: #fff;
+        border: 1px solid #e6e8ec;
+        border-radius: 16px;
+        padding: 20px 22px;
+      }
+      .panel h3 {
+        margin: 0 0 16px;
+        font-size: 16px;
+      }
+      .bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+        height: 180px;
+      }
+      .bar {
+        flex: 1;
+        border-radius: 8px 8px 0 0;
+        background: linear-gradient(#34d399, #059669);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th {
+        text-align: left;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0 0 10px;
+        border-bottom: 1px solid #eceef1;
+      }
+      td {
+        padding: 11px 0;
+        border-bottom: 1px solid #f1f2f4;
+      }
+      .pill {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 9px;
+        border-radius: 999px;
+        background: #ecfdf3;
+        color: #15803d;
+      }
+      .pill.warn {
+        background: #fffbeb;
+        color: #b45309;
+      }
+    </style>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="logo">North<span>wind</span></div>
+      <div class="navitem active"><span class="dot"></span> Overview</div>
+      <div class="navitem"><span class="dot"></span> Revenue</div>
+      <div class="navitem"><span class="dot"></span> Customers</div>
+      <div class="navitem"><span class="dot"></span> Products</div>
+      <div class="navitem"><span class="dot"></span> Reports</div>
+      <div class="navitem"><span class="dot"></span> Settings</div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <h1>Overview</h1>
+        <span class="spacer"></span>
+        <button class="btn">Last 30 days</button>
+        <button class="btn btn--primary">Export</button>
+      </div>
+
+      <section class="stats">
+        <div class="stat">
+          <div class="label">Revenue</div>
+          <div class="value">$48,210</div>
+          <div class="delta">▲ 12.4%</div>
+        </div>
+        <div class="stat">
+          <div class="label">New customers</div>
+          <div class="value">1,284</div>
+          <div class="delta">▲ 8.1%</div>
+        </div>
+        <div class="stat">
+          <div class="label">Churn</div>
+          <div class="value">2.3%</div>
+          <div class="delta down">▼ 0.4%</div>
+        </div>
+        <div class="stat">
+          <div class="label">Avg. order</div>
+          <div class="value">$37.55</div>
+          <div class="delta">▲ 3.2%</div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <h3>Revenue by week</h3>
+          <div class="bars">
+            <div class="bar" style="height: 55%"></div>
+            <div class="bar" style="height: 72%"></div>
+            <div class="bar" style="height: 48%"></div>
+            <div class="bar" style="height: 86%"></div>
+            <div class="bar" style="height: 64%"></div>
+            <div class="bar" style="height: 92%"></div>
+            <div class="bar" style="height: 78%"></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Recent orders</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Acme Co.</td>
+                <td><span class="pill">Paid</span></td>
+                <td>$1,240</td>
+              </tr>
+              <tr>
+                <td>Globex</td>
+                <td><span class="pill warn">Pending</span></td>
+                <td>$880</td>
+              </tr>
+              <tr>
+                <td>Initech</td>
+                <td><span class="pill">Paid</span></td>
+                <td>$2,150</td>
+              </tr>
+              <tr>
+                <td>Umbrella</td>
+                <td><span class="pill">Paid</span></td>
+                <td>$640</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
