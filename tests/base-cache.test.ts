@@ -17,7 +17,7 @@ import {
   clearBaseCache,
   readBaseCache,
   writeBaseCache,
-} from "../src/lib/engine/base-cache";
+} from "../src/lib/storage/base-cache";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { generatePalette } from "../src/lib/palette";
 import type { ApplyOptions } from "../src/types";

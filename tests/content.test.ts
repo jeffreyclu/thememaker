@@ -22,7 +22,7 @@ import {
 import type { ApplyOptions } from "../src/types";
 import type { Palette } from "../src/lib/palette";
 
-import { loadDecision } from "../src/lib/storage/site-state";
+import { loadDecision } from "../src/lib/scheme/site-state";
 import { STYLE_ELEMENT_ID } from "../src/lib/engine/theme-dom-constants";
 import { schemeFromPalette } from "../src/lib/scheme";
 import { KEYS, type SiteState } from "../src/lib/storage";

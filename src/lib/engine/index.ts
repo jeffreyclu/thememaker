@@ -33,7 +33,11 @@ import {
   ROOT_MARKER_ATTR,
   STYLE_ELEMENT_ID,
 } from "./theme-dom-constants";
-import { baseBackgroundFor, clearBaseCache, readBaseCache } from "./base-cache";
+import {
+  baseBackgroundFor,
+  clearBaseCache,
+  readBaseCache,
+} from "../storage/base-cache";
 import { ensureStyleEl } from "./theme-style";
 import { resolveApply } from "./engine-apply";
 import { clearEarlyBaseStyle, paintEarlyBaseStyle } from "./engine-early";

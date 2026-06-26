@@ -13,7 +13,12 @@
  * paints, so the early paint matches the final paint. No `chrome.*` here.
  */
 import { isHexColor, normalizeHex } from "../color";
-import { BASE_CACHE_KEY } from "./theme-dom-constants";
+/**
+ * Namespaced page `localStorage` key under which the engine caches the exact base
+ * background it painted onto html/body for the current origin (read synchronously
+ * at `document_start` to early-paint the themed base — no reload flash).
+ */
+const BASE_CACHE_KEY = "__thememaker_base__";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 

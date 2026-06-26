@@ -10,9 +10,9 @@
  * AA-floored against the lightest rendered surface, border vars to the role border.
  * Pure derivation over the detected vars + resolved roles.
  */
-import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
-import { luminanceBucket, luminanceOf, nudgeToAA } from "../color";
-import type { ResolvedRoles } from "./engine-roles";
+import { mixCss, parseCssColor, rgbTupleToHex } from "./css-color";
+import { luminanceBucket, luminanceOf, nudgeToAA } from ".";
+import type { ResolvedRoles } from "../engine/engine-roles";
 
 /** A detected `:root` color variable + the role its name classifies it as. */
 export interface DetectedVar {

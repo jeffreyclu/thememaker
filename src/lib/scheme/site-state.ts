@@ -13,7 +13,7 @@
 import type { ApplyOptions, Scheme } from "../../types";
 import { clampIntensity, DEFAULT_INTENSITY } from "../../types";
 import type { Palette } from "../palette";
-import type { SiteState } from ".";
+import type { SiteState } from "../storage";
 
 // `enable` is the only transition the app dispatches. The popup owns the "full
 // reset" (off + forget) and writes that state directly (see popup `onReset`), so

@@ -10,7 +10,7 @@
  * imports them rather than re-implementing.
  */
 import { isButtonLike } from "./classify";
-import { cssColorToHex } from "../color/color-runtime";
+import { cssColorToHex } from "../color/css-color";
 import { makeOverrideKey } from "./keys";
 
 /**

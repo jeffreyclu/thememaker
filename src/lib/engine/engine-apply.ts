@@ -9,10 +9,10 @@
  * paints each surface with. No scheduling, observer, or state ownership — those
  * live on the Engine.
  */
-import { mixCss } from "../color/color-runtime";
-import { writeBaseCache } from "./base-cache";
+import { mixCss } from "../color/css-color";
+import { writeBaseCache } from "../storage/base-cache";
 import { resolveRoles } from "./engine-roles";
-import { buildVarDecls, detectRootVars } from "./css-var-remap";
+import { buildVarDecls, detectRootVars } from "../color/css-var-remap";
 import { buildRoleRules } from "./role-rules";
 import {
   buildButtonOrder,

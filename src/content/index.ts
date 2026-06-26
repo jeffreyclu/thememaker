@@ -7,7 +7,7 @@
  */
 import { engine } from "../lib/engine";
 import { STYLE_ELEMENT_ID } from "../lib/engine/theme-dom-constants";
-import { loadDecision } from "../lib/storage/site-state";
+import { loadDecision } from "../lib/scheme/site-state";
 import { storage } from "../lib/storage";
 import { installMessageRouter } from "./message-router";
 

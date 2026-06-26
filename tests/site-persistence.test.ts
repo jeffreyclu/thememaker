@@ -14,7 +14,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { Storage, type StorageArea } from "../src/lib/storage";
-import { loadDecision, siteStateReducer } from "../src/lib/storage/site-state";
+import { loadDecision, siteStateReducer } from "../src/lib/scheme/site-state";
 import { schemeFromPalette, schemeWithIntensity } from "../src/lib/scheme";
 import { generatePalette } from "../src/lib/palette";
 import { mockPalette } from "./mocks";

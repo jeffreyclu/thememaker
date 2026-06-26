@@ -26,11 +26,3 @@ export const ROOT_MARKER_ATTR = "data-thememaker";
 
 /** The attribute a tinted semantic surface carries so scoped text rules find it. */
 export const SURFACE_TOKEN_ATTR = "data-tm-surf";
-
-/**
- * Namespaced `localStorage` key under which the engine caches the exact base
- * background it painted onto html/body for the current origin. The content script
- * reads it synchronously at `document_start` to early-paint the themed base on the
- * first frame (no reload flash).
- */
-export const BASE_CACHE_KEY = "__thememaker_base__";

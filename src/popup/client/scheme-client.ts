@@ -8,7 +8,7 @@
  * after `dispatch` would still see the pre-dispatch scheme.
  */
 import { applyPayloadForScheme, schemeWithIntensity } from "../../lib/scheme";
-import { siteStateReducer } from "../../lib/storage/site-state";
+import { siteStateReducer } from "../../lib/scheme/site-state";
 import { sendToContent, sendToContentWithReply } from "../../lib/messaging";
 import type {
   ContentMessage,

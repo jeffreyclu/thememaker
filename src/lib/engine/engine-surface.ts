@@ -19,7 +19,7 @@ import {
   parseCssColor,
   rgbTupleToHex,
   withAlpha,
-} from "../color/color-runtime";
+} from "../color/css-color";
 import { hasImageBackground, isSkippable } from "./role-classify";
 import { ROOT_MARKER_ATTR, SURFACE_TOKEN_ATTR } from "./theme-dom-constants";
 import type { ResolvedRoles } from "./engine-roles";

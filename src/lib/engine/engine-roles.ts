@@ -14,7 +14,7 @@
  * than re-reading the palette. Pure derivation, no DOM.
  */
 import { luminanceBucket, nudgeToAA } from "../color";
-import { mixCss, parseCssColor, rgbTupleToHex } from "../color/color-runtime";
+import { mixCss, parseCssColor, rgbTupleToHex } from "../color/css-color";
 import type { Palette } from "../palette";
 import type { ApplyOptions } from "../../types";
 
