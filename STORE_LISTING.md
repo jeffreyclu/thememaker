@@ -33,7 +33,7 @@ Make the web look the way you want. Thememaker generates a color scheme and appl
 - Works on-device. No account, no analytics, no tracking, no ads.
 - The only thing ever sent off your device is a single color value + a harmony mode, to a public color API for palette suggestions — never the pages you visit or any personal data. Works offline with on-device generation.
 
-Open source. See the privacy policy for exactly what's stored and sent.
+See the privacy policy for exactly what's stored and sent.
 
 ---
 

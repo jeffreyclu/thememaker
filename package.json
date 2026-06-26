@@ -2,6 +2,8 @@
   "name": "thememaker",
   "version": "1.0.0",
   "description": "Apply a new color scheme to any website.",
+  "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",

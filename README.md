@@ -115,45 +115,43 @@ Thememaker has no in-page controls. Everything lives in the toolbar **popup**:
 
 ### Architecture
 
-Two React UI surfaces — the toolbar **popup** and the in-page **picker** — drive a
-single in-page theming **engine**. A content script runs at `document_start` and
-hosts the engine; the popup sends messages straight to the active tab's content
-script. Declared permissions are `activeTab` and `storage`.
+Two React UI surfaces — the toolbar **popup** ([`src/popup/README.md`](src/popup/README.md))
+and the in-page **picker** ([`src/picker/README.md`](src/picker/README.md)) — drive a
+single in-page theming **engine** ([`src/lib/engine/README.md`](src/lib/engine/README.md)).
+An always-on content script runs at `document_start` and hosts the engine; the popup
+sends typed messages straight to the active tab's content script. Declared
+permissions are `activeTab` and `storage`.
 
 ```
 src/
-  manifest.config.ts        # MV3 manifest (source of truth, consumed by CRXJS)
-  config.ts, types.ts       # modes/bounds + shared domain types
-  background/index.ts        # no-op service worker (MV3 requires one; no logic)
-  popup/                     # the toolbar popup (React)
-    main.tsx, App.tsx, index.html, popup.css
-    state/                  # PopupProvider + SchemeProvider (context + reducers)
-    hooks/                  # action hooks (generate / apply / favorites / history / persist)
-    components/             # presentational + connected components
-    client/                # scheme-client: apply/persist I/O to the content script
-  picker/                    # the in-page Customize panel (React, lazy-loaded)
-    session.ts              # eager shim: dynamic-imports + mounts the React app
-    main.tsx, App.tsx
-    state/ hooks/ components/ client/   # same shape as popup
-  content/                   # page-side glue (content script)
-    index.ts                # entry: auto-reapply on load + install the message router
-    message-router.ts       # routes popup → content messages
-    apply-handlers.ts       # APPLY / RESET / QUERY → the engine
-  lib/                       # framework-free domains, each with one entry
-    engine/                 # the Engine class + internals (in-page adaptive theming)
-    color/                  # pure color math (hex/hsl, WCAG contrast, AA)
-    palette/                # palette generation (paletteGenerator)
-    scheme/                 # scheme building (palette → scheme → apply payload)
-    storage/                # the Storage class + singleton (history, settings, per-site, favorites)
-    messaging.ts            # typed popup ⇄ content message contract
-    override-keys.ts        # the <tag>|<prop> override grammar
-    classify.ts             # shared element classifiers
-public/                      # static icons copied into dist/
-tests/                       # Vitest specs (+ chrome-mock.ts, setup.ts)
-e2e/                         # Playwright specs (real Chromium)
+  manifest.config.ts        MV3 manifest (source of truth, consumed by CRXJS)
+  config.ts · types.ts      modes/bounds + shared domain types
+  background/index.ts       no-op service worker (MV3 requires one; no logic)
+  popup/                    the toolbar popup (React) — see popup/README.md
+    main · App · state/ · hooks/ · components/ · client/
+  picker/                   the in-page Customize panel (React, lazy-loaded) — see picker/README.md
+    index.ts (eager shim) · main · App · panel.css · state/ · hooks/ · components/
+  content/index.ts          the always-on content script: auto-reapply on load + the page-side
+                            APPLY/RESET/QUERY handlers, wired into the message router
+  lib/                      framework-free domains, each with one entry
+    engine/                 the in-page adaptive theming engine — see engine/README.md
+    color/                  pure color math (hex/hsl, WCAG contrast, AA)
+    palette/                palette generation (the paletteGenerator)
+    scheme/                 scheme building (palette → scheme → apply payload) + per-site persistence
+    storage/                the Storage class + singleton (history, settings, per-site, favorites)
+    messaging/              the typed popup ⇄ content message contract + the content router
+    overrides/              the <tag>|<prop> override grammar, element classifiers, pick resolution
+public/                     static icons copied into dist/
+tests/                      Vitest specs (+ chrome-mock.ts, setup.ts)
+e2e/                        Playwright specs (real Chromium)
 ```
 
-Message contract (popup → the active tab's content script):
+Each `lib/` domain ships its own entry and never imports a UI surface (`popup` /
+`picker`). The engine, popup, and picker each have a dedicated README for their
+internals.
+
+Message contract — the popup sends to the active tab's content script
+(`lib/messaging`), which the content script wires to the engine + picker handlers:
 
 - `APPLY_SCHEME { palette, options, scheme }` → the engine maps the palette onto
   the page via a `<style id="themeMaker">`.
