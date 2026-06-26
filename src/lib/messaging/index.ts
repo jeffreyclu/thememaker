@@ -214,3 +214,92 @@ export const sendToContent = (
       resolve();
     }
   });
+
+/**
+ * The page-side handlers the content script binds the router to. The engine +
+ * picker live in the page world (not in lib), so the content script injects them
+ * here rather than this module importing them — keeping messaging a pure
+ * transport/contract layer.
+ */
+export interface ContentHandlers {
+  apply: (
+    palette: Palette,
+    options: ApplyOptions,
+    scheme: Scheme,
+  ) => ApplySchemeResponse;
+  reset: () => ResetSchemeResponse;
+  query: () => QueryStateResponse;
+  showPicker: (palette: Palette, options: ApplyOptions) => void;
+  hidePicker: () => void;
+  applyLive: (palette: Palette, options: ApplyOptions) => void;
+}
+
+const needsReply = (
+  message: ContentMessage | ContentReplyMessage,
+): message is ContentReplyMessage =>
+  message.type === "APPLY_SCHEME" ||
+  message.type === "RESET_SCHEME" ||
+  message.type === "QUERY_STATE";
+
+/** Routes a reply-carrying APPLY/RESET/QUERY message to its handler. */
+const routeReply = (
+  message: ContentReplyMessage,
+  handlers: ContentHandlers,
+): MessageResponse => {
+  switch (message.type) {
+    case "APPLY_SCHEME":
+      return handlers.apply(message.palette, message.options, message.scheme);
+    case "RESET_SCHEME":
+      return handlers.reset();
+    case "QUERY_STATE":
+      return handlers.query();
+    default: {
+      const _exhaustive: never = message;
+      return {
+        ok: false,
+        error: `unknown message: ${JSON.stringify(_exhaustive)}`,
+      };
+    }
+  }
+};
+
+/** Routes a fire-and-forget picker-control message to its handler. */
+const routeControl = (
+  message: ContentMessage,
+  handlers: ContentHandlers,
+): void => {
+  if (message.type === "SHOW_PICKER") {
+    handlers.showPicker(message.palette, message.options);
+  } else if (message.type === "HIDE_PICKER") {
+    handlers.hidePicker();
+  } else if (message.type === "APPLY_LIVE") {
+    handlers.applyLive(message.palette, message.options);
+  }
+};
+
+/**
+ * Installs the popup → content-script listener, routing each message to one of
+ * the injected page-side `handlers`. Reply-carrying messages return a typed
+ * response (the MV3 channel stays open for it); picker control messages are
+ * fire-and-forget. Total — never throws (a non-extension context is a no-op).
+ */
+export const installMessageRouter = (handlers: ContentHandlers): void => {
+  try {
+    chrome.runtime.onMessage.addListener(
+      (
+        message: ContentMessage | ContentReplyMessage,
+        _sender,
+        sendResponse: (response: MessageResponse) => void,
+      ) => {
+        if (needsReply(message)) {
+          sendResponse(routeReply(message, handlers));
+          return true;
+        }
+        routeControl(message, handlers);
+        return undefined;
+      },
+    );
+  } catch {
+    // chrome.runtime unavailable (non-extension context) — ignore.
+  }
+};

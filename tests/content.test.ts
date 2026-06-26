@@ -230,12 +230,11 @@ describe("runContentScript (auto-reapply flow)", () => {
 });
 
 /**
- * APPLY / RESET / QUERY reply-message handling — the page-side routing that the
- * background's `chrome.scripting.executeScript` injector USED to do (the
- * relocated `router.test.ts` coverage). `handleContentReplyMessage` is the
- * content script's request/response handler the popup awaits.
+ * APPLY / RESET / QUERY page-side reply handlers — the content script's
+ * request/response handlers the popup awaits, which the router (lib/messaging)
+ * invokes for each reply-carrying message.
  */
-describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () => {
+describe("content reply handlers (APPLY/RESET/QUERY)", () => {
   let applySpy: MockInstance<[Palette, ApplyOptions], boolean>;
   let removeSpy: MockInstance<[], boolean>;
   let appliedSpy: MockInstance<[], boolean>;
@@ -254,16 +253,10 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
     vi.restoreAllMocks();
   });
 
-  it("APPLY_SCHEME runs the engine and echoes the scheme with applied:true", async () => {
-    const { handleContentReplyMessage } =
-      await import("../src/content/message-router");
+  it("runApply runs the engine and echoes the scheme with applied:true", async () => {
+    const { runApply } = await import("../src/content");
     const scheme = schemeFromPalette(mockPalette, 60, "Test");
-    const resp = handleContentReplyMessage({
-      type: "APPLY_SCHEME",
-      palette: mockPalette,
-      options: { intensity: 60 },
-      scheme,
-    });
+    const resp = runApply(mockPalette, { intensity: 60 }, scheme);
 
     expect(applySpy).toHaveBeenCalledTimes(1);
     const [palette, options] = applySpy.mock.calls[0];
@@ -272,19 +265,17 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
     expect(resp).toMatchObject({ ok: true, applied: true, scheme });
   });
 
-  it("RESET_SCHEME removes the style and reports applied:false", async () => {
-    const { handleContentReplyMessage } =
-      await import("../src/content/message-router");
-    const resp = handleContentReplyMessage({ type: "RESET_SCHEME" });
+  it("runReset removes the style and reports applied:false", async () => {
+    const { runReset } = await import("../src/content");
+    const resp = runReset();
     expect(removeSpy).toHaveBeenCalledTimes(1);
     expect(resp).toStrictEqual({ ok: true, applied: false });
   });
 
-  it("QUERY_STATE reports whether a style is applied", async () => {
+  it("runQuery reports whether a style is applied", async () => {
     appliedSpy.mockReturnValue(true);
-    const { handleContentReplyMessage } =
-      await import("../src/content/message-router");
-    const resp = handleContentReplyMessage({ type: "QUERY_STATE" });
+    const { runQuery } = await import("../src/content");
+    const resp = runQuery();
     expect(appliedSpy).toHaveBeenCalledTimes(1);
     expect(resp).toStrictEqual({ ok: true, applied: true });
   });
@@ -293,14 +284,12 @@ describe("handleContentReplyMessage (APPLY/RESET/QUERY page-side routing)", () =
     applySpy.mockImplementation(() => {
       throw new Error("boom");
     });
-    const { handleContentReplyMessage } =
-      await import("../src/content/message-router");
-    const resp = handleContentReplyMessage({
-      type: "APPLY_SCHEME",
-      palette: mockPalette,
-      options: { intensity: 60 },
-      scheme: schemeFromPalette(mockPalette, 60, "Test"),
-    });
+    const { runApply } = await import("../src/content");
+    const resp = runApply(
+      mockPalette,
+      { intensity: 60 },
+      schemeFromPalette(mockPalette, 60, "Test"),
+    );
     expect(resp.ok).toBe(false);
     expect(resp.error).toBe("boom");
   });
